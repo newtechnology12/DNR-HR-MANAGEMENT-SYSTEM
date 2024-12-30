@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-100 overflow-x-hidden;
+}
+
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-Regular.ttf") format("truetype");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-Medium.ttf") format("truetype");
+  font-weight: 500;
+}
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+}
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-Bold.ttf") format("truetype");
+  font-weight: 700;
+}
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-ExtraBold.ttf") format("truetype");
+  font-weight: 800;
+}
+
+@keyframes indeterminateAnimation {
+  0% {
+    transform: translateX(0) scaleX(0);
+  }
+
+  40% {
+    transform: translateX(0) scaleX(0.4);
+  }
+
+  100% {
+    transform: translateX(100%) scaleX(0.5);
+  }
+}
+
+.progress-bar-value {
+  animation: indeterminateAnimation 1s infinite linear;
+  transform-origin: 0% 50%;
+}
+
+.group.toaster {
+  @apply font-sans;
+}
+.blue-square-grid-20px {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='7'%3E%3Crect width='100%' height='100%' fill='transparent' /%3E%3Crect x='50%' width='1' height='100%' fill='%23e2e8f0' /%3E%3Crect y='50%' width='100%' height='1' fill='%23e2e8f0' /%3E%3C/svg%3E%0A");
+}
+
+.example-box {
+  width: 100vw;
+  height: 100px;
+}
+
+.scroller .scroller-thumb {
+  @apply hidden;
+}
+
+.board-grid {
+  column-count: 4;
+  column-gap: 0.7em;
+}
+.item {
+  -webkit-column-break-inside: avoid;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+input[type="password"]::-webkit-text-security-disc {
+  font-size: 24px; /* Adjust the font size as needed */
+  line-height: 24px; /* Adjust line-height if necessary */
+}
+
+.print:last-child {
+  page-break-after: auto;
+}
+
+@media print {
+  html,
+  body {
+    height: auto; /* or 'auto' */
+  }
+}
+
+.react-time-picker__wrapper {
+  @apply rounded-sm border !border-slate-300 outline-none bg-white px-2 py-[10px] text-[14px] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:ring-primary dark:placeholder:text-slate-400 dark:focus-visible:ring-slate-300;
+}
+.react-time-picker__wrapper svg {
+  @apply w-4 h-4 !text-slate-500 hover:!stroke-primary !stroke-slate-500;
+}
+.react-time-picker__clock {
+  @apply !hidden;
+}
+
+[data-sonner-toaster] {
+  @apply h-fit;
+}
+
+/* select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  text-indent: 1px;
+  text-overflow: "";
+} */

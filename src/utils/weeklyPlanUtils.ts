@@ -1,0 +1,50 @@
+// weeklyPlanUtils.ts
+import { z } from "zod";
+
+// Define the weeklyPlanSchema
+export const weeklyPlanSchema = z.object({
+  reference_number: z.string().min(1, { message: "Reference number is required" }),
+  service_category: z.string().min(1, { message: "Service category is required" }),
+  client_name: z.string().min(1, { message: "Client name is required" }),
+  engagement_title: z.string().min(1, { message: "Engagement title is required" }),
+  engagement_contractual_deadline: z.date().optional(),
+  firm_deadline: z.date().optional(),
+  key_tasks: z.string().min(1, { message: "Key tasks are required" }),
+  output_deliverables: z.string().min(1, { message: "Output deliverables are required" }),
+  partner: z.string().min(1, { message: "Partner is required" }),
+  director: z.string().min(1, { message: "Director is required" }),
+  manager: z.string().min(1, { message: "Manager is required" }),
+  team_leader: z.string().min(1, { message: "Team leader is required" }),
+  team_members: z.string().min(1, { message: "Team members are required" }),
+  monday: z.string().min(1, { message: "Monday tasks are required" }),
+  tuesday: z.string().min(1, { message: "Tuesday tasks are required" }),
+  wednesday: z.string().min(1, { message: "Wednesday tasks are required" }),
+  thursday: z.string().min(1, { message: "Thursday tasks are required" }),
+  friday: z.string().min(1, { message: "Friday tasks are required" }),
+  engagement_status: z.string().min(1, { message: "Engagement status is required" }),
+  observations: z.string().optional(),
+});
+
+export const getDefaultValues = (data?: any, user?: any) => ({
+  reference_number: data?.reference_number || "",
+  service_category: data?.service_category || "",
+  client_name: data?.client_name || "",
+  engagement_title: data?.engagement_title || "",
+  engagement_contractual_deadline: data?.engagement_contractual_deadline ? new Date(data?.engagement_contractual_deadline) : undefined,
+  firm_deadline: data?.firm_deadline ? new Date(data?.firm_deadline) : undefined,
+  key_tasks: data?.key_tasks || "",
+  output_deliverables: data?.output_deliverables || "",
+  partner: data?.partner || "",
+  director: data?.director || "",
+  manager: data?.manager || "",
+  team_leader: data?.team_leader || "",
+  team_members: data?.team_members || "",
+  monday: data?.monday || "",
+  tuesday: data?.tuesday || "",
+  wednesday: data?.wednesday || "",
+  thursday: data?.thursday || "",
+  friday: data?.friday || "",
+  engagement_status: data?.engagement_status || "",
+  observations: data?.observations || "",
+  created_by: user?.id || "",
+});
