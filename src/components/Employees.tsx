@@ -17,6 +17,7 @@ import Avatar from "@/components/shared/Avatar";
 import useModalState from "@/hooks/useModalState";
 import { EmployeFormModal } from "@/components/modals/EmployeeFormModal";
 import useEditRow from "@/hooks/use-edit-row";
+import { ScrollArea, ScrollBar } from "./ui/scroll-area";
 
 export const orderSchema = z.object({
   id: z.string(),
@@ -28,29 +29,6 @@ export const orderSchema = z.object({
   department: z.string(),
   branch: z.string(),
 });
-
-const statuses = [
-  {
-    label: "Active",
-    value: "active",
-  },
-  {
-    label: "Inactive",
-    value: "inactive",
-  },
-  {
-    label: "Suspended",
-    value: "suspended",
-  },
-  {
-    label: "Terminated",
-    value: "terminated",
-  },
-  {
-    label: "Resigned",
-    value: "resigned",
-  },
-];
 
 export type Order = z.infer<typeof orderSchema>;
 
@@ -257,6 +235,8 @@ export default function Employees({ ...otherProps }) {
     pageSize: 10,
   });
 
+  const [activeTab, setactiveTab] = useState("Active");
+
   const employeesQuery = useQuery({
     queryKey: [
       "employees",
@@ -266,6 +246,7 @@ export default function Employees({ ...otherProps }) {
         sort: sorting,
         pageIndex,
         pageSize,
+        activeTab,
       },
     ],
     keepPreviousData: true,
@@ -287,14 +268,11 @@ export default function Employees({ ...otherProps }) {
             ).toISOString()}"`;
           }
         } else {
-          console.log(e);
           return e.value
             .map((p) => `${e.id}="${p.id || p.value || p}"`)
             .join(" || ");
         }
       });
-
-      console.log(filters);
 
       const sorters = sorting
         .map((p) => `${p.desc ? "-" : "+"}${p.id}`)
@@ -304,7 +282,9 @@ export default function Employees({ ...otherProps }) {
         .collection("users")
         .getList(pageIndex + 1, pageSize, {
           ...cleanObject({
-            filter: [searchQ, filters].filter((e) => e).join("&&"),
+            filter: [searchQ, filters, `status="${activeTab}"`]
+              .filter((e) => e)
+              .join("&&"),
             expand: "department,role,branch",
             sort: sorters,
           }),
@@ -343,10 +323,39 @@ export default function Employees({ ...otherProps }) {
 
   const editRow = useEditRow();
 
-  console.log(employeesQuery.data);
-
   return (
     <>
+      <div className=" bg-white scroller border-t border-l border-r rounded-t">
+        <ScrollArea className="w-full  whitespace-nowrap">
+          <div className="flex px-2 items-center  justify-start">
+            {[
+              { title: "Actice employees", name: "Active" },
+              { title: "Inactive employees", name: "Inactive" },
+            ].map((e, i) => {
+              return (
+                <a
+                  key={i}
+                  className={cn(
+                    "cursor-pointer px-6 capitalize text-center relative w-full- text-slate-700 text-[13px] sm:text-sm py-3  font-medium",
+                    {
+                      "text-primary ": activeTab === e.name,
+                    }
+                  )}
+                  onClick={() => {
+                    setactiveTab(e.name);
+                  }}
+                >
+                  {activeTab === e.name && (
+                    <div className="h-[3px] left-0 rounded-t-md bg-primary absolute bottom-0 w-full"></div>
+                  )}
+                  <span className=""> {e.title}</span>
+                </a>
+              );
+            })}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+      </div>
       <DataTable
         isFetching={employeesQuery.isFetching}
         defaultColumnVisibility={{}}
@@ -377,7 +386,6 @@ export default function Employees({ ...otherProps }) {
           );
         }}
         facets={[
-          { title: "Status", options: statuses, name: "status" },
           {
             title: "Role",
             loader: ({ search }) => {

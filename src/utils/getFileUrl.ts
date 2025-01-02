@@ -1,8 +1,6 @@
 const getFileUrl = ({ file, collection, record }) => {
   return file
-    ? `${
-        import.meta.env.VITE_POCKETBASE_URL
-      }/api/files/${collection}/${record}/${file}`
+    ? `https://pocketbase-production-f0b0.up.railway.app/api/files/${collection}/${record}/${file}`
     : undefined;
 };
 

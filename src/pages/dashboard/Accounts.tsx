@@ -8,12 +8,17 @@ import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
 import { useQuery } from "react-query";
+import BreadCrumb from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
+import useModalState from "@/hooks/useModalState";
+import useEditRow from "@/hooks/use-edit-row";
+import DataTableRowActions from "@/components/datatable/DataTableRowActions";
 import ConfirmModal from "@/components/modals/ConfirmModal";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
+import { AccountFormModal } from "@/components/modals/AccountFormModal";
 
-export default function Roles() {
+export default function Accounts() {
   const navigate = useNavigate();
 
   const columns: ColumnDef<any>[] = [
@@ -60,20 +65,38 @@ export default function Roles() {
       enableSorting: true,
       enableHiding: true,
     },
+
     {
-      accessorKey: "created_by",
+      accessorKey: "currentBalance",
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created By" />
+        <DataTableColumnHeader column={column} title="Current Balance" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created_by")}</div>
+        <div className="capitalize">
+          {(row.getValue("currentBalance") as number).toLocaleString()} FRW
+        </div>
       ),
       enableSorting: true,
+      enableHiding: true,
       filterFn: (__, _, value) => {
         return value;
       },
-      enableHiding: true,
     },
+    {
+      accessorKey: "feeType",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Fee type" />
+      ),
+      cell: ({ row }) => (
+        <div className="capitalize">{row.getValue("feeType")}</div>
+      ),
+      enableSorting: true,
+      enableHiding: true,
+      filterFn: (__, _, value) => {
+        return value;
+      },
+    },
+
     {
       accessorKey: "created",
       header: ({ column }) => (
@@ -94,18 +117,31 @@ export default function Roles() {
         <DataTableColumnHeader column={column} title="Actions" />
       ),
       cell: ({ row }) => (
-        <Button
-          size={"sm"}
-          onClick={() => {
-            navigate(
-              `/dashboard/settings/general-settings/roles-permissions/${row.original.id}`
-            );
-          }}
-          className="text-blue-500"
-          variant="link"
-        >
-          View Details
-        </Button>
+        <DataTableRowActions
+          actions={[
+            {
+              title: "View Transactions",
+              onClick: (e) => {
+                navigate(
+                  `/dashboard/finance/petty-cash-accounts/${e.original.id}`
+                );
+              },
+            },
+            {
+              title: "Edit price type",
+              onClick: (e) => {
+                editRow.edit(e.original);
+              },
+            },
+            {
+              title: "Delete account",
+              onClick: (e) => {
+                confirmModal.open({ meta: e });
+              },
+            },
+          ]}
+          row={row}
+        />
       ),
     },
   ];
@@ -122,12 +158,12 @@ export default function Roles() {
 
   const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
     pageIndex: 0,
-    pageSize: 10,
+    pageSize: 15,
   });
 
   const recordsQuery = useQuery({
     queryKey: [
-      "roles",
+      "accounts",
       {
         columnFilters,
         search: searchText,
@@ -150,12 +186,11 @@ export default function Roles() {
         .join(" && ");
 
       return pocketbase
-        .collection("roles")
+        .collection("accounts")
         .getList(pageIndex + 1, pageSize, {
           ...cleanObject({
             filter: [searchQ, filters].filter((e) => e).join("&&"),
             sort: sorters,
-            expand: `employees,created_by`,
           }),
         })
         .then((e) => {
@@ -164,17 +199,15 @@ export default function Roles() {
               return {
                 id: e.id,
                 name: e.name,
-                created_by: e.expand?.created_by?.name,
-                employees: e.employees.length || 0,
+                description: e.description,
+                currentBalance: e.currentBalance,
+                feeType: e.feeType,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
                   month: "long",
                   year: "numeric",
-                }),
-                updated: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
                 }),
                 original: e,
               };
@@ -186,17 +219,21 @@ export default function Roles() {
     enabled: true,
   });
 
+  const newRecordModal = useModalState();
+
+  const editRow = useEditRow();
+
   const confirmModal = useConfirmModal();
 
   const handleDelete = (e) => {
     confirmModal.setIsLoading(true);
     return pocketbase
-      .collection("roles")
+      .collection("accounts")
       .delete(e.id)
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("Roles deleted succesfully");
+        toast.success("price type deleted succesfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -206,52 +243,61 @@ export default function Roles() {
 
   return (
     <>
-      <DataTable
-        className="!border-none !p-0"
-        isFetching={recordsQuery.isFetching}
-        defaultColumnVisibility={{}}
-        isLoading={recordsQuery.status === "loading"}
-        data={recordsQuery?.data?.items || []}
-        columns={columns}
-        Action={() => {
-          return (
-            <Button
-              className="mr-2"
-              onClick={() => {
-                navigate(
-                  "/dashboard/settings/general-settings/roles-permissions/new"
-                );
-              }}
-              size="sm"
-            >
-              <PlusCircle size={16} className="mr-2" />
-              <span>Create new role</span>
-            </Button>
-          );
-        }}
-        onSearch={(e) => {
-          setsearchText(e);
-        }}
-        sorting={sorting}
-        setSorting={setSorting}
-        pageCount={recordsQuery?.data?.totalPages}
-        setPagination={setPagination}
-        pageIndex={pageIndex}
-        pageSize={pageSize}
-        setColumnFilters={setColumnFilters}
-        columnFilters={columnFilters}
-        facets={[
-          {
-            title: "Status",
-            name: "status",
-            options: [
-              { label: "active", value: "active" },
-              { label: "inactive", value: "inactive" },
-            ],
-          },
-        ]}
-      />
+      <div className="sm:px-4 px-2">
+        <div className="flex items-start justify-between space-y-2 mb-3">
+          <div className="flex items-start gap-2 flex-col">
+            <h2 className="text-base font-semibold tracking-tight">
+              All Petty Cah account.
+            </h2>
+            <BreadCrumb
+              items={[{ title: "All accounts", link: "/dashboard" }]}
+            />
+          </div>
+          <Button onClick={() => newRecordModal.open()} size="sm">
+            <PlusCircle size={16} className="mr-2" />
+            <span>Create new account</span>
+          </Button>
+        </div>
+        <DataTable
+          isFetching={recordsQuery.isFetching}
+          defaultColumnVisibility={{}}
+          isLoading={recordsQuery.status === "loading"}
+          data={recordsQuery?.data?.items || []}
+          columns={columns}
+          onSearch={(e) => {
+            setsearchText(e);
+          }}
+          sorting={sorting}
+          setSorting={setSorting}
+          pageCount={recordsQuery?.data?.totalPages}
+          setPagination={setPagination}
+          pageIndex={pageIndex}
+          pageSize={pageSize}
+          setColumnFilters={setColumnFilters}
+          columnFilters={columnFilters}
+          facets={[
+            {
+              title: "Status",
+              name: "status",
+              options: [
+                { label: "active", value: "active" },
+                { label: "inactive", value: "inactive" },
+              ],
+            },
+          ]}
+        />
+      </div>
 
+      <AccountFormModal
+        onComplete={() => {
+          recordsQuery.refetch();
+          newRecordModal.close();
+          editRow.close();
+        }}
+        record={editRow.row}
+        setOpen={editRow.isOpen ? editRow.setOpen : newRecordModal.setisOpen}
+        open={newRecordModal.isOpen || editRow.isOpen}
+      />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
         description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet

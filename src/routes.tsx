@@ -1,4 +1,4 @@
-import { Outlet, createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 import App from "@/App";
 import DashboardLayout from "@/layouts/DashboardLayout";
 import PageNotFound from "@/pages/PageNotFound";
@@ -38,11 +38,10 @@ import AssetsCategories from "./pages/dashboard/AssetsCategories";
 import FileManager from "./pages/dashboard/FileManager";
 import WeeklyPlans from "./pages/dashboard/WeeklyPlane";
 import RequestCash from "./pages/dashboard/RequestCash";
-import Tasks from "./pages/dashboard/Task";
-import Reports from "./pages/dashboard/Report";
-import ReasonFormModal from "./components/modals/ReasonFormModel";
 import Reason from "./pages/dashboard/Reason";
 import ClientManagement from "./pages/dashboard/clients";
+import Accounts from "./pages/dashboard/Accounts";
+import AccountTransactions from "./components/AccountTransactions";
 
 const router = createBrowserRouter([
   {
@@ -92,7 +91,7 @@ const router = createBrowserRouter([
                       <ProtectedRoute entity="access_employee_portal">
                         <RequestCash />
                       </ProtectedRoute>
-                    ),  
+                    ),
                   },
                   {
                     path: "AddReason",
@@ -104,27 +103,26 @@ const router = createBrowserRouter([
                   },
 
                   {
-                      path: "employees/tasks",
-                      // element: <Tasks />,
+                    path: "employees/tasks",
+                    // element: <Tasks />,
                   },
                   {
                     path: "employees/reports",
                     // element: <Reports />,
-                },
-                {
-                  path: "Dnr-Material",
-                  element: <FileManager />,
-              },
+                  },
+                  {
+                    path: "Dnr-Material",
+                    element: <FileManager />,
+                  },
                   {
                     path: "weeklyplane",
-                    element:<WeeklyPlans />                    
+                    element: <WeeklyPlans />,
                   },
 
                   {
                     path: "clients",
-                    element:<ClientManagement />                    
+                    element: <ClientManagement />,
                   },
-                 
                 ],
               },
 
@@ -179,7 +177,7 @@ const router = createBrowserRouter([
                       </ProtectedRoute>
                     ),
                   },
-                  
+
                   {
                     path: "performance",
                     children: [
@@ -211,7 +209,7 @@ const router = createBrowserRouter([
                   },
                   {
                     path: "payroll",
-                    children: [   
+                    children: [
                       {
                         index: true,
                         element: (
@@ -228,7 +226,7 @@ const router = createBrowserRouter([
                           </ProtectedRoute>
                         ),
                       },
-                     
+
                       {
                         path: ":payrollId",
                         element: (
@@ -257,6 +255,28 @@ const router = createBrowserRouter([
                     element: (
                       <ProtectedRoute entity="view_attendace_report">
                         <AttendanceReport />
+                      </ProtectedRoute>
+                    ),
+                  },
+                ],
+              },
+
+              {
+                path: "finance",
+                children: [
+                  {
+                    path: "petty-cash-accounts",
+                    element: (
+                      <ProtectedRoute entity="view_petty_cash_accounts">
+                        <Accounts />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "petty-cash-accounts/:accountId",
+                    element: (
+                      <ProtectedRoute entity="view_petty_cash_accounts">
+                        <AccountTransactions />,
                       </ProtectedRoute>
                     ),
                   },

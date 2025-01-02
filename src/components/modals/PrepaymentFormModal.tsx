@@ -20,46 +20,33 @@ import AppFormTextArea from "../forms/AppFormTextArea";
 import { useAuth } from "@/context/auth.context";
 import AppFormAsyncSelect from "../forms/AppFormAsyncSelect";
 import cleanObject from "@/utils/cleanObject";
-import AppFormMonthPicker from "../forms/AppFormMonthpicker";
 import AppFileUpload from "../forms/AppFileUpload";
 import { Alert, AlertTitle } from "../ui/alert";
 import { AlertCircleIcon } from "lucide-react";
-import AppFormDatePicker from "../forms/AppFormDatepicker";
 
 const formSchema = z.object({
   employee: z.string().min(1, { message: "Employee is Required" }),
-  position: z.string().optional(),
   expenseCategory: z.string().min(1, "Expense category is required"),
   amount: z.string().min(1, { message: "Amount is required" }),
   date: z.date(),
-  particularly: z.string().optional(),
   description: z.string().optional(),
   momoNumber: z.string().optional(),
   momoName: z.string().optional(),
-  totalAmount: z.number().min(1, "Total amount is required"),
   attachment: z.any().optional(),
-  
-  deduction_month: z
-    .string()
-    .min(1, { message: "Deduction month is required" }),
+  account: z.string().optional(),
 });
 
 const getDefaultValues = (data?: any) => {
   return {
     employee: data?.employee || "",
-    position: data?.position || "",
     expenseCategory: data?.expenseCategory || "",
     date: data?.date ? new Date(data.date) : new Date(),
-    particularly: data?.particularly || "",
     momoNumber: data?.momoNumber || "",
     momoName: data?.momoName || "",
-    totalAmount: data?.totalAmount || 0,
     amount: data?.amount?.toString() || "",
     description: data?.description || "",
     attachment: data?.attachment || undefined,
-    deduction_month:
-      data?.deduction_month ||
-      `${new Date().getFullYear()}.${new Date().getMonth() + 1}`,
+    account: data?.account || "",
   };
 };
 
@@ -96,34 +83,11 @@ export function PrepaymentFormModal({
     };
     setError("");
 
-    const employee = await pocketbase.collection("users").getOne(data.employee);
-    const employee_salary = employee?.salary || 0;
-
-    // check if employee salary is less than the amount to be deducted
-    if (parseInt(data.amount) > employee_salary) {
-      return setError(
-        "The amount to be deducted is greater than the employee's salary"
-      );
-    }
-
-    // check if the employee has an existing prepayments to be deducted from the selected month
-    const existing_prepayments = await pocketbase
-      .collection("prepayments")
-      .getFullList({
-        filter: `employee="${data.employee}" && deduction_month="${data.deduction_month}"`,
-      });
-
-    if (existing_prepayments.length)
-      return setError(
-        "Employee already has a prepayment for the selected month"
-      );
-
     const q = !record
       ? pocketbase.collection("prepayments").create({
           ...data,
           created_by: user?.id,
           status: "pending",
-          payment_status: "unpaid",
         })
       : pocketbase.collection("prepayments").update(record.id, { ...data });
 
@@ -153,6 +117,8 @@ export function PrepaymentFormModal({
       .then((e) => e.map((e) => ({ label: e.names || e.name, value: e.id })));
   }
 
+  console.log("record", form.formState.errors);
+
   return (
     <>
       {" "}
@@ -162,12 +128,12 @@ export function PrepaymentFormModal({
             <DialogTitle>
               <span className="text-base px-2 font-semibold py-2">
                 {record ? "Update" : employeeId ? "Apply for a" : "Create"}{" "}
-                Prepayment
+                Expense
               </span>
             </DialogTitle>
             <DialogDescription>
               <span className="px-2 py-0 text-sm text-slate-500 leading-7">
-                Fill in the fields to create a new prepayment salary.
+                Fill in the fields to create a new expense salary.
               </span>
             </DialogDescription>
           </DialogHeader>
@@ -198,19 +164,6 @@ export function PrepaymentFormModal({
                   />
                   <AppFormField
                     form={form}
-                    label={"Position"}
-                    placeholder={"Enter position"}
-                    name={"position"}
-                  />
-
-                  <AppFormField
-                    form={form}
-                    label={"Particularly"}
-                    placeholder={"Enter particularly"}
-                    name={"particularly"}
-                  />
-                  <AppFormField
-                    form={form}
                     label={"Momo Number"}
                     placeholder={"Enter momo number"}
                     name={"momoNumber"}
@@ -221,7 +174,7 @@ export function PrepaymentFormModal({
                     placeholder={"Enter momo name"}
                     name={"momoName"}
                   />
-               
+
                   <AppFormField
                     form={form}
                     type="number"
@@ -230,28 +183,44 @@ export function PrepaymentFormModal({
                     name={"amount"}
                   />
                 </div>
-                <div>
-                  {/* <AppFormMonthPicker
+                <div className="grid grid-cols-2 gap-3">
+                  <AppFormAsyncSelect
                     form={form}
-                    label={"Deduction month"}
-                    name={"deduction_month"}
-                  /> */}
-                  <AppFormDatePicker
-                    form={form}
-                    label={"Deduction Date"}
-                    name={"deduction_month"}
-                    placeholder={"Enter date"}
+                    name={"expenseCategory"}
+                    label={`Choose expense category`}
+                    placeholder={`Choose expense category`}
+                    loader={({ search }) => {
+                      return pocketbase
+                        .collection("expenses_categories")
+                        .getFullList({
+                          filter: `name~"${search}"`,
+                        })
+                        .then((e) =>
+                          e.map((e) => ({ label: e.name, value: e.id }))
+                        );
+                    }}
                   />
-
-                   <AppFormField
+                  <AppFormAsyncSelect
                     form={form}
-                    label={"Total Amount"}
-                    placeholder={"Enter total amount"}
-                    name={"totalAmount"}
+                    name={"account"}
+                    label={"Choose account"}
+                    placeholder={"Choose method"}
+                    loader={({ search }) => {
+                      return pocketbase
+                        .collection("accounts")
+                        .getFullList({
+                          filter: search ? `name~"${search}"` : "",
+                        })
+                        .then((e) =>
+                          e.map((e) => ({
+                            label: e.name,
+                            value: e.id,
+                            original: e,
+                          }))
+                        );
+                    }}
                   />
                 </div>
-
-
                 <div>
                   <AppFormTextArea
                     form={form}
@@ -293,7 +262,7 @@ export function PrepaymentFormModal({
                     {form.formState.isSubmitting && (
                       <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
                     )}
-                    {record ? "Update credit." : " Create new credit"}
+                    {record ? "Update expense." : " Create new expense"}
                   </Button>
                 </div>
               </DialogFooter>

@@ -1,10 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google';
+import React, { useState, useEffect, useCallback } from "react";
+import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import DataTable from "@/components/DataTable";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Folder, FileText, Share2, Download, ArrowLeft } from "lucide-react";
+import {
+  PlusCircle,
+  Folder,
+  FileText,
+  Share2,
+  Download,
+  ArrowLeft,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery } from "react-query";
 import { Button } from "@/components/ui/button";
@@ -15,9 +22,8 @@ import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
 import BreadCrumb from "@/components/breadcrumb";
 
-
-const CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
-const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 
 function FileManagerContent() {
   const [accessToken, setAccessToken] = useState(null);
@@ -29,17 +35,19 @@ function FileManagerContent() {
 
   const login = useGoogleLogin({
     onSuccess: (response) => setAccessToken(response.access_token),
-    scope: 'https://www.googleapis.com/auth/drive.file',
+    scope: "https://www.googleapis.com/auth/drive.file",
   });
 
   const initializeGapi = useCallback(async () => {
     if (!window.gapi) return;
-    
+
     await window.gapi.client.init({
       apiKey: API_KEY,
-      discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
+      discoveryDocs: [
+        "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+      ],
     });
-    
+
     setGapi(window.gapi);
   }, []);
 
@@ -47,7 +55,7 @@ function FileManagerContent() {
     const script = document.createElement("script");
     script.src = "https://apis.google.com/js/api.js";
     script.onload = () => {
-      window.gapi.load('client', initializeGapi);
+      window.gapi.load("client", initializeGapi);
     };
     document.body.appendChild(script);
 
@@ -91,10 +99,18 @@ function FileManagerContent() {
       ),
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          {row.original.mimeType === 'application/vnd.google-apps.folder' ? <Folder size={16} /> : <FileText size={16} />}
+          {row.original.mimeType === "application/vnd.google-apps.folder" ? (
+            <Folder size={16} />
+          ) : (
+            <FileText size={16} />
+          )}
           <Link
             to="#"
-            onClick={() => row.original.mimeType === 'application/vnd.google-apps.folder' ? handleFolderClick(row.original.id) : handleOpenFile(row.original)}
+            onClick={() =>
+              row.original.mimeType === "application/vnd.google-apps.folder"
+                ? handleFolderClick(row.original.id)
+                : handleOpenFile(row.original)
+            }
             className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
           >
             {row.getValue("name")}
@@ -109,7 +125,9 @@ function FileManagerContent() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Modified" />
       ),
-      cell: ({ row }) => <div>{new Date(row.getValue("modifiedTime")).toLocaleString()}</div>,
+      cell: ({ row }) => (
+        <div>{new Date(row.getValue("modifiedTime")).toLocaleString()}</div>
+      ),
       enableSorting: true,
       enableHiding: true,
     },
@@ -153,15 +171,27 @@ function FileManagerContent() {
   });
 
   const filesQuery = useQuery({
-    queryKey: ["files", { columnFilters, search: searchText, sort: sorting, pageIndex, pageSize, currentFolderId }],
+    queryKey: [
+      "files",
+      {
+        columnFilters,
+        search: searchText,
+        sort: sorting,
+        pageIndex,
+        pageSize,
+        currentFolderId,
+      },
+    ],
     queryFn: async () => {
       if (!accessToken || !gapi) return { files: [], nextPageToken: null };
-      
+
       const response = await gapi.client.drive.files.list({
         pageSize: pageSize,
         fields: "nextPageToken, files(id, name, mimeType, modifiedTime)",
         q: `'${currentFolderId}' in parents and trashed = false`,
-        orderBy: sorting.map(s => `${s.id} ${s.desc ? 'desc' : 'asc'}`).join(', '),
+        orderBy: sorting
+          .map((s) => `${s.id} ${s.desc ? "desc" : "asc"}`)
+          .join(", "),
         pageToken: pageIndex > 0 ? filesQuery.data?.nextPageToken : null,
       });
 
@@ -182,22 +212,22 @@ function FileManagerContent() {
       toast.error("Please sign in to create a folder");
       return;
     }
-  
+
     if (!name || name.trim() === "") {
       toast.error("Folder name cannot be empty");
       return;
     }
-  
+
     try {
       const response = await gapi.client.drive.files.create({
         resource: {
           name: name,
-          mimeType: 'application/vnd.google-apps.folder',
+          mimeType: "application/vnd.google-apps.folder",
           parents: [currentFolderId],
         },
-        fields: 'id'
+        fields: "id",
       });
-  
+
       if (response.status === 200) {
         filesQuery.refetch();
         newFolderModal.close();
@@ -221,15 +251,21 @@ function FileManagerContent() {
       parents: [currentFolderId],
     };
     const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', file);
+    form.append(
+      "metadata",
+      new Blob([JSON.stringify(metadata)], { type: "application/json" })
+    );
+    form.append("file", file);
 
     try {
-      await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST',
-        headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-        body: form,
-      });
+      await fetch(
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+        {
+          method: "POST",
+          headers: new Headers({ Authorization: "Bearer " + accessToken }),
+          body: form,
+        }
+      );
       filesQuery.refetch();
       uploadFileModal.close();
       toast.success("File uploaded successfully");
@@ -245,7 +281,7 @@ function FileManagerContent() {
     }
     try {
       await gapi.client.drive.files.delete({
-        fileId: file.id
+        fileId: file.id,
       });
       filesQuery.refetch();
       confirmModal.close();
@@ -264,9 +300,9 @@ function FileManagerContent() {
       await gapi.client.drive.permissions.create({
         fileId: fileId,
         resource: {
-          role: 'reader',
-          type: 'anyone'
-        }
+          role: "reader",
+          type: "anyone",
+        },
       });
       toast.success("File shared successfully");
     } catch (error) {
@@ -283,26 +319,29 @@ function FileManagerContent() {
       // Fetch file metadata to get the file name and MIME type
       const metadataResponse = await gapi.client.drive.files.get({
         fileId: fileId,
-        fields: 'name, mimeType',
+        fields: "name, mimeType",
       });
 
       const fileName = metadataResponse.result.name;
       const mimeType = metadataResponse.result.mimeType;
 
       // Fetch the file content
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-        headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-      });
+      const response = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        {
+          headers: new Headers({ Authorization: "Bearer " + accessToken }),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to download fil e');
+        throw new Error("Failed to download fil e");
       }
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      link.setAttribute('download', fileName);
+      link.setAttribute("download", fileName);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -314,20 +353,20 @@ function FileManagerContent() {
 
   const handleOpenFile = (file) => {
     const mimeType = file.mimeType;
-    let url = '';
+    let url = "";
 
-    if (mimeType === 'application/vnd.google-apps.document') {
+    if (mimeType === "application/vnd.google-apps.document") {
       url = `https://docs.google.com/document/d/${file.id}/edit`;
-    } else if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+    } else if (mimeType === "application/vnd.google-apps.spreadsheet") {
       url = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
-    } else if (mimeType === 'application/vnd.google-apps.presentation') {
+    } else if (mimeType === "application/vnd.google-apps.presentation") {
       url = `https://docs.google.com/presentation/d/${file.id}/edit`;
     } else {
       handleDownload(file.id);
       return;
     }
 
-    window.open(url, '_blank');
+    window.open(url, "_blank");
   };
 
   const handleFolderClick = (folderId) => {
@@ -348,12 +387,17 @@ function FileManagerContent() {
     <div className="px-4">
       <div className="flex items-start justify-between space-y-2">
         <div className="flex items-start gap-2 flex-col">
-          <h2 className="text-lg font-semibold tracking-tight">DNR File Management</h2>
+          <h2 className="text-lg font-semibold tracking-tight">
+            DNR File Management
+          </h2>
           <BreadCrumb items={[{ title: "Files", link: "/files" }]} />
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => accessToken ? setAccessToken(null) : login()} size="sm">
-            {accessToken ? 'Sign Out' : 'Sign In'}
+          <Button
+            onClick={() => (accessToken ? setAccessToken(null) : login())}
+            size="sm"
+          >
+            {accessToken ? "Sign Out" : "Sign In"}
           </Button>
           {accessToken && (
             <>
@@ -382,7 +426,9 @@ function FileManagerContent() {
           onSearch={setSearchText}
           sorting={sorting}
           setSorting={setSorting}
-          pageCount={filesQuery?.data?.nextPageToken ? pageIndex + 2 : pageIndex + 1}
+          pageCount={
+            filesQuery?.data?.nextPageToken ? pageIndex + 2 : pageIndex + 1
+          }
           setPagination={setPagination}
           pageIndex={pageIndex}
           pageSize={pageSize}
@@ -392,11 +438,13 @@ function FileManagerContent() {
           defaultColumnVisibility={{}} // Add appropriate default column visibility here
         />
       ) : (
-        <div className="text-center mt-8">Please sign in to view your DNR Files Managment.</div>
+        <div className="text-center mt-8">
+          Please sign in to view your DNR Files Managment.
+        </div>
       )}
 
       {/* TODO: Implement NewFolderModal, UploadFileModal components */}
-      
+
       <ConfirmModal
         title={"Are you sure you want to delete this item?"}
         description={"This action cannot be undone."}
@@ -418,7 +466,9 @@ function FileManagerContent() {
               onChange={(e) => setNewFolderName(e.target.value)}
               placeholder="Folder Name"
             />
-            <Button onClick={() => handleCreateFolder(newFolderName)}>Create</Button>
+            <Button onClick={() => handleCreateFolder(newFolderName)}>
+              Create
+            </Button>
             <Button onClick={() => newFolderModal.close()}>Cancel</Button>
           </div>
         </div>
@@ -433,7 +483,9 @@ function FileManagerContent() {
               type="file"
               onChange={(e) => setFileToUpload(e.target.files[0])}
             />
-            <Button onClick={() => handleUploadFile(fileToUpload)}>Upload</Button>
+            <Button onClick={() => handleUploadFile(fileToUpload)}>
+              Upload
+            </Button>
             <Button onClick={() => uploadFileModal.close()}>Cancel</Button>
           </div>
         </div>

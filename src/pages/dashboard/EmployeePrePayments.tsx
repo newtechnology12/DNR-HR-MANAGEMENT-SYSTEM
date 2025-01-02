@@ -78,67 +78,12 @@ export default function EmployeePrePayments({ employeeId }) {
     },
 
     {
-      accessorKey: "reason",
+      accessorKey: "category",
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Reason" />
+        <DataTableColumnHeader column={column} title="Category" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("reason")}</div>
-      ),
-      enableSorting: false,
-      enableHiding: true,
-    },
-
-    // {
-    //   accessorKey: "paid_amount",
-    //   header: ({ column }) => (
-    //     <DataTableColumnHeader column={column} title="Received" />
-    //   ),
-    //   cell: ({ row }) => (
-    //     <div className="capitalize truncate">
-    //       {Number(row.getValue("paid_amount")).toLocaleString()} FRW
-    //     </div>
-    //   ),
-    //   filterFn: (__, _, value) => {
-    //     return value;
-    //   },
-    //   enableSorting: true,
-    //   enableHiding: true,
-    // },
-    // {
-    //   accessorKey: "remaining_amount",
-    //   header: ({ column }) => (
-    //     <DataTableColumnHeader column={column} title="Remaining Amount" />
-    //   ),
-    //   cell: ({ row }) => (
-    //     <div className="capitalize">
-    //       {Number(row.getValue("remaining_amount")).toLocaleString()} FRW
-    //     </div>
-    //   ),
-    //   filterFn: (__, _, value) => {
-    //     return value;
-    //   },
-    //   enableSorting: true,
-    //   enableHiding: true,
-    // },
-    {
-      accessorKey: "deduction_date",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Deduction" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("deduction_date")}</div>
-      ),
-      enableSorting: false,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "particularly",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Particularly" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("particularly")}</div>
+        <div className="capitalize">{row.getValue("category")}</div>
       ),
       enableSorting: false,
       enableHiding: true,
@@ -150,34 +95,6 @@ export default function EmployeePrePayments({ employeeId }) {
       ),
       cell: ({ row }) => (
         <div className="capitalize">{row.getValue("status")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "created_by",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created by" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created_by")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "payment_status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Approved by" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("payment_status")}</div>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -204,25 +121,7 @@ export default function EmployeePrePayments({ employeeId }) {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Actions" />
       ),
-      cell: ({ row }) => (
-        <DataTableRowActions
-          actions={[
-            {
-              title: "Edit loan",
-              onClick: (e) => {
-                editRow.edit(e.original);
-              },
-            },
-            {
-              title: "Delete loan",
-              onClick: (e) => {
-                confirmModal.open({ meta: e });
-              },
-            },
-          ]}
-          row={row}
-        />
-      ),
+      cell: ({ row }) => <DataTableRowActions actions={[]} row={row} />,
     },
   ];
 
@@ -291,7 +190,7 @@ export default function EmployeePrePayments({ employeeId }) {
               .filter((e) => e)
               .join("&&"),
             sort: sorters,
-            expand: `employee,created_by,transactions`,
+            expand: `employee,created_by,transactions,expenseCategory`,
           }),
         })
         .then((e) => {
@@ -300,31 +199,9 @@ export default function EmployeePrePayments({ employeeId }) {
               return {
                 id: e.id,
                 amount: e.amount,
-                reason: e.reason,
-                particularly: e.particularly,
-                // paid_amount:
-                //   e?.expand?.transactions
-                //     ?.map((e) => e.amount)
-                //     .reduce((a, b) => a + b, 0) || -0,
-                // remaining_amount:
-                //   e.amount -
-                //   (e?.expand?.transactions
-                //     ?.map((e) => e.amount)
-                //     .reduce((a, b) => a + b, 0) || -0),
+                category: e?.expand?.expenseCategory?.name,
                 status: e.status,
-                payment_status: e.payment_status,
                 created_by: e.expand?.created_by?.name,
-                // deduction_month: e.deduction_month
-                //   ? formatDate(e.deduction_month)
-                //   : "N.A",
-                deduction_date: new Date(e.deduction_date).toLocaleDateString(
-                  "en-US",
-                  {
-                    day: "2-digit",
-                    month: "long",
-                    year: "numeric",
-                  }
-                ),
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
                   month: "long",
@@ -395,7 +272,7 @@ export default function EmployeePrePayments({ employeeId }) {
               size="sm"
               className="mr-2"
             >
-              Apply For prepayment.
+              Apply For Expense.
             </Button>
           );
         }}

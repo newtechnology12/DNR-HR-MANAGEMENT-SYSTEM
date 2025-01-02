@@ -18,7 +18,6 @@ import { toast } from "sonner";
 import BreadCrumb from "@/components/breadcrumb";
 import ReasonFormModal from "@/components/modals/ReasonFormModel";
 
-
 export default function Reason() {
   const columns: ColumnDef<any>[] = [
     {
@@ -75,7 +74,7 @@ export default function Reason() {
       enableSorting: true,
       enableHiding: true,
     },
-   
+
     {
       accessorKey: "updated",
       header: ({ column }) => (
@@ -228,9 +227,7 @@ export default function Reason() {
       <div className="px-4">
         <div className="flex items-start justify-between space-y-2">
           <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
-              All reason
-            </h2>
+            <h2 className="text-lg font-semibold tracking-tight">All reason</h2>
             <BreadCrumb
               items={[{ title: "View reason", link: "/dashboard" }]}
             />

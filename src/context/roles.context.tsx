@@ -17,17 +17,18 @@ export function RolesProvider({ children }: { children: React.ReactNode }) {
 
   const permitions = user?.role?.permitions?.filter((e) => e?.access === true);
 
-  console.log('User:', user);
-  console.log('Roles:', roles);
-  console.log('Permitions:', permitions);
+  const canPerform = (permition: string) => {
+    return permitions?.find((e) => e?.name === permition)?.access;
+  };
 
   const contextValue = useMemo(
     () => ({
       roles,
       isLoading,
       permitions,
+      canPerform,
     }),
-    [roles, isLoading, permitions]
+    [roles, isLoading, permitions, canPerform]
   );
 
   return (

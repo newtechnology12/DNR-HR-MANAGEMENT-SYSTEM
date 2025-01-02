@@ -1,9 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { read, utils, writeFile } from 'xlsx';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { read, utils, writeFile } from "xlsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "../ui/button";
 import { Form } from "../ui/form";
 import Loader from "../icons/Loader";
@@ -22,9 +29,13 @@ const formSchema = z.object({
   phone: z.string().min(10, { message: "Phone is a required field" }),
   role: z.string().min(1, { message: "Role is a required field" }),
   department: z.string().min(1, { message: "Department is a required field" }),
-  designation: z.string().min(1, { message: "Designation is a required field" }),
+  designation: z
+    .string()
+    .min(1, { message: "Designation is a required field" }),
   branch: z.string().min(1, { message: "Branch is a required field" }),
-  employment_type: z.string().min(1, { message: "Employment type is a required field" }),
+  employment_type: z
+    .string()
+    .min(1, { message: "Employment type is a required field" }),
   gender: z.string().min(1, { message: "Gender is a required field" }),
   birth: z.date(),
   country: z.string(),
@@ -100,7 +111,9 @@ export function EmployeFormModal({ open, setOpen, employee, onComplete }: any) {
         setFile(null);
       } catch (error) {
         console.error("Error importing file:", error);
-        toast.error("Failed to import employees. Please check the file format.");
+        toast.error(
+          "Failed to import employees. Please check the file format."
+        );
       } finally {
         setIsImporting(false);
       }
@@ -144,9 +157,9 @@ export function EmployeFormModal({ open, setOpen, employee, onComplete }: any) {
       joined_at: values.joined_at || new Date(),
       ...values,
     };
-  
+
     console.log("Submitting data:", data); // Log the data being sent
-  
+
     const q = !employee
       ? pocketbase.collection("users").create({
           emailVisibility: true,
@@ -158,7 +171,7 @@ export function EmployeFormModal({ open, setOpen, employee, onComplete }: any) {
           status: "active",
           ...data,
         });
-  
+
     return q
       .then(async () => {
         onComplete();
@@ -168,20 +181,20 @@ export function EmployeFormModal({ open, setOpen, employee, onComplete }: any) {
             : "Employee created successfully"
         );
         form.reset();
-  
+
         if (employee && employee.department !== data.department) {
           const newDepartment = await pocketbase
             .collection("departments")
             .getOne(data.department);
-  
+
           const oldDepartment = await pocketbase
             .collection("departments")
             .getOne(employee?.department);
-  
+
           await pocketbase.collection("departments").update(data.department, {
             employees: [...newDepartment.employees, employee.id],
           });
-  
+
           await pocketbase
             .collection("departments")
             .update(employee.department, {
@@ -414,8 +427,8 @@ export function EmployeFormModal({ open, setOpen, employee, onComplete }: any) {
                       placeholder={"Choose employee status"}
                       name={"status"}
                       options={[
-                        { label: "Active", value: "active" },
-                        { label: "Inactive", value: "inactive" },
+                        { label: "Active", value: "Active" },
+                        { label: "Inactive", value: "Inactive" },
                         { label: "Suspended", value: "suspended" },
                         { label: "Terminated", value: "terminated" },
                         { label: "Resigned", value: "resigned" },
@@ -479,7 +492,7 @@ export function EmployeFormModal({ open, setOpen, employee, onComplete }: any) {
                   className="hidden"
                   id="file-upload"
                 />
-                <label htmlFor="file-upload" className="w-full">
+                {/* <label htmlFor="file-upload" className="w-full">
                   <Button
                     type="button"
                     className="w-full"
@@ -502,8 +515,8 @@ export function EmployeFormModal({ open, setOpen, employee, onComplete }: any) {
                     <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
                   )}
                   Process Import
-                </Button>
-                <Button
+                </Button> */}
+                {/* <Button
                   type="button"
                   onClick={handleDownloadTemplate}
                   className="w-full"
@@ -511,7 +524,7 @@ export function EmployeFormModal({ open, setOpen, employee, onComplete }: any) {
                   variant="outline"
                 >
                   Download Template
-                </Button>
+                </Button> */}
               </div>
             </DialogFooter>
           </form>

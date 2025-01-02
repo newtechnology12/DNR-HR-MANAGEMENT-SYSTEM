@@ -272,6 +272,51 @@ const basePermissions = [
     ],
   },
   {
+    parent: "Expenses",
+    children: [
+      {
+        access: false,
+        name: "view_expenses",
+        title: "View expenses",
+      },
+      {
+        access: false,
+        name: "create_expense",
+        title: "Create expense",
+      },
+      {
+        access: false,
+        name: "approve_or_reject_expense",
+        title: "Approve or reject expense",
+      },
+    ],
+  },
+  {
+    parent: "Petty Cash Accounts",
+    children: [
+      {
+        access: false,
+        name: "view_petty_cash_accounts",
+        title: "View petty cash accounts",
+      },
+      {
+        access: false,
+        name: "create_petty_cash_account",
+        title: "Create petty cash account",
+      },
+      {
+        access: false,
+        name: "update_petty_cash_account",
+        title: "Update petty cash account",
+      },
+      {
+        access: false,
+        name: "refill_accounts",
+        title: "Refill accounts",
+      },
+    ],
+  },
+  {
     parent: "Assets Categories",
     children: [
       {
@@ -309,6 +354,26 @@ const basePermissions = [
         access: false,
         name: "update_assets_type",
         title: "Update assets type",
+      },
+    ],
+  },
+  {
+    parent: "Assets",
+    children: [
+      {
+        access: false,
+        name: "view_assets",
+        title: "View assets",
+      },
+      {
+        access: false,
+        name: "create_assets",
+        title: "Create assets",
+      },
+      {
+        access: false,
+        name: "update_assets",
+        title: "Update assets",
       },
     ],
   },

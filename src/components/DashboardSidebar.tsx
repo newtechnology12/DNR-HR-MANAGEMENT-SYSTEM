@@ -1,6 +1,6 @@
 import { useAuth } from "@/context/auth.context";
 import { cn } from "@/utils/cn";
-import { Users, LogOut, PenTool } from "react-feather";
+import { Users, LogOut } from "react-feather";
 import { AiOutlineShop } from "react-icons/ai";
 import { Link, useLocation } from "react-router-dom";
 import { Fragment, useMemo, useState } from "react";
@@ -22,13 +22,10 @@ import {
   Settings,
   Split,
   UserCog,
+  WalletCards,
 } from "lucide-react";
 import { useRoles } from "@/context/roles.context";
 import { BiPurchaseTagAlt } from "react-icons/bi";
-import { AiOutlineFileText, AiOutlineFileDone } from "react-icons/ai";
-
-
-
 
 const getRoles = (entity, roles = []) => {
   console.log(`Checking roles for entity: ${entity}`);
@@ -46,8 +43,8 @@ const getRoles = (entity, roles = []) => {
 export default function DashboardSidebar() {
   const { user }: any = useAuth();
   const { roles = [] }: any = useRoles(); // Provide a default empty array for roles
-  console.log('User:', user);
-  console.log('Roles:', roles);
+  console.log("User:", user);
+  console.log("Roles:", roles);
 
   const groupLinks: any = useMemo(
     () =>
@@ -73,8 +70,7 @@ export default function DashboardSidebar() {
                 //   icon: AiOutlineShop,
                 //   link: "/dashboard/clients",
                 //   roles: ["*"],
-                // },            
-                
+                // },
               ],
             },
             {
@@ -99,19 +95,18 @@ export default function DashboardSidebar() {
                 //   link: "/dashboard/RequestCash",
                 //   roles: getRoles("access_employee_portal", roles),
                 // },
-                {
-                  name: "Leave Management",
-                  icon: AiOutlineShop,
-                  link: "/dashboard/AddReason",
-                  roles: getRoles("access_employee_portal", roles),
-                },
+                // {
+                //   name: "Leave Management",
+                //   icon: AiOutlineShop,
+                //   link: "/dashboard/AddReason",
+                //   roles: getRoles("access_employee_portal", roles),
+                // },
                 // {
                 //   name: "Add Reason",
                 //   icon: AiOutlineShop,
                 //   link: "/dashboard/AddReason",
                 //   roles: getRoles("access_employee_portal", roles),
                 // },
-                                    
               ],
             },
             {
@@ -151,7 +146,7 @@ export default function DashboardSidebar() {
                   name: "Expense Request",
                   icon: CircleDollarSign,
                   link: "/dashboard/hr/prepayments",
-                  roles: getRoles("view_employee_prepayments", roles),
+                  roles: getRoles("view_expenses", roles),
                 },
                 {
                   name: "Performance & Appraisals",
@@ -161,6 +156,18 @@ export default function DashboardSidebar() {
                 },
               ],
             },
+            {
+              name: "Finance",
+              children: [
+                {
+                  name: "Petty Cash Accounts",
+                  icon: WalletCards,
+                  link: "/dashboard/finance/petty-cash-accounts",
+                  roles: getRoles("view_petty_cash_accounts", roles),
+                },
+              ],
+            },
+
             {
               name: "attendance",
               children: [
@@ -187,35 +194,30 @@ export default function DashboardSidebar() {
                   icon: BiPurchaseTagAlt,
                   link: "/dashboard/finance/petty-cash-requisition",
                   roles: getRoles("view_petty_cash_requisition", roles),
-                  
                 },
                 {
                   name: "Petty Cash Account",
                   icon: Container,
                   link: "/dashboard/finance/petty-cash-account",
                   roles: getRoles("view_petty_cash_account", roles),
-                 
                 },
                 {
                   name: "Expense Reports",
                   icon: Blocks,
                   link: "/dashboard/finance/expense-reports",
                   roles: getRoles("view_expense_reports", roles),
-                  
                 },
                 {
                   name: "Budget Management",
                   icon: Blocks,
                   link: "/dashboard/finance/budget-management",
                   roles: getRoles("view_budget_management", roles),
-                  
                 },
                 {
                   name: "Financial Statements",
                   icon: Blocks,
                   link: "/dashboard/finance/financial-statements",
                   roles: getRoles("view_financial_statements", roles),
-                  
                 },
               ],
             },
@@ -303,9 +305,15 @@ export default function DashboardSidebar() {
                   link: "/dashboard/assets/types",
                   roles: getRoles("view_assets_types", roles),
                 },
+                {
+                  name: "Assets inventory",
+                  icon: Blocks,
+                  link: "/dashboard/assets",
+                  roles: getRoles("view_assets", roles),
+                },
               ],
             },
-           
+
             {
               name: "Settings",
               children: [
@@ -329,8 +337,9 @@ export default function DashboardSidebar() {
               children: Array.isArray(e.children)
                 ? e.children.filter(
                     (child) =>
-                      child.roles?.find((role) => role?.id === user?.role?.id) ||
-                      child.roles[0] === "*"
+                      child.roles?.find(
+                        (role) => role?.id === user?.role?.id
+                      ) || child.roles[0] === "*"
                   )
                 : [],
             };

@@ -33,34 +33,13 @@ import AppFormTextArea from "@/components/forms/AppFormTextArea";
 import Loader from "@/components/icons/Loader";
 import { useForm } from "react-hook-form";
 import { Form } from "@/components/ui/form";
-
-function formatDate(inputDate) {
-  // Split the input string into year and month parts
-  var parts = inputDate.split(".");
-
-  // Create a new Date object with the provided year and month
-  var date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1);
-
-  // Format the date in a readable format
-  var formattedDate = date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-  });
-
-  // i want to add column of TOtal all the amount on the table
-//please help me with making logic for that
-
-const totalAmount = recordsQuery?.data?.items.reduce((acc, item) => {
-  return acc + item.amount;
-})
-
-
-
-  // Return the formatted date
-  return formattedDate;
-}
+import getFileUrl from "@/utils/getFileUrl";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { cn } from "@/utils";
+import { useRoles } from "@/context/roles.context";
 
 export default function Prepayments() {
+  const { canPerform } = useRoles();
   const columns: ColumnDef<any>[] = [
     {
       id: "select",
@@ -88,17 +67,14 @@ export default function Prepayments() {
       enableHiding: false,
     },
     {
-      accessorKey: "employee",
+      accessorKey: "created_by",
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={"Employee"} />
+        <DataTableColumnHeader column={column} title="Requested by" />
       ),
       cell: ({ row }) => (
-        <Link
-          to={`/employees/${row.original.original.expand?.employee?.id}`}
-          className="capitalize"
-        >
-          {row.getValue("employee")}
-        </Link>
+        <div className="capitalize truncate">
+          {row.getValue("created_by") || "---"}
+        </div>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -107,23 +83,38 @@ export default function Prepayments() {
       enableHiding: true,
     },
     {
-      accessorKey: "position",
+      accessorKey: "designation",
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="position" />
+        <DataTableColumnHeader column={column} title="Designation" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("position")}</div>
+        <div className="capitalize truncate">{row.getValue("designation")}</div>
       ),
       enableSorting: false,
       enableHiding: true,
     },
     {
-      accessorKey: "reason",
+      accessorKey: "category",
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Reason" />
+        <DataTableColumnHeader column={column} title="Category" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("reason")}</div>
+        <div className="capitalize truncate">
+          {row.getValue("category") || "N.A"}
+        </div>
+      ),
+      enableSorting: false,
+      enableHiding: true,
+    },
+    {
+      accessorKey: "account",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Account" />
+      ),
+      cell: ({ row }) => (
+        <div className="capitalize truncate">
+          {row.getValue("account") || "N.A"}
+        </div>
       ),
       enableSorting: false,
       enableHiding: true,
@@ -144,64 +135,10 @@ export default function Prepayments() {
       enableSorting: true,
       enableHiding: true,
     },
-    // {
-    //   accessorKey: "paid_amount",
-    //   header: ({ column }) => (
-    //     <DataTableColumnHeader column={column} title="Received" />
-    //   ),
-    //   cell: ({ row }) => (
-    //     <div className="capitalize">
-    //       {Number(row.getValue("paid_amount")).toLocaleString()} FRW
-    //     </div>
-    //   ),
-    //   filterFn: (__, _, value) => {
-    //     return value;
-    //   },
-    //   enableSorting: true,
-    //   enableHiding: true,
-    // },
-    // {
-    //   accessorKey: "remaining_amount",
-    //   header: ({ column }) => (
-    //     <DataTableColumnHeader column={column} title="Remaining Amount" />
-    //   ),
-    //   cell: ({ row }) => (
-    //     <div className="capitalize">
-    //       {Number(row.getValue("remaining_amount")).toLocaleString()} FRW
-    //     </div>
-    //   ),
-    //   filterFn: (__, _, value) => {
-    //     return value;
-    //   },
-    //   enableSorting: true,
-    //   enableHiding: true,
-    // },
-    {
-      accessorKey: "deduction_date",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Deduction" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("deduction_date")}</div>
-      ),
-      enableSorting: false,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "particularly",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Particularly" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("particularly")}</div>
-      ),
-      enableSorting: false,
-      enableHiding: true,
-    },
     {
       accessorKey: "momoNumber",
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Momo Code" />
+        <DataTableColumnHeader column={column} title="Momo" />
       ),
       cell: ({ row }) => (
         <div className="capitalize">{row.getValue("momoNumber")}</div>
@@ -231,20 +168,6 @@ export default function Prepayments() {
       cell: ({ row }) => (
         <div className="capitalize">{row.getValue("status")}</div>
       ),
-      filterFn: (__, _, value) => { 
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "totalAmount",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Total Amount" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("totalAmount")}</div>
-      ),
       filterFn: (__, _, value) => {
         return value;
       },
@@ -257,7 +180,18 @@ export default function Prepayments() {
         <DataTableColumnHeader column={column} title="Attachment" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("attachment")}</div>
+        <div className="capitalize">
+          <a
+            className="underline truncate text-blue-500"
+            href={getFileUrl({
+              file: row.getValue("attachment"),
+              collection: "prepayments",
+              record: row?.original?.original,
+            })}
+          >
+            View Attachement
+          </a>
+        </div>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -265,41 +199,14 @@ export default function Prepayments() {
       enableSorting: true,
       enableHiding: true,
     },
-    {
-      accessorKey: "created_by",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created by" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created_by")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "payment_status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Approved by" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("payment_status")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
+
     {
       accessorKey: "created",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Created at" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created")}</div>
+        <div className="capitalize truncate">{row.getValue("created")}</div>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -316,34 +223,24 @@ export default function Prepayments() {
         <DataTableRowActions
           actions={[
             {
-              title: "Edit advance",
-              onClick: (e) => {
-                editRow.edit(e.original);
-              },
-            },
-            {
-              title: "Approve advance",
+              title: "Approve expense",
               onClick: (e) => {
                 setloanToApprove(e.original);
               },
               disabled:
                 row.original.status === "approved" ||
-                row.original.status === "rejected",
+                row.original.status === "rejected" ||
+                !canPerform("approve_or_reject_expense"),
             },
             {
-              title: "Reject loan",
+              title: "Reject expense",
               onClick: (e) => {
                 setloanToReject(e.original);
               },
               disabled:
                 row.original.status === "approved" ||
-                row.original.status === "rejected",
-            },
-            {
-              title: "Delete loan",
-              onClick: (e) => {
-                confirmModal.open({ meta: e });
-              },
+                row.original.status === "rejected" ||
+                !canPerform("approve_or_reject_expense"),
             },
           ]}
           row={row}
@@ -370,6 +267,8 @@ export default function Prepayments() {
     pageSize: 10,
   });
 
+  const [activeTab, setactiveTab] = useState("pending");
+
   const recordsQuery = useQuery({
     queryKey: [
       "prepayments",
@@ -379,6 +278,7 @@ export default function Prepayments() {
         sort: sorting,
         pageIndex,
         pageSize,
+        activeTab,
       },
     ],
     keepPreviousData: true,
@@ -416,11 +316,11 @@ export default function Prepayments() {
         .collection("prepayments")
         .getList(pageIndex + 1, pageSize, {
           ...cleanObject({
-            filter: [searchQ, filters, `employee!=""`]
+            filter: [searchQ, filters, `status="${activeTab}"`]
               .filter((e) => e)
               .join("&&"),
             sort: sorters,
-            expand: `employee,created_by,transactions`,
+            expand: `employee,created_by,transactions,employee.designation,expenseCategory,account`,
           }),
         })
         .then((e) => {
@@ -430,25 +330,15 @@ export default function Prepayments() {
                 id: e.id,
                 employee: e.expand?.employee?.name,
                 position: e.position,
-                reason: e.reason,
+                category: e?.expand?.expenseCategory?.name,
+                account: e?.expand?.account?.name,
                 attachment: e.attachment,
                 momoNumber: e.momoNumber,
                 momoName: e.momoName,
-                particularly: e.particularly,
-                totalAmount: e.totalAmount,
                 amount: e.amount,
-                paid_amount:
-                  e?.expand?.transactions
-                    ?.map((e) => e.amount)
-                    .reduce((a, b) => a + b, 0) || -0,
-                remaining_amount:
-                  e.amount -
-                  (e?.expand?.transactions
-                    ?.map((e) => e.amount)
-                    .reduce((a, b) => a + b, 0) || -0),
-                payment_status: e.payment_status,
                 status: e.status,
                 created_by: e.expand?.created_by?.name,
+                designation: e.expand?.employee?.expand?.designation?.name,
                 deduction_date: new Date(e.deduction_date).toLocaleDateString(
                   "en-US",
                   {
@@ -505,7 +395,7 @@ export default function Prepayments() {
         <div className="flex pb-2 items-start justify-between space-y-2">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-[17px] font-semibold capitalize tracking-tight">
-            Staff Expense Request
+              Staff Expense Request
             </h2>
             <BreadCrumb
               items={[
@@ -520,6 +410,38 @@ export default function Prepayments() {
             <PlusCircle size={16} className="mr-2" />
             <span>Add new Expense Request.</span>
           </Button>
+        </div>
+        <div className=" bg-white scroller border-t border-l border-r rounded-t">
+          <ScrollArea className="w-full  whitespace-nowrap">
+            <div className="flex px-2 items-center  justify-start">
+              {[
+                { title: "Pending Expenses", name: "pending" },
+                { title: "Approved Expenses", name: "approved" },
+                { title: "Rejected Expenses", name: "rejected" },
+              ].map((e, i) => {
+                return (
+                  <a
+                    key={i}
+                    className={cn(
+                      "cursor-pointer px-6 capitalize text-center relative w-full- text-slate-700 text-[13px] sm:text-sm py-3  font-medium",
+                      {
+                        "text-primary ": activeTab === e.name,
+                      }
+                    )}
+                    onClick={() => {
+                      setactiveTab(e.name);
+                    }}
+                  >
+                    {activeTab === e.name && (
+                      <div className="h-[3px] left-0 rounded-t-md bg-primary absolute bottom-0 w-full"></div>
+                    )}
+                    <span className=""> {e.title}</span>
+                  </a>
+                );
+              })}
+            </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
         </div>
         <DataTable
           isFetching={recordsQuery.isFetching}
@@ -540,24 +462,7 @@ export default function Prepayments() {
           columnFilters={columnFilters}
           facets={[
             {
-              title: "Status",
-              name: "status",
-              options: [
-                { label: "Pending", value: "pending" },
-                { label: "Approved", value: "approved" },
-                { label: "Rejected", value: "rejected" },
-              ],
-            },
-            {
-              title: "Approved by",
-              name: "payment_status",
-              options: [
-                { label: "Approved", value: "Approved" },
-                { label: "Pending", value: "Pending" },
-              ],
-            },
-            {
-              title: "Created by",
+              title: "Requested by",
               loader: ({ search }) => {
                 return pocketbase
                   .collection("users")
@@ -569,23 +474,6 @@ export default function Prepayments() {
                   .then((e) => e.map((e) => ({ label: e.name, value: e.id })));
               },
               name: "created_by",
-              type: "async-options",
-            },
-            {
-              title: "Employee",
-              loader: ({ search }) => {
-                return pocketbase
-                  .collection("users")
-                  .getFullList(
-                    cleanObject({
-                      filter: search ? `name~"${search}"` : "",
-                    })
-                  )
-                  .then((e) =>
-                    e.map((e) => ({ label: e.names || e.name, value: e.id }))
-                  );
-              },
-              name: "employee",
               type: "async-options",
             },
           ]}
@@ -635,7 +523,13 @@ const formSchema = z.object({
   reason: z.string().min(1, { message: "Please enter a reason" }),
 });
 
-function ApproveOrRejectModal({ type, open, setOpen, loan, onCompleted }) {
+function ApproveOrRejectModal({
+  type,
+  open,
+  setOpen,
+  loan: expense,
+  onCompleted,
+}) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -645,27 +539,49 @@ function ApproveOrRejectModal({ type, open, setOpen, loan, onCompleted }) {
 
   const { user } = useAuth();
 
-  const onSubmit = (values) => {
-    return pocketbase
-      .collection("prepayments")
-      .update(loan.id, {
+  const onSubmit = async (values) => {
+    try {
+      await pocketbase.collection("prepayments").update(expense.id, {
         status: type === "approve" ? "approved" : "rejected",
         [type === "approve" ? "approved_by" : "rejected_by"]: user?.id,
         [type === "approve" ? "approved_at" : "rejected_at"]: new Date(),
         [type === "approve" ? "approved_reason" : "rejected_reason"]:
           values.reason,
-      })
-      .then(() => {
-        setOpen(false);
-        toast.success(
-          `Loan ${type === "approve" ? "approved" : "rejected"} succesfully`
-        );
-        onCompleted();
-        form.reset();
-      })
-      .catch((e) => {
-        toast.error(e.message);
       });
+
+      const account = await pocketbase
+        .collection("accounts")
+        .getOne(expense.account);
+
+      const transaction = await pocketbase
+        .collection("accounts_transactions")
+        .create({
+          amount: expense.amount,
+          date: expense.date || expense.created || new Date().toLocaleString(),
+          account: expense.account,
+          expense: expense.id,
+          transactionType: "expense",
+          notes: expense.notes,
+          balanceAfter: account.currentBalance - expense.amount,
+        });
+
+      await pocketbase.collection("accounts").update(account.id, {
+        currentBalance: account?.currentBalance - expense?.amount,
+      });
+
+      await pocketbase.collection("prepayments").update(expense?.id, {
+        account_transaction: transaction?.id,
+      });
+
+      setOpen(false);
+      toast.success(
+        `Expense ${type === "approve" ? "approved" : "rejected"} succesfully`
+      );
+      onCompleted();
+      form.reset();
+    } catch (error) {
+      toast.error(error.message);
+    }
   };
 
   return (
@@ -674,13 +590,13 @@ function ApproveOrRejectModal({ type, open, setOpen, loan, onCompleted }) {
         <DialogHeader>
           <DialogTitle>
             <span className="text-base px-1 font-semibold py-2">
-              {type === "approve" ? "Approve advance." : "Reject advance"}
+              {type === "approve" ? "Approve expense." : "Reject expense"}
             </span>
           </DialogTitle>
           <DialogDescription>
             <span className="px-1 py-0 text-sm text-slate-500 leading-7">
               Fill in the fields to {type === "approve" ? "approve" : "reject"}{" "}
-              a advance.
+              a expense.
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -710,7 +626,7 @@ function ApproveOrRejectModal({ type, open, setOpen, loan, onCompleted }) {
                   {form.formState.isSubmitting && (
                     <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
                   )}
-                  {type === "approve" ? "Approve advance." : "Reject advance"}
+                  {type === "approve" ? "Approve expense." : "Reject expense"}
                 </Button>
               </div>
             </DialogFooter>

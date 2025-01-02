@@ -487,19 +487,15 @@ export default function EmployeePortal() {
       </div>
 
       <div className="mt-3">
-      <Card>
-          <div className="flex px-2 gap-4 w-full border-b items-center justify-start">
+        <Card>
+          <div className="flex px-2 gap-2 w-full border-b items-center justify-start">
             {[
               "Attendance Log",
               "Documents",
               "Leaves",
               "Payslips",
-              "Assets",
               "Expense Request",
               "Perfomance",
-              "Reports",
-              "timesheet",
-              "chat-interface"
             ].map((e, i) => (
               <a
                 key={i}
@@ -524,34 +520,14 @@ export default function EmployeePortal() {
             {activeTab === "Payslips" && (
               <EmployeePayslips employeeId={user.id} />
             )}
-            {activeTab === "Assets" && <EmployeeAssets employeeId={user.id} />}
             {activeTab === "Documents" && (
               <EmployeeDocuments employeeId={user.id} />
             )}
             {activeTab === "Expense Request" && (
               <EmployeePrePayments employeeId={user.id} />
             )}
-            {activeTab === "Reports" && (
-              <ReportList employeeId={user.id} />
-            )}
             {activeTab === "Perfomance" && (
               <EmployeePerfomance employee={user} />
-            )}
-            {activeTab === "timesheet" && (
-              <div className="px-3 py-3">
-                <iframe
-                  src="https://docs.google.com/spreadsheets/d/1Uw7Hjv2y1zYv6L0v3YQJ9g2zvZ4Qp1fZ1Q6gQ6eR8JY/edit?usp=sharing"
-                  className="w-full h-[600px]"
-                ></iframe>
-              </div>
-            )}
-            {activeTab === "chat-interface" && (
-              <div className="px-3 py-3">
-                <iframe
-                  src="https://chat-interface.vercel.app/"
-                  className="w-full h-[600px]"
-                ></iframe>
-              </div>
             )}
           </div>
         </Card>
