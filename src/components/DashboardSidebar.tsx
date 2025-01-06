@@ -83,12 +83,12 @@ export default function DashboardSidebar() {
                   roles: getRoles("access_employee_portal", roles),
                 },
 
-                {
-                  name: "DNR File Management",
-                  icon: AiOutlineShop,
-                  link: "Dnr-Material",
-                  roles: getRoles("view_fileManager", roles),
-                },
+                // {
+                //   name: "DNR File Management",
+                //   icon: AiOutlineShop,
+                //   link: "Dnr-Material",
+                //   roles: getRoles("view_fileManager", roles),
+                // },
                 // {
                 //   name: "Request Cash",
                 //   icon: AiOutlineShop,
