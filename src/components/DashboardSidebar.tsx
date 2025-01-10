@@ -96,6 +96,12 @@ export default function DashboardSidebar() {
                 },
 
                 // {
+                //   name: "DNR File Management",
+                //   icon: AiOutlineShop,
+                //   link: "Dnr-Material",
+                //   roles: getRoles("view_fileManager", roles),
+                // },
+                // {
                 //   name: "Request Cash",
                 //   icon: AiOutlineShop,
                 //   link: "/dashboard/RequestCash",
