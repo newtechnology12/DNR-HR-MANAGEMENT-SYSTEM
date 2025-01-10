@@ -95,7 +95,16 @@ const basePermissions = [
       },
     ],
   },
-
+  {
+    parent: "Employee Timesheet",
+    children: [
+      {
+        access: false,
+        name: "view_employee_timesheet",
+        title: "View employee timesheet",
+      },
+    ],
+  },
   {
     parent: "Employee Perfomance",
     children: [
@@ -158,6 +167,21 @@ const basePermissions = [
         access: false,
         name: "update_designations",
         title: "Update designations",
+      },
+    ],
+  },
+  {
+    parent: "Reports",
+    children: [
+      {
+        access: false,
+        name: "view_expense_reports",
+        title: "view expenses report",
+      },
+      {
+        access: false,
+        name: "view_timesheet_report",
+        title: "view timesheet report",
       },
     ],
   },
@@ -234,6 +258,21 @@ const basePermissions = [
         name: "view_asset_allocation_details",
         title: "View asset allocation detail",
       },
+      {
+        access: false,
+        name: "view_assets_requests",
+        title: "View assets requests",
+      },
+      {
+        access: false,
+        name: "view_all_assets_requests",
+        title: "View all assets requests",
+      },
+      {
+        access: false,
+        name: "reject_or_approve_assets_requests",
+        title: "Reject or approve assets requests",
+      },
     ],
   },
   {
@@ -308,6 +347,17 @@ const basePermissions = [
         access: false,
         name: "update_petty_cash_account",
         title: "Update petty cash account",
+      },
+      {
+        access: false,
+        name: "view_petty_cash_requests",
+        title: "View petty cash requests",
+      },
+      //approve_or_reject_request
+      {
+        access: false,
+        name: "approve_or_reject_request",
+        title: "Approve or reject request",
       },
       {
         access: false,

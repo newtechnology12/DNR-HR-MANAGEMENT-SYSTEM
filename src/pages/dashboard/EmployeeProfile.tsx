@@ -107,8 +107,7 @@ export default function EmployeeProfile() {
                 "Documents",
                 "Leaves",
                 "Payslips",
-                "Assets",
-                "Pre Payments",
+                "Expenses",
               ].map((e, i) => {
                 return (
                   <a
@@ -150,13 +149,10 @@ export default function EmployeeProfile() {
                   {activeTab === "Payslips" && (
                     <EmployeePayslips employeeId={employee?.id} />
                   )}
-                  {activeTab === "Assets" && (
-                    <EmployeeAssets employeeId={employee?.id} />
-                  )}
                   {activeTab === "Documents" && (
                     <EmployeeDocuments employeeId={employee?.id} />
                   )}
-                  {activeTab === "Pre Payments" && (
+                  {activeTab === "Expenses" && (
                     <EmployeePrePayments employeeId={employee.id} />
                   )}
                 </>

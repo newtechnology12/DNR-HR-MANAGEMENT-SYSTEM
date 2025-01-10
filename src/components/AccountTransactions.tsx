@@ -351,37 +351,6 @@ export default function AccountTransactions() {
               </p>
             </CardContent>
           </Card>
-          <Card className="mb-4">
-            <CardHeader className="p-3">
-              <CardTitle className="text-lg">Re-Fill</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0">
-              <p className="text-base text-blue-500 font-bold">
-                {(footer_row.refill || 0)?.toLocaleString()}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="mb-4">
-            <CardHeader className="p-3">
-              <CardTitle className="text-lg">Total Used</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0">
-              <p className="text-base text-red-500 font-bold">
-                {(footer_row.totalAmount || 0)?.toLocaleString()}
-              </p>
-            </CardContent>
-          </Card>
-          {canPerform("refill_accounts") && (
-            <div className="col-span-2">
-              <ReplenishForm
-                account={account}
-                onReplenish={() => {
-                  recordsQuery.refetch();
-                  refetch();
-                }}
-              />
-            </div>
-          )}
         </div>
         <DataTable
           isFetching={recordsQuery.isFetching}

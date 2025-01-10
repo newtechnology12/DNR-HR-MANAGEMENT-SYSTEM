@@ -31,6 +31,8 @@ const formSchema = z.object({
   type: z.string().min(1, { message: "Asset type is required" }),
   status: z.string().min(1, { message: "Asset status is required" }),
   assigned_to: z.string().min(1, { message: "Assigned to is required" }),
+  purchased_at: z.string().optional(),
+  cost: z.string().optional(),
 });
 
 const getDefaultValues = (data?: any) => {
@@ -43,6 +45,8 @@ const getDefaultValues = (data?: any) => {
     type: data?.type || "",
     status: data?.status || "",
     assigned_to: data?.assigned_to || "",
+    purchased_at: data?.purchased_at || "",
+    cost: data?.cost?.toString() || "",
   };
 };
 
@@ -220,6 +224,22 @@ export function AssetsFormModal({ open, setOpen, record, onComplete }: any) {
                     label={`Assigned to`}
                     placeholder={`Choose assigned to`}
                     loader={usersLoader}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <AppFormField
+                    form={form}
+                    name={"purchased_at"}
+                    label={`Purchased at`}
+                    placeholder={`Enter purchase date`}
+                    type="date"
+                  />
+                  <AppFormField
+                    form={form}
+                    name={"cost"}
+                    label={`Cost`}
+                    placeholder={`Enter cost`}
+                    type="number"
                   />
                 </div>
                 <div>

@@ -42,6 +42,11 @@ import Reason from "./pages/dashboard/Reason";
 import ClientManagement from "./pages/dashboard/clients";
 import Accounts from "./pages/dashboard/Accounts";
 import AccountTransactions from "./components/AccountTransactions";
+import PettyCashRequests from "./pages/dashboard/PettyCashRequests";
+import ExpensesReport from "./pages/dashboard/ExpensesReport";
+import AssetsRequests from "./pages/dashboard/AssetsRequests";
+import EmployeeTimesheet from "./pages/dashboard/EmployeeTimesheet";
+import TimesheetReport from "./pages/dashboard/TimesheetReport";
 
 const router = createBrowserRouter([
   {
@@ -111,7 +116,7 @@ const router = createBrowserRouter([
                     // element: <Reports />,
                   },
                   {
-                    path: "Dnr-Material",
+                    path: "file-management",
                     element: <FileManager />,
                   },
                   {
@@ -275,8 +280,45 @@ const router = createBrowserRouter([
                   {
                     path: "petty-cash-accounts/:accountId",
                     element: (
-                      <ProtectedRoute entity="view_petty_cash_accounts">
+                      <ProtectedRoute entity="view_petty_cash_requests">
                         <AccountTransactions />,
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "petty-cash-requests",
+                    element: (
+                      <ProtectedRoute entity="view_petty_cash_requests">
+                        <PettyCashRequests />
+                      </ProtectedRoute>
+                    ),
+                  },
+                ],
+              },
+              {
+                path: "reports",
+                children: [
+                  {
+                    path: "expense-reports",
+                    element: (
+                      <ProtectedRoute entity="view_expense_reports">
+                        <ExpensesReport />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "employee-timesheet",
+                    element: (
+                      <ProtectedRoute entity="view_employee_timesheet">
+                        <EmployeeTimesheet />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "timesheet-report",
+                    element: (
+                      <ProtectedRoute entity="view_timesheet_report">
+                        <TimesheetReport />
                       </ProtectedRoute>
                     ),
                   },
@@ -319,6 +361,14 @@ const router = createBrowserRouter([
                     element: (
                       <ProtectedRoute entity="view_assets_categories">
                         <AssetsCategories />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "requests",
+                    element: (
+                      <ProtectedRoute entity="view_assets_requests">
+                        <AssetsRequests />
                       </ProtectedRoute>
                     ),
                   },

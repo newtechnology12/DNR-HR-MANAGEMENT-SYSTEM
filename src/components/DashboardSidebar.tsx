@@ -16,11 +16,16 @@ import {
   Blocks,
   CandlestickChart,
   CircleDollarSign,
+  Clock,
   Container,
+  Folder,
+  GitPullRequest,
   Layout,
   ListChecks,
   Settings,
   Split,
+  Table,
+  User,
   UserCog,
   WalletCards,
 } from "lucide-react";
@@ -78,17 +83,18 @@ export default function DashboardSidebar() {
               children: [
                 {
                   name: "Employee portal",
-                  icon: AiOutlineShop,
+                  icon: User,
                   link: "/dashboard/employee-portal",
                   roles: getRoles("access_employee_portal", roles),
                 },
 
                 {
-                  name: "DNR File Management",
-                  icon: AiOutlineShop,
-                  link: "Dnr-Material",
+                  name: "File Management",
+                  icon: Folder,
+                  link: "/dashboard/file-management",
                   roles: getRoles("view_fileManager", roles),
                 },
+
                 // {
                 //   name: "Request Cash",
                 //   icon: AiOutlineShop,
@@ -142,12 +148,7 @@ export default function DashboardSidebar() {
                   link: "/dashboard/hr/payroll",
                   roles: getRoles("view_payrolls", roles),
                 },
-                {
-                  name: "Expense Request",
-                  icon: CircleDollarSign,
-                  link: "/dashboard/hr/prepayments",
-                  roles: getRoles("view_expenses", roles),
-                },
+
                 {
                   name: "Performance & Appraisals",
                   icon: CandlestickChart,
@@ -160,10 +161,22 @@ export default function DashboardSidebar() {
               name: "Finance",
               children: [
                 {
+                  name: "Expense Request",
+                  icon: CircleDollarSign,
+                  link: "/dashboard/hr/prepayments",
+                  roles: getRoles("view_expenses", roles),
+                },
+                {
                   name: "Petty Cash Accounts",
                   icon: WalletCards,
                   link: "/dashboard/finance/petty-cash-accounts",
                   roles: getRoles("view_petty_cash_accounts", roles),
+                },
+                {
+                  name: "Petty Cash Requests",
+                  icon: GitPullRequest,
+                  link: "/dashboard/finance/petty-cash-requests",
+                  roles: getRoles("view_petty_cash_requests", roles),
                 },
               ],
             },
@@ -187,37 +200,25 @@ export default function DashboardSidebar() {
             },
 
             {
-              name: "Finance",
+              name: "Reports & Analytics",
               children: [
                 {
-                  name: "Petty Cash Requisition",
-                  icon: BiPurchaseTagAlt,
-                  link: "/dashboard/finance/petty-cash-requisition",
-                  roles: getRoles("view_petty_cash_requisition", roles),
+                  name: "Employee Timesheet",
+                  icon: Table,
+                  link: "/dashboard/reports/employee-timesheet",
+                  roles: getRoles("view_employee_timesheet", roles),
                 },
                 {
-                  name: "Petty Cash Account",
-                  icon: Container,
-                  link: "/dashboard/finance/petty-cash-account",
-                  roles: getRoles("view_petty_cash_account", roles),
+                  name: "Timesheet report",
+                  icon: Clock,
+                  link: "/dashboard/reports/timesheet-report",
+                  roles: getRoles("view_timesheet_report", roles),
                 },
                 {
                   name: "Expense Reports",
-                  icon: Blocks,
-                  link: "/dashboard/finance/expense-reports",
+                  icon: CircleDollarSign,
+                  link: "/dashboard/reports/expense-reports",
                   roles: getRoles("view_expense_reports", roles),
-                },
-                {
-                  name: "Budget Management",
-                  icon: Blocks,
-                  link: "/dashboard/finance/budget-management",
-                  roles: getRoles("view_budget_management", roles),
-                },
-                {
-                  name: "Financial Statements",
-                  icon: Blocks,
-                  link: "/dashboard/finance/financial-statements",
-                  roles: getRoles("view_financial_statements", roles),
                 },
               ],
             },
@@ -311,6 +312,12 @@ export default function DashboardSidebar() {
                   link: "/dashboard/assets",
                   roles: getRoles("view_assets", roles),
                 },
+                {
+                  name: "Assets requests",
+                  icon: GitPullRequest,
+                  link: "/dashboard/assets/requests",
+                  roles: getRoles("view_assets_requests", roles),
+                },
               ],
             },
 
@@ -318,16 +325,16 @@ export default function DashboardSidebar() {
               name: "Settings",
               children: [
                 {
-                  name: "General settings",
-                  icon: Settings,
-                  link: "/dashboard/settings/general-settings",
-                  roles: getRoles("access_general_settings", roles),
-                },
-                {
                   name: "Account Settings",
                   icon: UserCog,
                   link: "/dashboard/settings/account-settings",
                   roles: ["*"],
+                },
+                {
+                  name: "General settings",
+                  icon: Settings,
+                  link: "/dashboard/settings/general-settings",
+                  roles: getRoles("access_general_settings", roles),
                 },
               ],
             },

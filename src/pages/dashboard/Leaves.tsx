@@ -33,6 +33,9 @@ import { Form } from "@/components/ui/form";
 import AppFormTextArea from "@/components/forms/AppFormTextArea";
 import Loader from "@/components/icons/Loader";
 import { useAuth } from "@/context/auth.context";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { cn } from "@/utils/cn";
+import formatFilter from "@/utils/formatFilter";
 
 const capitalizeFirstLetter = (str) => {
   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -95,20 +98,6 @@ export default function Leaves() {
       enableHiding: true,
     },
     {
-      accessorKey: "status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Status" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("status")}</div>
-      ),
-      enableSorting: true,
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableHiding: true,
-    },
-    {
       accessorKey: "end",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="End" />
@@ -136,6 +125,21 @@ export default function Leaves() {
       enableSorting: true,
       enableHiding: true,
     },
+    {
+      accessorKey: "status",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Status" />
+      ),
+      cell: ({ row }) => (
+        <div className="capitalize">{row.getValue("status")}</div>
+      ),
+      enableSorting: true,
+      filterFn: (__, _, value) => {
+        return value;
+      },
+      enableHiding: true,
+    },
+
     {
       accessorKey: "approved_by",
       header: ({ column }) => (
@@ -269,6 +273,8 @@ export default function Leaves() {
     pageSize: 10,
   });
 
+  const [activeTab, setActiveTab] = useState("pending");
+
   const recordsQuery = useQuery({
     queryKey: [
       "leaves",
@@ -278,34 +284,16 @@ export default function Leaves() {
         sort: sorting,
         pageIndex,
         pageSize,
+        activeTab,
       },
     ],
     keepPreviousData: true,
     queryFn: () => {
-      const searchQ = searchText ? `employee.name~"${searchText}"` : "";
-      const filters = columnFilters
-        .map((e) => {
-          if (e.value["from"]) {
-            if (e.value?.to) {
-              return `created >= "${new Date(
-                e.value?.from
-              ).toISOString()}" && created <= "${new Date(
-                e.value?.to
-              ).toISOString()}"`;
-            } else {
-              return `created >= "${new Date(
-                e.value?.from
-              ).toISOString()}" && created <= "${new Date(
-                addDays(new Date(e.value?.from), 1)
-              ).toISOString()}"`;
-            }
-          } else {
-            return e.value
-              .map((p) => `${e.id}="${p.id || p.value || p}"`)
-              .join(" || ");
-          }
-        })
-        .join(" && ");
+      const searchQ = searchText
+        ? `name~"${searchText}" || department.name~"${searchText}" `
+        : "";
+
+      const filters = formatFilter(columnFilters);
 
       const sorters = sorting
         .map((p) => `${p.desc ? "-" : "+"}${p.id}`)
@@ -315,7 +303,9 @@ export default function Leaves() {
         .collection("leaves")
         .getList(pageIndex + 1, pageSize, {
           ...cleanObject({
-            filter: [searchQ, filters].filter((e) => e).join("&&"),
+            filter: [searchQ, filters, `status="${activeTab}"`]
+              .filter((e) => e)
+              .join(" && "),
             sort: sorters,
             expand: `employee,created_by`,
           }),
@@ -401,6 +391,38 @@ export default function Leaves() {
             <span>Create new leave.</span>
           </Button>
         </div>
+        <div className=" bg-white scroller border-t border-l border-r rounded-t">
+          <ScrollArea className="w-full  whitespace-nowrap">
+            <div className="flex px-2 items-center  justify-start">
+              {[
+                { title: "Pending Leaves", name: "pending" },
+                { title: "Approved Leaves", name: "approved" },
+                { title: "Rejected Leaves", name: "rejected" },
+              ].map((e, i) => {
+                return (
+                  <a
+                    key={i}
+                    className={cn(
+                      "cursor-pointer px-6 capitalize text-center relative w-full- text-slate-700 text-[13px] sm:text-sm py-3  font-medium",
+                      {
+                        "text-primary ": activeTab === e.name,
+                      }
+                    )}
+                    onClick={() => {
+                      setActiveTab(e.name);
+                    }}
+                  >
+                    {activeTab === e.name && (
+                      <div className="h-[3px] left-0 rounded-t-md bg-primary absolute bottom-0 w-full"></div>
+                    )}
+                    <span className=""> {e.title}</span>
+                  </a>
+                );
+              })}
+            </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </div>
         <DataTable
           isFetching={recordsQuery.isFetching}
           defaultColumnVisibility={{
@@ -424,15 +446,6 @@ export default function Leaves() {
           setColumnFilters={setColumnFilters}
           columnFilters={columnFilters}
           facets={[
-            {
-              title: "Status",
-              name: "status",
-              options: [
-                { label: "Approved", value: "approved" },
-                { label: "Rejected", value: "rejected" },
-                { label: "Pending", value: "pending" },
-              ],
-            },
             {
               title: "Type",
               name: "type",

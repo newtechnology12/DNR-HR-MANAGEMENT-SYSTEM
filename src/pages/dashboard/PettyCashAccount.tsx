@@ -1,11 +1,10 @@
 import DataTable from "@/components/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
-import { useState } from "react";
 import { useQuery } from "react-query";
 import { Button } from "@/components/ui/button";
 import useModalState from "@/hooks/useModalState";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
-import { PettyCashAccountFormModal } from "./PettyCashAccountFormModal";
+import { PettyCashAccountFormModal } from "@/components/modals/PettyCashAccountFormModal";
 import pocketbase from "@/lib/pocketbase";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/modals/ConfirmModal";
@@ -92,7 +91,9 @@ export default function PettyCashAccountTable() {
       />
       <PettyCashAccountFormModal
         open={newRecordModal.isOpen || editRow.isOpen}
-        setOpen={newRecordModal.isOpen ? newRecordModal.setisOpen : editRow.setisOpen}
+        setOpen={
+          newRecordModal.isOpen ? newRecordModal.setisOpen : editRow.setisOpen
+        }
         record={editRow.row}
         onComplete={() => {
           recordsQuery.refetch();

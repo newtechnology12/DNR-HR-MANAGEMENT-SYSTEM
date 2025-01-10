@@ -63,43 +63,19 @@ export default function Departments() {
       enableSorting: true,
       enableHiding: true,
     },
-    {
-      accessorKey: "employees",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Employees" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("employees")}</div>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
+
     {
       accessorKey: "manager",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Manager" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("manager")}</div>
+        <div className="capitalize">{row.getValue("manager") || "N.A"}</div>
       ),
       enableSorting: true,
       enableHiding: true,
     },
 
-    {
-      accessorKey: "updated",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Updated at" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("updated")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
     {
       accessorKey: "created",
       header: ({ column }) => (
@@ -195,14 +171,8 @@ export default function Departments() {
               return {
                 id: e.id,
                 name: e.name,
-                employees: e.employees.length || 0,
                 manager: e.expand?.manager?.name,
                 created: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                }),
-                updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
                   month: "long",
                   year: "numeric",

@@ -24,6 +24,7 @@ import LeavesTakenVsRemaining from "@/components/LeavesTakenVsRemaining";
 import EmployeePrePayments from "./EmployeePrePayments";
 import EmployeePerfomance from "./EmployeePerfomance";
 import SubmitReportPage from "@/submit-report/page";
+import AssetsAllocation from "./AssetsAllocation";
 
 function timeStringToDate(timeString, date) {
   var parts = timeString.split(":");
@@ -496,6 +497,7 @@ export default function EmployeePortal() {
               "Payslips",
               "Expense Request",
               "Perfomance",
+              "Assets",
             ].map((e, i) => (
               <a
                 key={i}
@@ -528,7 +530,8 @@ export default function EmployeePortal() {
             )}
             {activeTab === "Perfomance" && (
               <EmployeePerfomance employee={user} />
-            )}
+            )}{" "}
+            {activeTab === "Assets" && <EmployeeAssets employeeId={user?.id} />}
           </div>
         </Card>
       </div>

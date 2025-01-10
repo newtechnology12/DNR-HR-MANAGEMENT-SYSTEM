@@ -1,7 +1,7 @@
 import PocketBase from "pocketbase";
 
 const pocketbase = new PocketBase(
-  "https://pocketbase-production-f0b0.up.railway.app"
+  import.meta.env.VITE_POCKETBASE_URL
 ).autoCancellation(false);
 
 export default pocketbase;

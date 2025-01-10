@@ -90,7 +90,7 @@ export default function Performance() {
         <DataTableColumnHeader column={column} title="score" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("score")}</div>
+        <div className="capitalize">{row.getValue("score")}/100</div>
       ),
       enableSorting: true,
       enableHiding: true,

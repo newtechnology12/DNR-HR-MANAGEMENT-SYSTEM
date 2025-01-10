@@ -6,7 +6,6 @@ import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useRef, useState } from "react";
 import { useQuery } from "react-query";
-import { addDays } from "date-fns";
 import BreadCrumb from "@/components/breadcrumb";
 import { PlusCircle, Printer } from "react-feather";
 import { Button } from "@/components/ui/button";
@@ -27,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import html2canvas from "html2canvas";
+import formatFilter from "@/utils/formatFilter";
 
 export default function Assets() {
   const columns: ColumnDef<any>[] = [
@@ -232,29 +232,7 @@ export default function Assets() {
       const searchQ = searchText
         ? `name~"${searchText}" || serial_number~"${searchText}" || code~"${searchText}" || type~"${searchText}" || status~"${searchText}" || category.name~"${searchText}"`
         : "";
-      const filters = columnFilters
-        .map((e) => {
-          if (e.value["from"]) {
-            if (e.value?.to) {
-              return `created >= "${new Date(
-                e.value?.from
-              ).toISOString()}" && created <= "${new Date(
-                e.value?.to
-              ).toISOString()}"`;
-            } else {
-              return `created >= "${new Date(
-                e.value?.from
-              ).toISOString()}" && created <= "${new Date(
-                addDays(new Date(e.value?.from), 1)
-              ).toISOString()}"`;
-            }
-          } else {
-            return e.value
-              .map((p) => `${e.id}="${p.id || p.value || p}"`)
-              .join(" || ");
-          }
-        })
-        .join(" && ");
+      const filters = formatFilter(columnFilters);
 
       const sorters = sorting
         .map((p) => `${p.desc ? "-" : "+"}${p.id}`)
@@ -396,6 +374,7 @@ export default function Assets() {
               title: "Status",
               name: "status",
               options: [
+                { value: "in-use", label: "In use" },
                 { value: "assigned", label: "assigned" },
                 { value: "returned", label: "returned" },
                 { value: "lost", label: "lost" },

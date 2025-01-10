@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import BreadCrumb from "@/components/breadcrumb";
 import { DepartmentFormModal } from "@/components/modals/DepartmentFormModal";
 import { DesignationFormModal } from "@/components/modals/DesignationFormModal";
+import formatFilter from "@/utils/formatFilter";
 
 export default function Designations() {
   const columns: ColumnDef<any>[] = [
@@ -64,17 +65,7 @@ export default function Designations() {
       enableSorting: true,
       enableHiding: true,
     },
-    {
-      accessorKey: "employees",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Employees" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("employees")}</div>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
+
     {
       accessorKey: "department",
       header: ({ column }) => (
@@ -82,20 +73,6 @@ export default function Designations() {
       ),
       cell: ({ row }) => (
         <div className="capitalize">{row.getValue("department")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "updated",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Updated at" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("updated")}</div>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -172,12 +149,11 @@ export default function Designations() {
     ],
     keepPreviousData: true,
     queryFn: () => {
-      const searchQ = searchText ? `name~"${searchText}"` : "";
-      const filters = columnFilters
-        .map((e) => {
-          return e.value.map((p) => `${e.id}="${p}"`).join(" || ");
-        })
-        .join(" && ");
+      const searchQ = searchText
+        ? `name~"${searchText}" || department.name~"${searchText}" `
+        : "";
+
+      const filters = formatFilter(columnFilters);
 
       const sorters = sorting
         .map((p) => `${p.desc ? "-" : "+"}${p.id}`)
@@ -187,7 +163,7 @@ export default function Designations() {
         .collection("designations")
         .getList(pageIndex + 1, pageSize, {
           ...cleanObject({
-            filter: [searchQ, filters].filter((e) => e).join("&&"),
+            filter: [searchQ, filters].filter((e) => e).join(" && "),
             sort: sorters,
             expand: `department`,
           }),
@@ -198,14 +174,8 @@ export default function Designations() {
               return {
                 id: e.id,
                 name: e.name,
-                employees: e?.employees?.length || 0,
                 department: e.expand?.department?.name,
                 created: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                }),
-                updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
                   month: "long",
                   year: "numeric",

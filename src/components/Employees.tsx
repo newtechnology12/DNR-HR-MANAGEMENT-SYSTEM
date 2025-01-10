@@ -18,6 +18,7 @@ import useModalState from "@/hooks/useModalState";
 import { EmployeFormModal } from "@/components/modals/EmployeeFormModal";
 import useEditRow from "@/hooks/use-edit-row";
 import { ScrollArea, ScrollBar } from "./ui/scroll-area";
+import formatFilter from "@/utils/formatFilter";
 
 export const orderSchema = z.object({
   id: z.string(),
@@ -122,6 +123,9 @@ export default function Employees({ ...otherProps }) {
           {row.getValue("department") || "N.A"}
         </div>
       ),
+      filterFn: (__, _, value) => {
+        return value;
+      },
       enableSorting: false,
       enableHiding: true,
     },
@@ -216,12 +220,7 @@ export default function Employees({ ...otherProps }) {
 
   const [searchText, setsearchText] = useState("");
 
-  const [columnFilters, setColumnFilters] = useState<any>([
-    {
-      id: "status",
-      value: ["Active"],
-    },
-  ]);
+  const [columnFilters, setColumnFilters] = useState<any>([]);
 
   const [sorting, setSorting] = useState<any>([
     {
@@ -251,28 +250,11 @@ export default function Employees({ ...otherProps }) {
     ],
     keepPreviousData: true,
     queryFn: () => {
-      const searchQ = searchText ? `name~"${searchText}"` : "";
-      const filters = columnFilters.map((e) => {
-        if (e.value["from"]) {
-          if (e.value?.to) {
-            return `created >= "${new Date(
-              e.value?.from
-            ).toISOString()}" && created <= "${new Date(
-              e.value?.to
-            ).toISOString()}"`;
-          } else {
-            return `created >= "${new Date(
-              e.value?.from
-            ).toISOString()}" && created <= "${new Date(
-              addDays(new Date(e.value?.from), 1)
-            ).toISOString()}"`;
-          }
-        } else {
-          return e.value
-            .map((p) => `${e.id}="${p.id || p.value || p}"`)
-            .join(" || ");
-        }
-      });
+      const searchQ = searchText
+        ? `name~"${searchText}" || department.name~"${searchText}" `
+        : "";
+
+      const filters = formatFilter(columnFilters);
 
       const sorters = sorting
         .map((p) => `${p.desc ? "-" : "+"}${p.id}`)
@@ -414,6 +396,21 @@ export default function Employees({ ...otherProps }) {
                 .then((e) => e.map((e) => ({ label: e.name, value: e.id })));
             },
             name: "branch",
+            type: "async-options",
+          },
+          {
+            title: "Department",
+            loader: ({ search }) => {
+              return pocketbase
+                .collection("departments")
+                .getFullList(
+                  cleanObject({
+                    filter: search ? `name~"${search}"` : "",
+                  })
+                )
+                .then((e) => e.map((e) => ({ label: e.name, value: e.id })));
+            },
+            name: "department",
             type: "async-options",
           },
         ]}

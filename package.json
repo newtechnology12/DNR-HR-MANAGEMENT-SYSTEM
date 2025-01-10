@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev:frontend": "vite",
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run start:backend\"",
+    "start:backend": "cd pocketbase && ./pocketbase serve --http=0.0.0.0:8090",
     "build": "vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite build && vite preview"
@@ -64,6 +66,7 @@
     "react-big-calendar": "^1.16.3",
     "react-clock": "^4.6.0",
     "react-countdown": "^2.3.5",
+    "react-datepicker": "^7.6.0",
     "react-day-picker": "^8.10.0",
     "react-dnd": "^16.0.1",
     "react-dom": "^18.2.0",
@@ -106,6 +109,7 @@
     "@typescript-eslint/parser": "^6.14.0",
     "@vitejs/plugin-react-swc": "^3.5.0",
     "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.2",
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
