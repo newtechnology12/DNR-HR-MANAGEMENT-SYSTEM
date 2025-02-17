@@ -23,8 +23,12 @@ import { LogIn, LogOut } from "lucide-react";
 import LeavesTakenVsRemaining from "@/components/LeavesTakenVsRemaining";
 import EmployeePrePayments from "./EmployeePrePayments";
 import EmployeePerfomance from "./EmployeePerfomance";
-import SubmitReportPage from "@/submit-report/page";
-import AssetsAllocation from "./AssetsAllocation";
+// import SubmitReportPage from "@/submit-report/page";
+// import AssetsAllocation from "./AssetsAllocation";
+// import { CarRequestForm } from "@/components/Carmodel/RequestForm";
+// import { LeavePlanFormModal } from "@/components/modals/LeavePlaneFormModel";
+import EmployeeLeavesPlan from "./EmployeeLeavesPlane";
+
 
 function timeStringToDate(timeString, date) {
   var parts = timeString.split(":");
@@ -493,9 +497,11 @@ export default function EmployeePortal() {
             {[
               "Attendance Log",
               "Documents",
+              "leavePlane",
               "Leaves",
-              "Payslips",
+              // "Payslips",
               "Expense Request",
+              "Car Request",
               "Perfomance",
               "Assets",
             ].map((e, i) => (
@@ -518,7 +524,13 @@ export default function EmployeePortal() {
             {activeTab === "Attendance Log" && (
               <EmployeeAttendances employeeId={user.id} />
             )}
-            {activeTab === "Leaves" && <EmployeeLeaves employeeId={user.id} />}
+
+            {activeTab === "leavePlane" && 
+            <EmployeeLeavesPlan employeeId={user.id} />}
+            
+            {activeTab === "Leaves" && 
+            <EmployeeLeaves employeeId={user.id} />}
+
             {activeTab === "Payslips" && (
               <EmployeePayslips employeeId={user.id} />
             )}
@@ -528,6 +540,9 @@ export default function EmployeePortal() {
             {activeTab === "Expense Request" && (
               <EmployeePrePayments employeeId={user.id} />
             )}
+            {/* {activeTab === "Car Request" && (
+              <CarRequestForm employeeId={user.id} />
+            )} */}
             {activeTab === "Perfomance" && (
               <EmployeePerfomance employee={user} />
             )}{" "}

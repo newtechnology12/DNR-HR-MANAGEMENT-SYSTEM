@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { read, utils, writeFile } from 'xlsx';
+// import { read, utils, writeFile } from 'xlsx';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "../ui/button";
 import { Form } from "../ui/form";
@@ -35,15 +35,27 @@ const formSchema = z.object({
   attachment: z.any(),
 });
 
+const calculateLeaveDuration = (start, end) => {
+  if (!start || !end) return 0;
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const timeDiff = endDate.getTime() - startDate.getTime();
+  const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+  return daysDiff;
+};
+
+
 const getDefaultValues = (data?: any) => {
+  const start = data?.start ? new Date(data.start) : new Date();
+  const end = data?.end ? new Date(data.end) : new Date();
   console.log(data);
   return {
     employee: data?.employee || "",
     type: data?.type || "",
-    status: data?.status || "",
-    start: data?.start ? new Date(data?.start) : undefined,
-    end: data?.end ? new Date(data?.end) : undefined,
-    Leaveduration: data?.Leaveduration || 0,
+    status: data?.status || "pending",
+    start,
+    end,
+    Leaveduration: calculateLeaveDuration(start, end),
     reason: data?.reason || "",
     attachment: data?.attachment || undefined,
   };
@@ -57,8 +69,7 @@ export function LeaveFormModal({
   employeeId,
 }: any) {
   console.log(record);
-  const [file, setFile] = useState<File | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
+  
   const values = useMemo(
     () =>
       getDefaultValues({ ...record, employee: employeeId || record?.employee }),
@@ -69,52 +80,59 @@ export function LeaveFormModal({
     resolver: zodResolver(formSchema),
     defaultValues: values,
   });
+    const { watch, setValue, handleSubmit, reset } = form;
+    const startDate = watch('start');
+    const endDate = watch('end');
+    const { user } = useAuth();
+    const [error, setError] = useState("");
+    const { settings } = useSettings();
+
+     useEffect(() => {
+        if (startDate && endDate) {
+          const duration = calculateLeaveDuration(startDate, endDate);
+          setValue('Leaveduration', duration);
+        }
+      }, [startDate, endDate, setValue]);
 
   useEffect(() => {
     form.reset(values);
   }, [record, values]);
 
-  const { user } = useAuth();
 
-  const [error, setError] = useState("");
-
-  const { settings } = useSettings();
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setError(undefined);
+    // Calculate leaveDuration using the original Date objects
+    const Leaveduration = calculateLeaveDuration(values.start, values.end);
     const data = {
       ...values,
       start: new Date(values.start).toISOString(),
       end: new Date(values.end).toISOString(),
+      Leaveduration,
     };
 
     const days = calculateLeaveDuration(data.start, data.end);
-
-    // // check if are not in the past
-    // if (new Date(data.start).getTime() < new Date().getTime()) {
-    //   return setError("Start date must be greater than today");
-    // }
-
     console.log(days);
     // check if days is greater than 0
     if (days <= 0) {
       return setError("End date must be greater than start date");
     }
 
-    if (data.type === "annual") {
-      const employee_data = await pocketbase
-        .collection("users")
-        .getOne(data.employee);
-      const { remaining } = await calculateRemainingLeaves({
-        employee: employee_data,
-        leaves_per_year: settings?.leaves_per_year,
-      });
+   // Check annual leave balance
+   if (data.type === "Annual Leave") {
+    const employee_data = await pocketbase.collection("users").getOne(data.employee);
+    const { remaining } = await calculateRemainingLeaves({
+      employee: employee_data,
+      joined_at: employee_data.joined_at,
+      leaves_per_year: settings?.leaves_per_year,
+    });
 
-      // check if days is greater than remaining leaves
-      if (remaining < days) {
-        return setError("You do not have enough annual leaves remaining");
-      }
+    if (remaining < Leaveduration) {
+      setError("You do not have enough annual leaves remaining");
+      return;
     }
+  }
+   // Submit data to PocketBase
     const q = !record
       ? pocketbase
           .collection("leaves")
@@ -151,61 +169,6 @@ export function LeaveFormModal({
     );
   }
 
-  function exportExcelTemplate() {
-    const ws = utils.json_to_sheet([
-      {
-        employee: "",
-        type: "",
-        status: "",
-        start: "",
-        end: "",
-        Leaveduration: "",
-        reason: "",
-        attachment: "",
-      },
-    ]);
-    const wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, "Template");
-    writeFile(wb, "LeaveTemplate.xlsx");
-  }
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setFile(file);
-    }
-  };
-
-  const handleImport = async () => {
-    if (!file) return;
-
-    setIsImporting(true);
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = utils.sheet_to_json(worksheet);
-
-        for (const row of jsonData) {
-          const values = getDefaultValues(row);
-          await onSubmit(values);
-        }
-
-        toast.success("Employees imported successfully");
-        setFile(null);
-      } catch (error) {
-        console.error("Error importing file:", error);
-        toast.error("Failed to import employees. Please check the file format.");
-      } finally {
-        setIsImporting(false);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-[650px]">
@@ -236,7 +199,7 @@ export function LeaveFormModal({
                 </Alert>
               </div>
             )}
-            <div className="grid px-2 gap-2">
+          
               <div className="grid gap-2 grid-cols-2">
                 <AppFormAsyncSelect
                   form={form}
@@ -277,6 +240,25 @@ export function LeaveFormModal({
                   name={"end"}
                 />
               </div>
+              <div className="grid gap-2 grid-cols-2">
+                <div>
+                  <Controller
+                    name="Leaveduration"
+                    control={form.control}
+                    render={({ field }) => (
+                      <div>
+                        <label className="text-sm font-medium">Leave Duration (Days)</label>
+                        <input
+                          {...field}
+                          type="number"
+                          disabled
+                          className="w-full h-10 px-3 text-sm border rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-50"
+                          placeholder="Leave Duration"
+                        />
+                      </div>
+                    )}
+                  />
+                </div>
               <div className="mb-2">
                 <AppFormTextArea
                   form={form}
@@ -314,46 +296,8 @@ export function LeaveFormModal({
                   )}
                   {record ? "Update leave" : "Create new leave"}
                 </Button>
-                <Button
-                  type="button"
-                  onClick={exportExcelTemplate}
-                  className="w-full text-slate-600"
-                  size="sm"
-                  variant="outline"
-                >
-                  Export Excel Template
-                </Button>
-                <input
-                  type="file"
-                  accept=".xlsx, .xls"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="import-excel"
-                />
-                <label htmlFor="import-excel" className="w-full">
-                  <Button
-                    type="button"
-                    className="w-full text-slate-600"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => document.getElementById('import-excel')?.click()}
-                  >
-                    Import Excel Template
-                  </Button>
-                </label>
-                <Button
-                  type="button"
-                  onClick={handleImport}
-                  className="w-full"
-                  size="sm"
-                  variant="outline"
-                  disabled={!file || isImporting}
-                >
-                  {isImporting && (
-                    <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
-                  )}
-                  Process Import
-                </Button>
+                
+               
               </div>
             </DialogFooter>
           </form>

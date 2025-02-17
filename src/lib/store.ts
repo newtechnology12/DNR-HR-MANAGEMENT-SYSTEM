@@ -1,94 +1,80 @@
-import { FileMetadata, Folder } from "../types";
+// lib/store.ts
+import { FileMetadata } from '@/types';
+import PocketBase from 'pocketbase';
+
+const pb = new PocketBase('YOUR_POCKETBASE_URL');
+
+type Subscriber = () => void;
 
 class FileStore {
+  private subscribers: Subscriber[] = [];
   private files: FileMetadata[] = [];
-  private folders: Folder[] = [];
-  private listeners: (() => void)[] = [];
 
-  addFile(file: FileMetadata) {
-    this.files.push(file);
-    this.notifyListeners();
-  }
-
-  getFiles() {
-    return [...this.files];
-  }
-
-  getFolders() {
-    return [...this.folders];
-  }
-
-  addFolder(folder: Folder) {
-    this.folders.push(folder);
-    this.notifyListeners();
-  }
-
-  updateFolder(id: string, updates: Partial<Folder>) {
-    const index = this.folders.findIndex((f) => f.id === id);
-    if (index !== -1) {
-      this.folders[index] = { ...this.folders[index], ...updates };
-      this.notifyListeners();
+  async fetchFiles() {
+    try {
+      const records = await pb.collection('files').getList(1, 50, {
+        sort: '-created',
+        expand: 'department'
+      });
+      
+      this.files = records.items.map(record => ({
+        id: record.id,
+        name: record.name,
+        size: record.size,
+        type: record.type,
+        department: record.expand?.department?.name || record.department,
+        archived: record.archived,
+        created: record.created,
+        url: pb.files.getUrl(record, record.file)
+      }));
+      
+      this.notifySubscribers();
+    } catch (error) {
+      console.error('Error fetching files:', error);
     }
   }
 
-  deleteFolder(id: string) {
-    // Move files from deleted folder to root
-    this.files = this.files.map((file) =>
-      file.folderId === id ? { ...file, folderId: null } : file
-    );
+  async uploadFile(file: File, department: string) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('name', file.name);
+      formData.append('size', file.size.toString());
+      formData.append('type', file.type);
+      formData.append('department', department);
+      formData.append('archived', 'false');
 
-    // Delete folder and all subfolders
-    const folderIdsToDelete = this.getAllSubfolderIds(id);
-    folderIdsToDelete.push(id);
-    this.folders = this.folders.filter(
-      (f) => !folderIdsToDelete.includes(f.id)
-    );
-
-    this.notifyListeners();
-  }
-
-  private getAllSubfolderIds(folderId: string): string[] {
-    const subfolderIds: string[] = [];
-    const subfolders = this.folders.filter((f) => f.parentId === folderId);
-
-    subfolders.forEach((folder) => {
-      subfolderIds.push(folder.id);
-      subfolderIds.push(...this.getAllSubfolderIds(folder.id));
-    });
-
-    return subfolderIds;
-  }
-
-  updateFile(id: string, updates: Partial<FileMetadata>) {
-    const index = this.files.findIndex((f) => f.id === id);
-    if (index !== -1) {
-      this.files[index] = { ...this.files[index], ...updates };
-      this.notifyListeners();
+      await pb.collection('files').create(formData);
+      await this.fetchFiles();
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      throw error;
     }
   }
 
-  moveFile(fileId: string, targetFolderId: string | null) {
-    const file = this.files.find((f) => f.id === fileId);
-    if (file) {
-      file.folderId = targetFolderId;
-      this.notifyListeners();
+  async updateFile(id: string, data: Partial<FileMetadata>) {
+    try {
+      await pb.collection('files').update(id, data);
+      await this.fetchFiles();
+    } catch (error) {
+      console.error('Error updating file:', error);
+      throw error;
     }
   }
 
-  deleteFile(id: string) {
-    this.files = this.files.filter((f) => f.id !== id);
-    this.notifyListeners();
+  getFiles(): FileMetadata[] {
+    return this.files;
   }
 
-  subscribe(listener: () => void) {
-    this.listeners.push(listener);
+  subscribe(callback: Subscriber) {
+    this.subscribers.push(callback);
     return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
+      this.subscribers = this.subscribers.filter(sub => sub !== callback);
     };
   }
 
-  private notifyListeners() {
-    this.listeners.forEach((listener) => listener());
+  private notifySubscribers() {
+    this.subscribers.forEach(callback => callback());
   }
 }
 

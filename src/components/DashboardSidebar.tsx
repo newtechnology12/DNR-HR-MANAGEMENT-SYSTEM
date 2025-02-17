@@ -88,12 +88,12 @@ export default function DashboardSidebar() {
                   roles: getRoles("access_employee_portal", roles),
                 },
 
-                {
-                  name: "File Management",
-                  icon: Folder,
-                  link: "/dashboard/file-management",
-                  roles: getRoles("view_fileManager", roles),
-                },
+                // {
+                //   name: "File Management",
+                //   icon: Folder,
+                //   link: "/dashboard/file-management",
+                //   roles: getRoles("view_fileManager", roles),
+                // },
 
                 // {
                 //   name: "DNR File Management",
@@ -143,6 +143,13 @@ export default function DashboardSidebar() {
                   roles: getRoles("view_designations", roles),
                 },
                 {
+                  name: "DNR Leave plan",
+                  icon: AiOutlineShop,
+                  link: "/dashboard/hr/leave-plan",
+                  roles: getRoles("view_leaves", roles),
+
+                },
+                {
                   name: "Leaves & Holidays",
                   icon: LogOut,
                   link: "/dashboard/hr/leaves",
@@ -163,6 +170,7 @@ export default function DashboardSidebar() {
                 },
               ],
             },
+
             {
               name: "Finance",
               children: [
@@ -182,6 +190,12 @@ export default function DashboardSidebar() {
                   name: "Petty Cash Requests",
                   icon: GitPullRequest,
                   link: "/dashboard/finance/petty-cash-requests",
+                  roles: getRoles("view_petty_cash_requests", roles),
+                },
+                {
+                  name: "Car Management",
+                  icon: GitPullRequest,
+                  link: "/dashboard/finance/carmanagement",
                   roles: getRoles("view_petty_cash_requests", roles),
                 },
               ],

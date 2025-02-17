@@ -16,6 +16,7 @@ import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/modals/ConfirmModal";
 import { addDays } from "date-fns";
+import { LeavePlanFormModal } from "@/components/modals/LeavePlaneFormModel";
 function capitalizeFirstLetter(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
@@ -77,33 +78,33 @@ export default function EmployeeLeaves({ employeeId }) {
       enableHiding: true,
     },
     {
-      accessorKey: "end",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="End" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("end")}</div>
-      ),
-      enableSorting: true,
-      filterFn: (__, _, value) => {
-        return value;
+        accessorKey: "end",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="End" />
+        ),
+        cell: ({ row }) => (
+          <div className="capitalize">{row.getValue("end")}</div>
+        ),
+        enableSorting: true,
+        filterFn: (__, _, value) => {
+          return value;
+        },
+        enableHiding: true,
       },
-      enableHiding: true,
-    },
-    {
-      accessorKey: "days",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Days" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("days")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
+      {
+        accessorKey: "Leaveduration",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Days" />
+        ),
+        cell: ({ row }) => (
+          <div className="capitalize">{row.getValue("Leaveduration")}</div>
+        ),
+        filterFn: (__, _, value) => {
+          return value;
+        },
+        enableSorting: true,
+        enableHiding: true,
       },
-      enableSorting: true,
-      enableHiding: true,
-    },
     {
       accessorKey: "status",
       header: ({ column }) => (
@@ -118,8 +119,8 @@ export default function EmployeeLeaves({ employeeId }) {
       },
       enableHiding: true,
     },
-   
-   
+  
+    
     {
       accessorKey: "approved_by",
       header: ({ column }) => (
@@ -223,12 +224,12 @@ export default function EmployeeLeaves({ employeeId }) {
   const handleDelete = (e) => {
     confirmModal.setIsLoading(true);
     return pocketbase
-      .collection("leaves")
+      .collection("LeavePlane")
       .delete(e.id)
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("Leaves deleted succesfully");
+        toast.success("LeavePlane deleted succesfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -253,7 +254,7 @@ export default function EmployeeLeaves({ employeeId }) {
 
   const recordsQuery = useQuery({
     queryKey: [
-      "leaves",
+      "LeavePlane",
       {
         columnFilters,
         search: searchText,
@@ -297,7 +298,7 @@ export default function EmployeeLeaves({ employeeId }) {
         .join(" && ");
 
       return pocketbase
-        .collection("leaves")
+        .collection("LeavePlane")
         .getList(pageIndex + 1, pageSize, {
           ...cleanObject({
             filter: [searchQ, filters, `employee="${employeeId}"`]
@@ -324,7 +325,7 @@ export default function EmployeeLeaves({ employeeId }) {
                   month: "long",
                   year: "numeric",
                 }),
-                days: e.Leaveduration,
+                Leaveduration: e.Leaveduration,
                 type: e.type,
                 status: e.status,
                 approved_by: e.approved_by || "---",
@@ -426,7 +427,7 @@ export default function EmployeeLeaves({ employeeId }) {
           },
         ]}
       />
-      <LeaveFormModal
+      <LeavePlanFormModal
         onComplete={() => {
           recordsQuery.refetch();
           newRecordModal.close();

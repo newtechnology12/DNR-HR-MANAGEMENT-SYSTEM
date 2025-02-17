@@ -35,7 +35,7 @@ import Designations from "./pages/dashboard/Designations";
 import Assets from "./pages/dashboard/Assets";
 import AssetsTypes from "./pages/dashboard/AssetsTypes";
 import AssetsCategories from "./pages/dashboard/AssetsCategories";
-import FileManager from "./pages/dashboard/FileManager";
+// import FileManager from "./pages/dashboard/FileManager";
 import WeeklyPlans from "./pages/dashboard/WeeklyPlane";
 import RequestCash from "./pages/dashboard/RequestCash";
 import Reason from "./pages/dashboard/Reason";
@@ -47,6 +47,12 @@ import ExpensesReport from "./pages/dashboard/ExpensesReport";
 import AssetsRequests from "./pages/dashboard/AssetsRequests";
 import EmployeeTimesheet from "./pages/dashboard/EmployeeTimesheet";
 import TimesheetReport from "./pages/dashboard/TimesheetReport";
+// import CarManagement from "./pages/dashboard/CarManagement";
+import { ReportGenerator } from "./components/Carmodel/ReportGenerator";
+import CarManagement from "./pages/dashboard/CarManagement";
+import CountInventorySession from "./pages/dashboard/CountInventorySession";
+import ExcelStyleLeavePlan from "./pages/dashboard/CountInventorySession";
+// import { DepartmentDashboard } from "./components/DepartmentFile/department-dashboard";
 
 const router = createBrowserRouter([
   {
@@ -106,6 +112,10 @@ const router = createBrowserRouter([
                       </ProtectedRoute>
                     ),
                   },
+                  {
+                    path: "leave-plan-2",
+                    element: <CountInventorySession />,
+                  },
 
                   {
                     path: "employees/tasks",
@@ -115,10 +125,10 @@ const router = createBrowserRouter([
                     path: "employees/reports",
                     // element: <Reports />,
                   },
-                  {
-                    path: "file-management",
-                    element: <FileManager />,
-                  },
+                  // {
+                  //   path: "file-management",
+                  //   element: <DepartmentDashboard />,
+                  // },
                   {
                     path: "weeklyplane",
                     element: <WeeklyPlans />,
@@ -159,6 +169,15 @@ const router = createBrowserRouter([
                     ),
                   },
                   {
+                    path: "leave-plan",
+                    element: (
+                      <ProtectedRoute entity="view_leaves">
+                        <ExcelStyleLeavePlan />
+                      </ProtectedRoute>
+                    ),
+                  },
+                 
+                  {
                     path: "leaves",
                     element: (
                       <ProtectedRoute entity="view_leaves">
@@ -174,6 +193,7 @@ const router = createBrowserRouter([
                       </ProtectedRoute>
                     ),
                   },
+                  
                   {
                     path: "departments",
                     element: (
@@ -290,6 +310,14 @@ const router = createBrowserRouter([
                     element: (
                       <ProtectedRoute entity="view_petty_cash_requests">
                         <PettyCashRequests />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "carmanagement",
+                    element: (
+                      <ProtectedRoute entity="view_petty_cash_requests">
+                        <CarManagement />
                       </ProtectedRoute>
                     ),
                   },

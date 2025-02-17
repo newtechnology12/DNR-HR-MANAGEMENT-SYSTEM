@@ -15,7 +15,7 @@ import { addDays } from "date-fns";
 import { Button } from "@/components/ui/button";
 import Avatar from "@/components/shared/Avatar";
 import useModalState from "@/hooks/useModalState";
-import { EmployeFormModal } from "@/components/modals/EmployeeFormModal";
+import { EmployeeFormModal } from "@/components/modals/EmployeeFormModal";
 import useEditRow from "@/hooks/use-edit-row";
 import { ScrollArea, ScrollBar } from "./ui/scroll-area";
 import formatFilter from "@/utils/formatFilter";
@@ -417,7 +417,7 @@ export default function Employees({ ...otherProps }) {
         {...otherProps}
       />
 
-      <EmployeFormModal
+      <EmployeeFormModal
         onComplete={() => {
           employeesQuery.refetch();
           newEmployeeModal.close();

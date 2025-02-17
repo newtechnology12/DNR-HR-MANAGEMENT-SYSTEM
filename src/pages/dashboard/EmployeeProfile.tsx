@@ -8,17 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import EmployeeAttendances from "./EmployeeAttendances";
 import EmployeeLeaves from "./EmployeeLeaves";
 import EmployeePayslips from "./EmployeePayslips";
-import EmployeeAssets from "./EmployeeAssets";
+// import EmployeeAssets from "./EmployeeAssets";
 import EmployeeDocuments from "./EmployeeDocuments";
 import { toast } from "sonner";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Edit } from "lucide-react";
-import { EmployeFormModal } from "@/components/modals/EmployeeFormModal";
+// import { EmployeFormModal } from "@/components/modals/EmployeeFormModal";
 import { cn } from "@/utils/cn";
 import { useQuery } from "react-query";
 import LeavesTakenVsRemaining from "@/components/LeavesTakenVsRemaining";
 import EmployeePrePayments from "./EmployeePrePayments";
+import { EmployeeFormModal } from "@/components/modals/EmployeeFormModal";
 
 export default function EmployeeProfile() {
   const [activeTab, setactiveTab] = useState("Attendance Log");
@@ -161,7 +162,7 @@ export default function EmployeeProfile() {
           </Card>
         </div>
       </div>
-      <EmployeFormModal
+      <EmployeeFormModal
         onComplete={() => {
           refetch();
         }}
