@@ -497,7 +497,7 @@ export default function EmployeePortal() {
             {[
               "Attendance Log",
               "Documents",
-              "leavePlane",
+              "leavePlan",
               "Leaves",
               // "Payslips",
               "Expense Request",
