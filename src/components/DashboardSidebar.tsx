@@ -87,6 +87,13 @@ export default function DashboardSidebar() {
                   link: "/dashboard/employee-portal",
                   roles: getRoles("access_employee_portal", roles),
                 },
+                {
+                  name: "DNR Leave plan",
+                  icon: AiOutlineShop,
+                  link: "/dashboard/hr/leave-plan",
+                  roles: getRoles("access_employee_portal", roles),
+
+                },
 
                 // {
                 //   name: "File Management",
@@ -142,13 +149,7 @@ export default function DashboardSidebar() {
                   link: "/dashboard/hr/designations",
                   roles: getRoles("view_designations", roles),
                 },
-                {
-                  name: "DNR Leave plan",
-                  icon: AiOutlineShop,
-                  link: "/dashboard/hr/leave-plan",
-                  roles: getRoles("view_leaves", roles),
-
-                },
+               
                 {
                   name: "Leaves & Holidays",
                   icon: LogOut,

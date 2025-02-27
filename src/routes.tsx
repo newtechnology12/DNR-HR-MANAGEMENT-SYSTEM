@@ -97,6 +97,14 @@ const router = createBrowserRouter([
                     ),
                   },
                   {
+                    path: "leave-plan",
+                    element: (
+                      <ProtectedRoute entity="access_employee_portal">
+                        <ExcelStyleLeavePlan />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
                     path: "RequestCash",
                     element: (
                       <ProtectedRoute entity="access_employee_portal">

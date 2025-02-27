@@ -103,12 +103,54 @@ export default function EmployeePrePayments({ employeeId }) {
       enableHiding: true,
     },
     {
+      accessorKey: "approved or rejected by",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Approved or Rejected by" />
+      ),
+      cell: ({ row }) => (
+        <div className="capitalize">{row.getValue("created_by")}</div>
+      ),
+      filterFn: (__, _, value) => {
+        return value;
+      },
+      enableSorting: true,
+      enableHiding: true,
+    },
+    {
+      accessorKey: "message",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Message" />
+      ),
+      cell: ({ row }) => (
+        <div className="capitalize">{row.getValue("message")}</div>
+      ),
+      filterFn: (__, _, value) => {
+        return value;
+      },
+      enableSorting: true,
+      enableHiding: true,
+    },
+    {
       accessorKey: "created",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Created at" />
       ),
       cell: ({ row }) => (
         <div className="capitalize">{row.getValue("created")}</div>
+      ),
+      filterFn: (__, _, value) => {
+        return value;
+      },
+      enableSorting: true,
+      enableHiding: true,
+    },
+    {
+      accessorKey: "updated",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Updated at" />
+      ),
+      cell: ({ row }) => (
+        <div className="capitalize">{row.getValue("updated")}</div>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -201,6 +243,8 @@ export default function EmployeePrePayments({ employeeId }) {
                 amount: e.amount,
                 category: e?.expand?.expenseCategory?.name,
                 status: e.status,
+                approved_or_rejected_by: e.approved_or_rejected_by,
+                message: e.message,
                 created_by: e.expand?.created_by?.name,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",

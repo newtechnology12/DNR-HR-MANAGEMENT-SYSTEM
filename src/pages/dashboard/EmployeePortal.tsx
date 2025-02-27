@@ -23,11 +23,9 @@ import { LogIn, LogOut } from "lucide-react";
 import LeavesTakenVsRemaining from "@/components/LeavesTakenVsRemaining";
 import EmployeePrePayments from "./EmployeePrePayments";
 import EmployeePerfomance from "./EmployeePerfomance";
-// import SubmitReportPage from "@/submit-report/page";
-// import AssetsAllocation from "./AssetsAllocation";
-// import { CarRequestForm } from "@/components/Carmodel/RequestForm";
-// import { LeavePlanFormModal } from "@/components/modals/LeavePlaneFormModel";
-import EmployeeLeavesPlan from "./EmployeeLeavesPlane";
+import EmployeeLeavesplan from "./EmployeeLeavesPlane";
+import { LeavePlanFormModal } from "@/components/modals/LeavePlaneFormModel";
+import ExcelStyleLeavePlan from "./CountInventorySession";
 
 
 function timeStringToDate(timeString, date) {
@@ -201,7 +199,7 @@ export default function EmployeePortal() {
           clockin_time: new Date(),
           type: "manual",
           behaviour,
-          date: new Date(),
+          date: new Date(), 
           branch: employee.branch,
         })
         .then(() => {
@@ -526,7 +524,7 @@ export default function EmployeePortal() {
             )}
 
             {activeTab === "leavePlane" && 
-            <EmployeeLeavesPlan employeeId={user.id} />}
+            <ExcelStyleLeavePlan employeeId={user.id} />}
             
             {activeTab === "Leaves" && 
             <EmployeeLeaves employeeId={user.id} />}
