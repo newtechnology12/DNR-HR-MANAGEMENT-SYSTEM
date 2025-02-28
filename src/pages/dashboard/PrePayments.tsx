@@ -612,7 +612,7 @@ import * as XLSX from "xlsx";
 
 export default function Prepayments() {
   const { canPerform } = useRoles();
-
+  
   const columns: ColumnDef<any>[] = [
     {
       id: "select",
@@ -926,19 +926,19 @@ export default function Prepayments() {
             items: e?.items?.map((e) => {
               return {
                 id: e.id,
-                employee: e.expand?.employee?.name,
-                position: e.position,
-                category: e?.expand?.expenseCategory?.name,
-                account: e?.expand?.account?.name,
-                attachment: e.attachment,
-                momoNumber: e.momoNumber,
-                momoName: e.momoName,
-                amount: e.amount,
-                status: e.status,
-                reason: e.reason,
-                description: e.description,
-                created_by: e.expand?.created_by?.name,
-                department: e.expand?.employee?.department,
+                employee: e.expand?.employee?.name || "---",
+                position: e.position || "---",
+                category: e?.expand?.expenseCategory?.name|| "---",
+                account: e?.expand?.account?.name || "---",
+                attachment: e.attachment || "---",
+                momoNumber: e.momoNumber || "---",
+                momoName: e.momoName || "---",
+                amount: e.amount || "---",
+                status: e.status || "---",
+                reason: e.reason || "---",
+                description: e.description || "---",
+                created_by: e.expand?.created_by?.name || "---",
+                department: e.expand?.employee?.department || "---",
                 deduction_date: new Date(e.deduction_date).toLocaleDateString(
                   "en-US",
                   {
@@ -1064,6 +1064,8 @@ export default function Prepayments() {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Prepayments");
     XLSX.writeFile(workbook, "prepayment_report.xlsx");
   };
+  const totalAmount = recordsQuery?.data?.items?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1141,6 +1143,14 @@ export default function Prepayments() {
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </div>
+         {/* Total Amount Section */}
+      <div className="bg-white rounded-lg shadow-sm mb-6 p-4">
+        <div className="flex justify-end">
+          <div className="text-lg font-semibold">
+            Total Amount: {Number(totalAmount).toLocaleString()} FRW
+          </div>
+        </div>
+      </div>
 
         {/* Data Table */}
         <div className="bg-white rounded-lg shadow-sm">
