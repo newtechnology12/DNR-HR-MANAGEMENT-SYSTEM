@@ -693,24 +693,24 @@ export default function PettyCashRequests() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <DatePicker
-              selected={exportStartDate}
-              onChange={(date) => setExportStartDate(date)}
-              placeholderText="Start Date"
-            />
-            <DatePicker
-              selected={exportEndDate}
-              onChange={(date) => setExportEndDate(date)}
-              placeholderText="End Date"
-            />
-            <Button onClick={handleExport} size="sm">
-              Export to Excel
-            </Button>
-            <Button onClick={() => newRecordModal.open()} size="sm">
-              <PlusCircle size={16} className="mr-2" />
-              <span>Request Petty Cash</span>
-            </Button>
-          </div>
+  <DatePicker
+    value={exportStartDate} // Use `value` instead of `selected`
+    setValue={(date) => setExportStartDate(date)} // Use `setValue` instead of `onChange`
+    placeholder="Start Date" // Use `placeholder` instead of `placeholderText`
+  />
+  <DatePicker
+    value={exportEndDate} // Use `value` instead of `selected`
+    setValue={(date) => setExportEndDate(date)} // Use `setValue` instead of `onChange`
+    placeholder="End Date" // Use `placeholder` instead of `placeholderText`
+  />
+  <Button onClick={handleExport} size="sm">
+    Export to Excel
+  </Button>
+  <Button onClick={() => newRecordModal.open()} size="sm">
+    <PlusCircle size={16} className="mr-2" />
+    <span>Request Petty Cash</span>
+  </Button>
+</div>
         </div>
         <div className="bg-white scroller border-t border-l border-r rounded-t">
           <ScrollArea className="w-full whitespace-nowrap">
@@ -800,6 +800,23 @@ export default function PettyCashRequests() {
               enableSorting: true,
               enableHiding: true,
             },
+            {accessorKey: 'requested_at',
+               header: 'Requested at',
+                cell: ({ row }) => <div className="capitalize truncate">{row.getValue('requested_at')}</div>, 
+                filterFn: (__, _, value) => value,
+                 enableSorting: true,
+                  enableHiding: true,
+              },
+            
+            {
+              accessorKey: 'approved_by',
+              header: ({ column }) => <DataTableColumnHeader column={column} title="Approved by" />,
+              cell: ({ row }) => <div className="capitalize truncate">{row.getValue('approved_by') || '---'}</div>,
+              filterFn: (__, _, value) => value,
+              enableSorting: true,
+              enableHiding: true,
+            },
+            
             {
               accessorKey: 'created',
               header: ({ column }) => <DataTableColumnHeader column={column} title="Created at" />,
@@ -957,6 +974,7 @@ function ApproveOrRejectModal({ type, open, setOpen, request, onCompleted }) {
         const transaction = await pocketbase.collection('accounts_transactions').create({
           amount: request.amount,
           date: request.created || new Date().toLocaleString(),
+          user: user?.id,
           account: request.account,
           request: request.id,
           transactionType: 'refill',

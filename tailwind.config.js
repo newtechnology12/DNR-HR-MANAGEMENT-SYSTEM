@@ -25,7 +25,7 @@ module.exports = {
         sans: ["Outfit", "sans-serif"],
       },
       colors: {
-        primary: "#6a2c90",
+        primary: "#242364",
         primaryDark: "#56187d",
       },
       keyframes: {
