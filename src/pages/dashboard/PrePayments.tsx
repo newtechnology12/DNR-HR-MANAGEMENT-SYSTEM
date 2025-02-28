@@ -747,20 +747,20 @@ export default function Prepayments() {
       enableSorting: true,
       enableHiding: true,
     },
-    {
-      accessorKey: "reason",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Reason" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("reason")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
+    // {
+    //   accessorKey: "reason",
+    //   header: ({ column }) => (
+    //     <DataTableColumnHeader column={column} title="Reason" />
+    //   ),
+    //   cell: ({ row }) => (
+    //     <div className="capitalize">{row.getValue("reason")}</div>
+    //   ),
+    //   filterFn: (__, _, value) => {
+    //     return value;
+    //   },
+    //   enableSorting: true,
+    //   enableHiding: true,
+    // },
     {
       accessorKey: "description",
       header: ({ column }) => (
@@ -938,7 +938,7 @@ export default function Prepayments() {
                 reason: e.reason || "---",
                 description: e.description || "---",
                 created_by: e.expand?.created_by?.name || "---",
-                department: e.expand?.employee?.department || "---",
+                department: e.expand?.department?.name || e.department,
                 deduction_date: new Date(e.deduction_date).toLocaleDateString(
                   "en-US",
                   {
@@ -1004,6 +1004,7 @@ export default function Prepayments() {
       "Amount",
       "Momo",
       "Momo Name",
+      "description",
       "Status",
       "Created at",
     ];
@@ -1014,9 +1015,11 @@ export default function Prepayments() {
       item.department || "---",
       item.category || "---",
       item.account || "---",
-      `${Number(item.amount).toLocaleString()} FRW`,
+      `${Number(item.amount).toLocaleString()}`,
       item.momoNumber || "---",
       item.momoName || "---",
+      item
+      .description || "---",
       item.status || "---",
       item.created || "---",
     ]);
@@ -1056,6 +1059,7 @@ export default function Prepayments() {
       'Amount': `${Number(item.amount).toLocaleString()} FRW`,
       'Momo': item.momoNumber || "---",
       'Momo Name': item.momoName || "---",
+      'description' : item.description || "---",
       'Status': item.status || "---",
       'Created at': item.created || "---",
     })));
