@@ -707,6 +707,7 @@ export default function Prepayments() {
       enableSorting: true,
       enableHiding: true,
     },
+
     {
       accessorKey: "momoNumber",
       header: ({ column }) => (
@@ -739,6 +740,34 @@ export default function Prepayments() {
       ),
       cell: ({ row }) => (
         <div className="capitalize">{row.getValue("status")}</div>
+      ),
+      filterFn: (__, _, value) => {
+        return value;
+      },
+      enableSorting: true,
+      enableHiding: true,
+    },
+    {
+      accessorKey: "reason",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Reason" />
+      ),
+      cell: ({ row }) => (
+        <div className="capitalize">{row.getValue("reason")}</div>
+      ),
+      filterFn: (__, _, value) => {
+        return value;
+      },
+      enableSorting: true,
+      enableHiding: true,
+    },
+    {
+      accessorKey: "description",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Description" />
+      ),
+      cell: ({ row }) => (
+        <div className="capitalize">{row.getValue("description")}</div>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -906,6 +935,8 @@ export default function Prepayments() {
                 momoName: e.momoName,
                 amount: e.amount,
                 status: e.status,
+                reason: e.reason,
+                description: e.description,
                 created_by: e.expand?.created_by?.name,
                 department: e.expand?.employee?.department,
                 deduction_date: new Date(e.deduction_date).toLocaleDateString(
