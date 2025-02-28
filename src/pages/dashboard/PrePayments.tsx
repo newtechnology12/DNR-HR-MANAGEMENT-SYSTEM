@@ -567,7 +567,6 @@
 //     </div>
 //   );
 // }
-
 import React, { useState } from 'react';
 import DataTable from "@/components/DataTable";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
@@ -611,8 +610,30 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from "xlsx";
 
 export default function Prepayments() {
+  // State for description modal
+  const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState(false);
+  const [selectedDescription, setSelectedDescription] = useState("");
+
+  // Handler for opening the description modal
+  const handleDescriptionClick = (description) => {
+    setSelectedDescription(description);
+    setIsDescriptionModalOpen(true);
+  };
+
+  // Render the description modal
+  const DescriptionModal = () => (
+    <Dialog open={isDescriptionModalOpen} onOpenChange={setIsDescriptionModalOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Description</DialogTitle>
+        </DialogHeader>
+        <div className="whitespace-pre-wrap">{selectedDescription}</div>
+      </DialogContent>
+    </Dialog>
+  );
+
   const { canPerform } = useRoles();
-  
+
   const columns: ColumnDef<any>[] = [
     {
       id: "select",
@@ -707,7 +728,6 @@ export default function Prepayments() {
       enableSorting: true,
       enableHiding: true,
     },
-
     {
       accessorKey: "momoNumber",
       header: ({ column }) => (
@@ -747,27 +767,19 @@ export default function Prepayments() {
       enableSorting: true,
       enableHiding: true,
     },
-    // {
-    //   accessorKey: "reason",
-    //   header: ({ column }) => (
-    //     <DataTableColumnHeader column={column} title="Reason" />
-    //   ),
-    //   cell: ({ row }) => (
-    //     <div className="capitalize">{row.getValue("reason")}</div>
-    //   ),
-    //   filterFn: (__, _, value) => {
-    //     return value;
-    //   },
-    //   enableSorting: true,
-    //   enableHiding: true,
-    // },
     {
       accessorKey: "description",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Description" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("description")}</div>
+        <Button
+          variant="link"
+          onClick={() => handleDescriptionClick(row.getValue("description"))}
+          className="text-blue-500 hover:text-blue-700"
+        >
+          View Description
+        </Button>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -918,7 +930,7 @@ export default function Prepayments() {
               .filter((e) => e)
               .join("&&"),
             sort: sorters,
-            expand: `employee,created_by,transactions,employee.designation,departments, expenseCategory,account`,
+            expand: `employee,created_by,transactions,employee.designation,departments, expenseCategory,account, employee.department`,
           }),
         })
         .then((e) => {
@@ -928,7 +940,7 @@ export default function Prepayments() {
                 id: e.id,
                 employee: e.expand?.employee?.name || "---",
                 position: e.position || "---",
-                category: e?.expand?.expenseCategory?.name|| "---",
+                category: e?.expand?.expenseCategory?.name || "---",
                 account: e?.expand?.account?.name || "---",
                 attachment: e.attachment || "---",
                 momoNumber: e.momoNumber || "---",
@@ -938,7 +950,7 @@ export default function Prepayments() {
                 reason: e.reason || "---",
                 description: e.description || "---",
                 created_by: e.expand?.created_by?.name || "---",
-                department: e.expand?.department?.name || e.department,
+                department: e.expand?.employee?.expand?.department?.name || "---",
                 deduction_date: new Date(e.deduction_date).toLocaleDateString(
                   "en-US",
                   {
@@ -990,12 +1002,8 @@ export default function Prepayments() {
   // Generate PDF
   const generatePDF = (data) => {
     const doc = new jsPDF();
-    
-    // Add title to the PDF
     doc.setFontSize(16);
     doc.text("Prepayment Report", 14, 15);
-    
-    // Define the columns
     const tableColumn = [
       "Requested by",
       "Department",
@@ -1004,13 +1012,11 @@ export default function Prepayments() {
       "Amount",
       "Momo",
       "Momo Name",
-      "description",
+      "Description",
       "Status",
       "Created at",
     ];
-
-    // Prepare the rows
-    const tableRows = data.map(item => [
+    const tableRows = data.map((item) => [
       item.created_by || "---",
       item.department || "---",
       item.category || "---",
@@ -1018,13 +1024,10 @@ export default function Prepayments() {
       `${Number(item.amount).toLocaleString()}`,
       item.momoNumber || "---",
       item.momoName || "---",
-      item
-      .description || "---",
+      item.description || "---",
       item.status || "---",
       item.created || "---",
     ]);
-
-    // Generate the table
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
@@ -1044,14 +1047,12 @@ export default function Prepayments() {
         fillColor: [245, 245, 245],
       },
     });
-
-    // Save the PDF
     doc.save("prepayment_report.pdf");
   };
 
   // Generate Excel
   const generateExcel = (data) => {
-    const worksheet = XLSX.utils.json_to_sheet(data.map(item => ({
+    const worksheet = XLSX.utils.json_to_sheet(data.map((item) => ({
       'Requested by': item.created_by || "---",
       'Department': item.department || "---",
       'Category': item.category || "---",
@@ -1059,17 +1060,16 @@ export default function Prepayments() {
       'Amount': `${Number(item.amount).toLocaleString()} FRW`,
       'Momo': item.momoNumber || "---",
       'Momo Name': item.momoName || "---",
-      'description' : item.description || "---",
+      'Description': item.description || "---",
       'Status': item.status || "---",
       'Created at': item.created || "---",
     })));
-    // Continue from the generateExcel function
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Prepayments");
     XLSX.writeFile(workbook, "prepayment_report.xlsx");
   };
-  const totalAmount = recordsQuery?.data?.items?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
 
+  const totalAmount = recordsQuery?.data?.items?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1115,8 +1115,8 @@ export default function Prepayments() {
                 onClick={() => generateExcel(recordsQuery?.data?.items || [])}
                 className="flex items-center gap-2"
               >
-                <Download size={16} />
                 Export Excel
+                <Download size={16 } />                
               </Button>
             </div>
           </div>
@@ -1147,14 +1147,15 @@ export default function Prepayments() {
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </div>
-         {/* Total Amount Section */}
-      <div className="bg-white rounded-lg shadow-sm mb-6 p-4">
-        <div className="flex justify-end">
-          <div className="text-lg font-semibold">
-            Total Amount: {Number(totalAmount).toLocaleString()} FRW
+
+        {/* Total Amount Section */}
+        <div className="bg-white rounded-lg shadow-sm mb-6 p-4">
+          <div className="flex justify-end">
+            <div className="text-lg font-semibold">
+              Total Amount: {Number(totalAmount).toLocaleString()} FRW
+            </div>
           </div>
         </div>
-      </div>
 
         {/* Data Table */}
         <div className="bg-white rounded-lg shadow-sm">
@@ -1231,6 +1232,9 @@ export default function Prepayments() {
           recordsQuery.refetch();
         }}
       />
+
+      {/* Description Modal */}
+      <DescriptionModal />
     </div>
   );
 }
@@ -1350,4 +1354,3 @@ function ApproveOrRejectModal({
     </Dialog>
   );
 }
-
