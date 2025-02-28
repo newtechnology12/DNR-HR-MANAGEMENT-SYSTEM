@@ -1967,7 +1967,7 @@ return () => clearTimeout(timeout);
     "Leaves",
     "Action Plan",
     "Reports",
-    "Training",
+    // "Training",
     "Expense Request",
     "Performance",
     "Assets"
