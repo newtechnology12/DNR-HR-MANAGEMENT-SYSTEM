@@ -1440,6 +1440,7 @@ import EmployeePerfomance from "./EmployeePerfomance";
 // import EmployeeTrainings from "./employeeTrainings";
 import useSettings from "@/hooks/useSettings";
 import EmployeeReports from "./EmployeeReportModel";
+import ActionPlanss from "./ActionPlansparUser";
 
 interface Location {
   latitude: number;
@@ -1965,7 +1966,7 @@ return () => clearTimeout(timeout);
     "Attendance Log",
     "Documents",
     "Leaves",
-    "Action Plan",
+    "Action Plans",
     "Reports",
     // "Training",
     "Expense Request",
@@ -2177,6 +2178,7 @@ return () => clearTimeout(timeout);
           {activeTab === "Expense Request" && <EmployeePrePayments employeeId={employee.id} />}
           {activeTab === "Performance" && <EmployeePerfomance employee={employee} />}
           {activeTab === "Assets" && <EmployeeAssets employeeId={employee.id} />}
+          {activeTab === "Action Plans" && <ActionPlanss employeeId={employee.id} />}
         </div>
       </Card>
     </div>

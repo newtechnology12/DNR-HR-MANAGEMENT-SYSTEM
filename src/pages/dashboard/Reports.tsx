@@ -1,56 +1,120 @@
-import {
-  ColumnDef,
-  PaginationState,
-  getCoreRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Link } from "react-router-dom";
-import pocketbase from "@/lib/pocketbase";
-import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import useModalState from "@/hooks/useModalState";
-import useEditRow from "@/hooks/use-edit-row";
+import { useQuery } from "react-query";
+import { Link } from "react-router-dom";
+import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
-import ConfirmModal from "@/components/modals/ConfirmModal";
 import { addDays } from "date-fns";
-// import { EmployeeReportModal } from "@/components/modals/EmployeeReportModel";
-import { Download, FileText, SheetIcon, Trash2 } from "lucide-react";
-import { saveAs } from "file-saver";
-// import { exportToExcel, exportToPdf } from "@/utils/exportUtils";
+
 import DataTable from "@/components/DataTable";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import useModalState from "@/hooks/useModalState";
+import useEditRow from "@/hooks/use-edit-row";
 import useConfirmModal from "@/hooks/useConfirmModal";
-// import { exportToExcel, exportToPdf } from "@/utils/exportUtils";
-import { useQuery } from "react-query";
+import pocketbase from "@/lib/pocketbase";
+import cleanObject from "@/utils/cleanObject";
+import ConfirmModal from "@/components/modals/ConfirmModal";
 import { EmployeeReportModal } from "@/components/modals/EmployeeReportModel";
-import { exportToExcel, exportToPdf } from "@/utils/exportUtils";
+import { title } from "process";
+import { DateRangePicker } from "./DateRangePicker";
 
-function capitalizeFirstLetter(str: string) {
+function capitalizeFirstLetter(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 export default function EmployeeReports() {
-  // Fetch departments
-  const { data: departments } = useQuery("departments", () =>
-    pocketbase.collection("departments").getFullList()
+  // State for modals
+  const [isTasksCompleteModalOpen, setIsTasksCompleteModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState("");
+
+  const [isChallengesFacedModalOpen, setIsChallengesFacedModalOpen] = useState(false);
+  const [selectedChallenge, setSelectedChallenge] = useState("");
+
+  const [isNextStepsModalOpen, setIsNextStepsModalOpen] = useState(false);
+  const [selectedNextStep, setSelectedNextStep] = useState("");
+  const [dateRange, setDateRange] = useState({ start: null, end: null });
+
+  // Handlers for opening modals
+  const handleTasksClick = (task) => {
+    setSelectedTask(task);
+    setIsTasksCompleteModalOpen(true);
+  };
+
+  const handleChallengesClick = (challenge) => {
+    setSelectedChallenge(challenge);
+    setIsChallengesFacedModalOpen(true);
+  };
+
+  const handleNextStepsClick = (nextStep) => {
+    setSelectedNextStep(nextStep);
+    setIsNextStepsModalOpen(true);
+  };
+
+  // Modal Components
+  const TasksModal = () => (
+    <Dialog open={isTasksCompleteModalOpen} onOpenChange={setIsTasksCompleteModalOpen}>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>Tasks Completed</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="whitespace-pre-wrap mb-4">{selectedTask}</div>
+        </div>
+        <DialogFooter>
+          <Button variant="default" onClick={() => setIsTasksCompleteModalOpen(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 
-  // Fetch users
-  const { data: users } = useQuery("users", () =>
-    pocketbase.collection("users").getFullList()
+  const ChallengesModal = () => (
+    <Dialog open={isChallengesFacedModalOpen} onOpenChange={setIsChallengesFacedModalOpen}>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>Challenges Faced</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="whitespace-pre-wrap mb-4">{selectedChallenge}</div>
+        </div>
+        <DialogFooter>
+          <Button variant="default" onClick={() => setIsChallengesFacedModalOpen(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
+
+  const NextStepsModal = () => (
+    <Dialog open={isNextStepsModalOpen} onOpenChange={setIsNextStepsModalOpen}>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>Next Steps</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="whitespace-pre-wrap mb-4">{selectedNextStep}</div>
+        </div>
+        <DialogFooter>
+          <Button variant="default" onClick={() => setIsNextStepsModalOpen(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  // Column Definitions
   const columns: ColumnDef<any>[] = [
     {
       id: "select",
       header: ({ table }) => (
         <Checkbox
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
-          }
+          checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
           aria-label="Select all"
           className="translate-y-[2px]"
@@ -69,11 +133,9 @@ export default function EmployeeReports() {
     },
     {
       accessorKey: "employee",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Employee" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
+        <div className="w-[80px] flex items-center gap-2">
           <Link
             to={""}
             className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
@@ -87,42 +149,28 @@ export default function EmployeeReports() {
     },
     {
       accessorKey: "department",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Department" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("department")}</div>
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Department" />,
+      cell: ({ row }) => <div className="capitalize">{row.getValue("department")}</div>,
       enableSorting: true,
       enableHiding: true,
     },
     {
       accessorKey: "reportType",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Report Type" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("reportType")}</div>
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Report Type" />,
+      cell: ({ row }) => <div className="capitalize">{row.getValue("reportType")}</div>,
       enableSorting: true,
       enableHiding: true,
     },
     {
       accessorKey: "actionplan",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Plan Title" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("actionplan")}</div>
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Your Plan" />,
+      cell: ({ row }) => <div className="capitalize">{row.getValue("actionplan")}</div>,
       enableSorting: true,
       enableHiding: true,
     },
     {
       accessorKey: "reportDate",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Report Date" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Report Date" />,
       cell: ({ row }) => (
         <div className="capitalize">
           {new Date(row.getValue("reportDate")).toLocaleDateString("en-US", {
@@ -137,9 +185,7 @@ export default function EmployeeReports() {
     },
     {
       accessorKey: "dateHappened",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Date Happened" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Date Happened" />,
       cell: ({ row }) => (
         <div className="capitalize">
           {new Date(row.getValue("dateHappened")).toLocaleDateString("en-US", {
@@ -149,141 +195,73 @@ export default function EmployeeReports() {
           })}
         </div>
       ),
+      enableSorting: true,
+      enableHiding: true,
     },
     {
       accessorKey: "tasksCompleted",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Tasks Completed" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Tasks Completed" />,
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("tasksCompleted")}</div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handleTasksClick(row.getValue("tasksCompleted"))}
+            className="text-blue-500 hover:text-blue-700 flex items-center gap-1"
+          >
+            View Tasks
+          </Button>
+        </div>
       ),
+      filterFn: (__, _, value) => value,
       enableSorting: true,
       enableHiding: true,
     },
     {
       accessorKey: "challengesFaced",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Challenges Faced" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Challenges Faced" />,
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("challengesFaced")}</div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handleChallengesClick(row.getValue("challengesFaced"))}
+            className="text-blue-500 hover:text-blue-700 flex items-center gap-1"
+          >
+            View Challenges
+          </Button>
+        </div>
       ),
+      filterFn: (__, _, value) => value,
       enableSorting: true,
       enableHiding: true,
     },
     {
       accessorKey: "nextSteps",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Next Steps" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Next Steps" />,
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("nextSteps")}</div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handleNextStepsClick(row.getValue("nextSteps"))}
+            className="text-blue-500 hover:text-blue-700 flex items-center gap-1"
+          >
+            View Next Steps
+          </Button>
+        </div>
       ),
+      filterFn: (__, _, value) => value,
       enableSorting: true,
       enableHiding: true,
     },
     {
-      accessorKey: "reportFile",
-      header: "Report File",
-      cell: ({ row }) => {
-        const fileUrl = row.getValue("reportFile") as string; // Type assertion
-    
-        // If no file URL, show a placeholder
-        if (!fileUrl) {
-          return <div className="text-slate-400">No file</div>;
-        }
-    
-        // Check if the file is a Google Doc or Google Sheet
-        const isGoogleDoc = fileUrl.includes("docs.google.com/document");
-        const isGoogleSheet = fileUrl.includes("docs.google.com/spreadsheets");
-    
-        // Function to handle opening the file
-        const handleOpenFile = () => {
-          // Test if the URL is valid
-          fetch(fileUrl, { method: "HEAD" })
-            .then((response) => {
-              if (response.ok) {
-                window.open(fileUrl, "_blank"); // Open the file in a new tab
-              } else {
-                toast.error("File not found or inaccessible.");
-              }
-            })
-            .catch((error) => {
-              console.error("Failed to open file:", error);
-              toast.error("Failed to open file. Please check the URL.");
-            });
-        };
-    
-        // Function to handle downloading the file
-        const handleDownloadFile = () => {
-          fetch(fileUrl)
-            .then((response) => {
-              if (!response.ok) {
-                throw new Error("File not found or inaccessible.");
-              }
-              return response.blob(); // Convert the response to a Blob
-            })
-            .then((blob) => {
-              // Extract the file name from the URL or generate one
-              const fileName = fileUrl.split("/").pop() || `report_${row.id}.${blob.type.split("/")[1]}`;
-              saveAs(blob, fileName); // Use file-saver to download the file
-            })
-            .catch((error) => {
-              console.error("Failed to download file:", error);
-              toast.error("Failed to download file. Please check the URL.");
-            });
-        };
-    
-        return (
-          <div className="flex items-center gap-2">
-            {/* View File Button */}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleOpenFile}
-            >
-              {isGoogleDoc ? (
-                <FileText className="h-4 w-4 mr-2" />
-              ) : isGoogleSheet ? (
-                <SheetIcon className="h-4 w-4 mr-2" />
-              ) : (
-                <FileText className="h-4 w-4 mr-2" />
-              )}
-              {isGoogleDoc ? "Open Doc" : isGoogleSheet ? "Open Sheet" : "View File"}
-            </Button>
-    
-            {/* Download File Button */}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleDownloadFile}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Download
-            </Button>
-          </div>
-        );
-      },
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
       accessorKey: "created_by",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created By" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created_by")}</div>
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Created By" />,
+      cell: ({ row }) => <div className="capitalize">{row.getValue("created_by")}</div>,
       enableSorting: true,
       enableHiding: true,
     },
     {
       accessorKey: "created",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created At" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Created At" />,
       cell: ({ row }) => (
         <div className="capitalize">
           {new Date(row.getValue("created")).toLocaleDateString("en-US", {
@@ -298,23 +276,17 @@ export default function EmployeeReports() {
     },
     {
       id: "actions",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Actions" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Actions" />,
       cell: ({ row }) => (
         <DataTableRowActions
           actions={[
             {
               title: "Edit Report",
-              onClick: (e) => {
-                editRow.edit(e.original);
-              },
+              onClick: (e) => editRow.edit(e.original),
             },
             {
               title: "Delete Report",
-              onClick: (e) => {
-                confirmModal.open({ meta: e });
-              },
+              onClick: (e) => confirmModal.open({ meta: e }),
             },
           ]}
           row={row}
@@ -323,8 +295,8 @@ export default function EmployeeReports() {
     },
   ];
 
+  // Confirm Modal Logic
   const confirmModal = useConfirmModal();
-
   const handleDelete = (e) => {
     confirmModal.setIsLoading(true);
     return pocketbase
@@ -341,19 +313,11 @@ export default function EmployeeReports() {
       });
   };
 
+  // Pagination and Query Logic
   const [searchText, setSearchText] = useState("");
   const [columnFilters, setColumnFilters] = useState([]);
-  const [sorting, setSorting] = useState([
-    {
-      id: "created",
-      desc: true,
-    },
-  ]);
-
-  const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 10,
-  });
+  const [sorting, setSorting] = useState([{ id: "created", desc: true }]);
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
 
   const recordsQuery = useQuery({
     queryKey: [
@@ -362,8 +326,9 @@ export default function EmployeeReports() {
         columnFilters,
         search: searchText,
         sort: sorting,
-        pageIndex,
-        pageSize,
+        pageIndex: pagination.pageIndex,
+        pageSize: pagination.pageSize,
+        
       },
     ],
     keepPreviousData: true,
@@ -401,11 +366,11 @@ export default function EmployeeReports() {
 
       return pocketbase
         .collection("employeeReports")
-        .getList(pageIndex + 1, pageSize, {
+        .getList(pagination.pageIndex + 1, pagination.pageSize, {
           ...cleanObject({
-            filter: [searchQ, filters].filter((e) => e).join("&&"),
+            filter: [searchQ, filters].filter((e) => e).join("&&"),             
             sort: sorters,
-            expand: `employee,created_by,department`,
+            expand: `employee,created_by, departments`,
           }),
         })
         .then((e) => {
@@ -423,7 +388,6 @@ export default function EmployeeReports() {
                 tasksCompleted: e.tasksCompleted,
                 challengesFaced: e.challengesFaced,
                 nextSteps: e.nextSteps,
-                reportFile: e.reportFile,
                 created: e.created,
                 original: e,
               };
@@ -437,15 +401,6 @@ export default function EmployeeReports() {
 
   const newRecordModal = useModalState();
   const editRow = useEditRow();
-
-  const handleExport = (format: "pdf" | "excel") => {
-    const data = recordsQuery.data?.items || [];
-    if (format === "pdf") {
-      exportToPdf(data, columns, "Employee_Reports");
-    } else {
-      exportToExcel(data, columns, "Employee_Reports");
-    }
-  };
 
   return (
     <>
@@ -474,89 +429,78 @@ export default function EmployeeReports() {
         setSorting={setSorting}
         pageCount={recordsQuery?.data?.totalPages}
         setPagination={setPagination}
-        pageIndex={pageIndex}
-        pageSize={pageSize}
+        pageIndex={pagination.pageIndex}
+        pageSize={pagination.pageSize}
         setColumnFilters={setColumnFilters}
         columnFilters={columnFilters}
         Action={() => {
           return (
-            <div className="flex gap-2">
-              <Button
-                onClick={() => handleExport("excel")}
-                size="sm"
-                variant="outline"
-              >
-                Export to Excel
-              </Button>
-              <Button
-                onClick={() => handleExport("pdf")}
-                size="sm"
-                variant="outline"
-              >
-                Export to PDF
-              </Button>
-              <Button
-                onClick={() => {
-                  newRecordModal.open();
-                }}
-                size="sm"
-              >
-                Create New Report
-              </Button>
-            </div>
+            <Button
+              onClick={() => {
+                newRecordModal.open();
+              }}
+              size="sm"
+              className="mr-2"
+            >
+              Create New Report
+            </Button>
           );
         }}
         facets={[
           {
             title: "Report Type",
-            name: "reportType", // Must match the accessorKey in your columns
+            name: "reportType",
             options: ["daily", "weekly", "monthly"].map((e) => ({
               label: capitalizeFirstLetter(e),
               value: e,
             })),
           },
           {
-            title: "Department",
-            name: "department", // Must match the accessorKey in your columns
-            options: departments?.map((e) => ({
-              label: e.name,
-              value: e.id,
-            })) || [],
-          },
-          {
-            title: "By Plan",
-            name: "actionplan", // Must match the accessorKey in your columns
-            options: users?.map((e) => ({
-              label: e.name,
-              value: e.id,
-            })) || [],
-          },
-          {
-            title: "Report Date",
-            name: "reportDate", // Must match the accessorKey in your columns
+            title: "Action Plan",
+            name: "actionplan",
             options: [
-              {
-                label: "Today",
-                value: {
-                  from: new Date(),
-                  to: new Date(),
-                },
-              },
-              {
-                label: "Last 7 Days",
-                value: {
-                  from: new Date(new Date().setDate(new Date().getDate() - 7)),
-                  to: new Date(),
-                },
-              },
-              {
-                label: "Last 30 Days",
-                value: {
-                  from: new Date(new Date().setDate(new Date().getDate() - 30)),
-                  to: new Date(),
-                },
-              },
-            ],
+              "yes",
+              "no",
+            ].map((e) => ({
+              label: capitalizeFirstLetter(e),
+              value: e,
+            })),
+          },
+          {
+            title: "Department",
+            loader: ({ search }) =>
+              pocketbase
+                .collection("departments")
+                .getFullList(cleanObject({ filter: search ? `name~"${search}"` : '' }))
+                .then((e) => e.map((e) => ({ label: e.name, value: e.id }))),
+            name: "department",
+            type: "async-options",
+          },
+
+          {
+            title: 'Created by',
+            loader: ({ search }) =>
+              pocketbase
+                .collection('users')
+                .getFullList(cleanObject({ filter: search ? `name~"${search}"` : '' }))
+                .then((e) => e.map((e) => ({ label: e.name, value: e.id }))),
+            name: 'created_by',
+            type: 'async-options',
+          },
+          {
+            title: "Created At",
+            name: "created",
+            type: "custom",
+            render: () => (
+              <DateRangePicker
+                onChange={(range) => setDateRange(range)}
+              />
+            ),
+            filter: (row) => {
+              if (!dateRange.start || !dateRange.end) return true;
+              const rowDate = new Date(row.getValue("created"));
+              return rowDate >= dateRange.start && rowDate <= dateRange.end;
+            },
           },
         ]}
       />
@@ -566,10 +510,14 @@ export default function EmployeeReports() {
           newRecordModal.close();
           editRow.close();
         }}
+        // employeeId={employeeId}
         record={editRow.row}
         setOpen={editRow.isOpen ? editRow.setOpen : newRecordModal.setisOpen}
         open={newRecordModal.isOpen || editRow.isOpen}
       />
+      <TasksModal />
+      <ChallengesModal />
+      <NextStepsModal />
     </>
   );
 }
