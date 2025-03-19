@@ -1970,6 +1970,7 @@ return () => clearTimeout(timeout);
     "Reports",
     // "Training",
     "Expense Request",
+    "Asset request",
     "Performance",
     "Assets"
   ];

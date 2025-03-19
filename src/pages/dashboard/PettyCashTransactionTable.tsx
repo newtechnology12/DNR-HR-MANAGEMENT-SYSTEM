@@ -1,15 +1,16 @@
 import DataTable from "@/components/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
-import { useState } from "react";
+// import { useState } from "react";
 import { useQuery } from "react-query";
 import { Button } from "@/components/ui/button";
 import useModalState from "@/hooks/useModalState";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
-import { PettyCashTransactionFormModal } from "./PettyCashTransactionFormModal";
+// import { PettyCashTransactionFormModal } from "./PettyCashTransactionFormModal";
 import pocketbase from "@/lib/pocketbase";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/modals/ConfirmModal";
 import useConfirmModal from "@/hooks/useConfirmModal";
+import { PettyCashTransactionFormModal } from "@/components/modals/PettyCashTransactionFormModal";
 
 export default function PettyCashTransactionTable() {
   const columns: ColumnDef<any>[] = [
@@ -111,6 +112,11 @@ export default function PettyCashTransactionTable() {
         data={recordsQuery.data || []}
         columns={columns}
         isLoading={recordsQuery.isLoading}
+        isFetching={recordsQuery.isFetching}
+        isError={recordsQuery.isError}
+        isRefetching={recordsQuery.isRefetching}
+        meta={recordsQuery.meta}
+        
       />
       <PettyCashTransactionFormModal
         open={newRecordModal.isOpen || editRow.isOpen}

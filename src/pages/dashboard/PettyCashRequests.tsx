@@ -262,7 +262,7 @@ export default function PettyCashRequests() {
               accessorKey: 'amount',
               header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" />,
               cell: ({ row }) => (
-                <div className="capitalize truncate">{Number(row.getValue('amount')).toLocaleString()} FRW</div>
+                <div className="capitalize truncate">{Number(row.getValue('amount')).toLocaleString()} </div>
               ),
               filterFn: (__, _, value) => value,
               enableSorting: true,
