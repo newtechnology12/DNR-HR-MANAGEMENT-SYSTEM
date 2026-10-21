@@ -16,11 +16,9 @@ import {
   ArrowRight,
   Banknote,
   CalendarClock,
-  CarFront,
   CheckCircle2,
   Clock,
   Inbox,
-  Laptop,
   Palmtree,
   Receipt,
   UserCheck,
@@ -36,6 +34,8 @@ import StatCard from "@/components/StatCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import BreadCrumb from "@/components/breadcrumb";
 import { ChartTooltip, EmptyState, HorizontalBars, Initials, ListSkeleton, Panel, StatusBadge } from "@/components/enterprise/ui";
+import MyDashboard from "./MyDashboard";
+import { queueCounts, queuesFor } from "./queues";
 
 // Chart colours: reference data-viz palette, slots 1–2 (validated for colour-blind separation).
 const SERIES_ON_TIME = "#2a78d6";
@@ -70,14 +70,18 @@ const count = (collection: string, filter = "") =>
   pocketbase.collection(collection).getList(1, 1, { filter, fields: "id" }).then((r) => r.totalItems);
 
 // ------------------------------------------------------------------ data
-async function fetchToday() {
+// Attendance, leave and expenses come back already limited by the API rules (department for a
+// head of department, everyone for HR and management); the staff directory is not, so its
+// counts take the department filter explicitly.
+async function fetchToday(dept: string) {
   const now = new Date();
   const todayFrom = pbDate(startOfDay(now));
   const todayTo = pbDate(endOfDay(now));
+  const inDept = dept ? ` && department = "${dept}"` : "";
   const [active, inactive, newHires, attendance, onLeave] = await Promise.all([
-    count("users", `status="Active"`),
-    count("users", `status!="Active"`),
-    count("users", `status="Active" && joined_at >= "${pbDate(startOfMonth(now))}"`),
+    count("users", `status="Active"${inDept}`),
+    count("users", `status!="Active"${inDept}`),
+    count("users", `status="Active" && joined_at >= "${pbDate(startOfMonth(now))}"${inDept}`),
     pocketbase.collection("attendance").getFullList({
       filter: `date >= "${todayFrom}" && date <= "${todayTo}"`,
       fields: "employee,behaviour",
@@ -91,21 +95,6 @@ async function fetchToday() {
   const present = new Set(attendance.map((a) => a.employee)).size;
   const late = attendance.filter((a) => a.behaviour === "late").length;
   return { active, inactive, newHires, present, late, onLeave };
-}
-
-const PENDING_QUEUES = [
-  { key: "leaves", label: "Leave requests", icon: Palmtree, collection: "leaves", link: "/dashboard/hr/leaves", permission: "view_leaves" },
-  { key: "expenses", label: "Expense requests", icon: Receipt, collection: "prepayments", link: "/dashboard/hr/prepayments", permission: "view_employee_prepayments" },
-  { key: "petty", label: "Petty cash requests", icon: Wallet, collection: "petty_cash_requests", link: "/dashboard/finance/petty-cash-requests", permission: "view_petty_cash_requests" },
-  { key: "assets", label: "Asset requests", icon: Laptop, collection: "assets_requests", link: "/dashboard/assets/requests", permission: "view_assets_requests" },
-  { key: "cars", label: "Vehicle requests", icon: CarFront, collection: "CarRequests", link: "/dashboard/finance/carmanagement", permission: "view_petty_cash_requests" },
-];
-
-async function fetchPending() {
-  const counts = await Promise.all(
-    PENDING_QUEUES.map((q) => count(q.collection, `status="pending"`).catch(() => 0))
-  );
-  return Object.fromEntries(PENDING_QUEUES.map((q, i) => [q.key, counts[i]]));
 }
 
 async function fetchTrends(days: number, workingDays: string[]) {
@@ -208,30 +197,49 @@ async function fetchRecent() {
 }
 
 // ------------------------------------------------------------------ page
+/**
+ * Staff get their personal dashboard. Organisation figures are for people whose role oversees
+ * the workforce: everyone for HR and management ("view_employees"), the own department for a
+ * head of department (attendance or leave oversight without the staff file).
+ */
 export default function Dashboard() {
+  const { canPerform } = useRoles();
+  if (canPerform("view_employees")) return <TeamDashboard scope="organisation" />;
+  if (canPerform("view_attendance_logs") || canPerform("view_leaves")) return <TeamDashboard scope="department" />;
+  return <MyDashboard />;
+}
+
+function TeamDashboard({ scope }: { scope: "organisation" | "department" }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { canPerform } = useRoles();
   const { settings } = useSettings();
   const [days, setDays] = React.useState(30);
+  // The auth context keeps the department's name; the filter needs its id.
+  const dept = scope === "department" ? String(pocketbase.authStore.model?.department || "") : "";
+  const deptName: string | undefined = user?.department;
 
   const workingDays: string[] = settings?.working_days?.length ? settings.working_days : DEFAULT_WORKING_DAYS;
   const isWorkingDay = workingDays.includes(DAY_NAMES[new Date().getDay()]);
 
-  const today = useQuery(["dashboard", "today"], fetchToday, { refetchInterval: 60_000 });
-  const pending = useQuery(["dashboard", "pending"], fetchPending, { refetchInterval: 60_000 });
+  const queues = React.useMemo(() => queuesFor(canPerform), [canPerform]);
+  const today = useQuery(["dashboard", "today", dept], () => fetchToday(dept), { refetchInterval: 60_000 });
+  const pending = useQuery(["dashboard", "pending", user?.id, queues.map((q) => q.key).join()], () => queueCounts(queues, user?.id), {
+    enabled: Boolean(user?.id),
+    refetchInterval: 60_000,
+  });
   const trends = useQuery(["dashboard", "trends", days, workingDays.join()], () => fetchTrends(days, workingDays), {
     keepPreviousData: true,
   });
-  const headcount = useQuery(["dashboard", "headcount"], fetchHeadcount);
+  const headcount = useQuery(["dashboard", "headcount"], fetchHeadcount, { enabled: scope === "organisation" });
   const finance = useQuery(["dashboard", "finance"], fetchFinance, { enabled: Boolean(canPerform("view_petty_cash_accounts") || canPerform("view_payrolls")) });
   const recent = useQuery(["dashboard", "recent"], fetchRecent);
 
   const t = today.data;
   const attendanceRate = t && t.active > 0 ? Math.round((t.present / t.active) * 100) : 0;
   const absent = t && isWorkingDay ? Math.max(t.active - t.present - t.onLeave.length, 0) : 0;
-  const queues = PENDING_QUEUES.filter((q) => canPerform(q.permission));
   const totalPending = queues.reduce((acc, q) => acc + (pending.data?.[q.key] || 0), 0);
+  const who = scope === "department" ? `${deptName || "your department"}` : "all staff";
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -246,7 +254,8 @@ export default function Dashboard() {
             {greeting}, {user?.names?.split(" ")[0] || "there"}
           </h2>
           <p className="text-[13px] text-slate-500">
-            {format(new Date(), "EEEE, d MMMM yyyy")} · {settings?.company_name || "Organisation overview"}
+            {format(new Date(), "EEEE, d MMMM yyyy")} ·{" "}
+            {scope === "department" ? `Department view: ${deptName || "your department"}` : settings?.company_name || "Organisation overview"}
           </p>
         </div>
         <PeriodSwitch value={days} onChange={setDays} />
@@ -255,7 +264,7 @@ export default function Dashboard() {
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <StatCard
-          title="Staff"
+          title={scope === "department" ? "Team" : "Staff"}
           icon={Users}
           loading={today.isLoading}
           value={t?.active}
@@ -317,7 +326,7 @@ export default function Dashboard() {
         <Panel
           className="xl:col-span-2"
           title="Attendance trend"
-          subtitle={`Clock-ins per working day, last ${days} days`}
+          subtitle={`Clock-ins per working day, last ${days} days · ${who}`}
           action={{ label: "Attendance logs", onClick: () => navigate("/dashboard/attendance/attendance-logs") }}
         >
           {trends.isLoading ? (
@@ -380,18 +389,20 @@ export default function Dashboard() {
       </div>
 
       {/* Workforce distribution */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <Panel title="Headcount by department" subtitle="Active employees">
-          {headcount.isLoading ? (
-            <Skeleton className="h-[240px] w-full" />
-          ) : !headcount.data?.length ? (
-            <EmptyState icon={Users} text="No employees assigned to departments" />
-          ) : (
-            <HorizontalBars data={headcount.data} label="Employees" />
-          )}
-        </Panel>
+      <div className={cn("grid grid-cols-1 gap-4 lg:grid-cols-2", scope === "organisation" && "xl:grid-cols-3")}>
+        {scope === "organisation" && (
+          <Panel title="Headcount by department" subtitle="Active employees">
+            {headcount.isLoading ? (
+              <Skeleton className="h-[240px] w-full" />
+            ) : !headcount.data?.length ? (
+              <EmptyState icon={Users} text="No employees assigned to departments" />
+            ) : (
+              <HorizontalBars data={headcount.data} label="Employees" />
+            )}
+          </Panel>
+        )}
 
-        <Panel title="Leave by type" subtitle={`Requests starting in the last ${days} days`}>
+        <Panel title="Leave by type" subtitle={`Requests starting in the last ${days} days · ${who}`}>
           {trends.isLoading ? (
             <Skeleton className="h-[240px] w-full" />
           ) : !trends.data?.leaveByType.length ? (
@@ -404,7 +415,7 @@ export default function Dashboard() {
         <Panel
           title="On leave today"
           subtitle={t ? `${t.onLeave.length} employee(s) away` : undefined}
-          className="lg:col-span-2 xl:col-span-1"
+          className={cn(scope === "organisation" && "lg:col-span-2 xl:col-span-1")}
         >
           {today.isLoading ? (
             <ListSkeleton rows={4} />
@@ -431,7 +442,7 @@ export default function Dashboard() {
 
       {/* Activity + finance */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title="Recent requests" subtitle="Latest leave, expense and petty cash submissions">
+        <Panel className="xl:col-span-2" title="Recent requests" subtitle={`Latest leave, expense and petty cash submissions you can see · ${who}`}>
           {recent.isLoading ? (
             <ListSkeleton rows={6} />
           ) : !recent.data?.length ? (
