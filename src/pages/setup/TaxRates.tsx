@@ -16,6 +16,8 @@ import { exportReport } from "@/lib/exporter";
 import { Button } from "@/components/ui/button";
 import { Badge, ListSkeleton, PageHeader, Panel } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
+import { ImportButton } from "@/components/enterprise/ExcelImport";
+import { IMPORTS } from "@/lib/importConfigs";
 import { Field, FormBlock, FormDialog, inputCls, showDate, textareaCls, toInputDate } from "@/components/portal/kit";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/utils";
@@ -119,6 +121,7 @@ export default function TaxRates() {
         actions={
           <>
             <ExportMenu onExport={doExport} permission={["view_master_data", "export_reports"]} disabled={!rows.length} />
+            {tab === "tax_rates" && <ImportButton config={IMPORTS.taxRates} size="default" />}
             {canManage && tab === "tax_rates" && (
               <Button onClick={() => setEditing({ category: "withholding", active: true, rate: "", effective_from: new Date().toISOString().slice(0, 10) })}>
                 <Plus size={15} /> New rate

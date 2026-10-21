@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/utils";
 import { EmptyState } from "./ui";
 import ExportMenu from "./ExportMenu";
+import { ImportButton, ImportConfig } from "./ExcelImport";
 import { CellFormat, exportReport } from "@/lib/exporter";
 import { Inbox, LucideIcon } from "lucide-react";
 
@@ -82,6 +83,8 @@ interface Props<T> {
   pageSize?: number;
   /** Bumps to refetch after a change made outside the table. */
   refreshKey?: unknown;
+  /** Adds an Excel import (template, validation, import through the API). */
+  importConfig?: ImportConfig;
 }
 
 function FilterSelect({ f, value, onChange }: { f: RecordFilter; value: string; onChange: (v: string) => void }) {
@@ -129,6 +132,7 @@ export default function RecordTable<T extends { id: string }>({
   empty,
   pageSize = 15,
   refreshKey,
+  importConfig,
 }: Props<T>) {
   const [search, setSearch] = React.useState("");
   const [debounced] = useDebounce(search, 300);
@@ -250,6 +254,7 @@ export default function RecordTable<T extends { id: string }>({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {toolbar}
+          {importConfig && <ImportButton config={{ collection, ...importConfig }} onDone={() => query.refetch()} />}
           <ExportMenu onExport={doExport} permission={exportPermission} disabled={!data?.totalItems} />
         </div>
       </div>

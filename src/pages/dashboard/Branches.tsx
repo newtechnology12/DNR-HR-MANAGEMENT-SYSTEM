@@ -1,4 +1,6 @@
 import DataTable from "@/components/DataTable";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -332,14 +334,33 @@ export default function Branches() {
         columnFilters={columnFilters}
         Action={() => {
           return (
-            <Button
-              className="mr-2"
-              onClick={() => newRecordModal.open()}
-              size="sm"
-            >
-              <PlusCircle size={16} className="mr-2" />
-              <span>Create new branch</span>
-            </Button>
+            <span className="mr-2 inline-flex flex-wrap items-center gap-2">
+              <TableTools
+                importConfig={IMPORTS.branches}
+                onImported={() => recordsQuery.refetch()}
+                exportConfig={{
+                  title: "Offices", fileName: "offices", what: "branches",
+                  rows: async () => {
+                    const [rows, users] = await Promise.all([
+                      pocketbase.collection("branches").getFullList({ sort: "name" }),
+                      pocketbase.collection("users").getFullList({ fields: "id,name" }),
+                    ]);
+                    const names = Object.fromEntries(users.map((u: any) => [u.id, u.name]));
+                    return rows.map((r: any) => ({ ...r, manager_name: names[r.manager] || "" }));
+                  },
+                  columns: [
+                    { header: "Office", value: (r: any) => r.name, width: 28 },
+                    { header: "Location", value: (r: any) => r.location || "", width: 30 },
+                    { header: "Manager", value: (r: any) => r.manager_name },
+                    { header: "Status", value: (r: any) => r.status || "" },
+                  ],
+                }}
+              />
+              <Button onClick={() => newRecordModal.open()} size="sm">
+                <PlusCircle size={16} className="mr-2" />
+                <span>Create new branch</span>
+              </Button>
+            </span>
           );
         }}
         facets={[

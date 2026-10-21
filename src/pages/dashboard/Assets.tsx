@@ -1,4 +1,6 @@
 import DataTable from "@/components/DataTable";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -386,15 +388,39 @@ export default function Assets() {
             <h2 className="text-lg font-semibold tracking-tight">All Assets</h2>
             <BreadCrumb items={[{ title: "Assets", link: "/dashboard" }]} />
           </div>
-          <Button
-            onClick={() => {
-              newRecordModal.open();
-            }}
-            size="sm"
-          >
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create new Asset.</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools
+              importConfig={IMPORTS.assets}
+              onImported={() => recordsQuery.refetch()}
+              exportConfig={{
+                title: "Equipment register", fileName: "equipment-register", what: "assets", orientation: "landscape", permission: ["view_assets", "export_assets"],
+                rows: () => pocketbase.collection("assets").getFullList({ sort: "code", expand: "category,type,assigned_to,department,supplier" }),
+                totals: ["Cost (RWF)"],
+                columns: [
+                  { header: "Tag", value: (r: any) => r.code || "" },
+                  { header: "Name", value: (r: any) => r.name, width: 30 },
+                  { header: "Category", value: (r: any) => r.expand?.category?.name || "" },
+                  { header: "Type", value: (r: any) => r.expand?.type?.name || "" },
+                  { header: "Serial number", value: (r: any) => r.serial_number || "" },
+                  { header: "Status", value: (r: any) => String(r.status || "").replace(/[_-]/g, " ") },
+                  { header: "Custodian", value: (r: any) => r.expand?.assigned_to?.name || "" },
+                  { header: "Department", value: (r: any) => r.expand?.department?.name || "" },
+                  { header: "Supplier", value: (r: any) => r.expand?.supplier?.name || "" },
+                  { header: "Purchase date", value: (r: any) => r.purchased_at || "", format: "date" },
+                  { header: "Cost (RWF)", value: (r: any) => Number(r.cost) || 0, format: "money" },
+                ],
+              }}
+            />
+            <Button
+              onClick={() => {
+                newRecordModal.open();
+              }}
+              size="sm"
+            >
+              <PlusCircle size={16} className="mr-2" />
+              <span>Create new Asset.</span>
+            </Button>
+          </div>
         </div>
         <DataTable
           // className="!border-none !p-0"

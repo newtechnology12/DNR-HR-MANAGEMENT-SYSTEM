@@ -11,6 +11,8 @@ import { Badge, Panel } from "@/components/enterprise/ui";
 import { errorMessage } from "@/lib/procurement";
 import { Field, inputCls, showDate, textareaCls, toInputDate, toPbDate } from "@/components/portal/kit";
 import { cn } from "@/utils";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const CATEGORIES = ["annual", "sick", "maternity", "paternity", "circumstantial", "study", "unpaid", "other"];
@@ -107,7 +109,23 @@ function Types({ canEdit }: { canEdit: boolean }) {
       title="Leave types"
       subtitle="Shown to staff in the leave request form"
       bodyClassName="px-0"
-      action={canEdit && <Button size="sm" variant="outline" onClick={() => setEditing({ active: true, day_basis: "working", paid: true, eligible_gender: "any", category: "other", sort: (q.data?.length || 0) + 1 })}><Plus size={14} /> Add type</Button>}
+      action={
+        <span className="flex flex-wrap items-center gap-2">
+          <TableTools
+            importConfig={IMPORTS.leaveTypes}
+            exportConfig={{
+              title: "Leave types", fileName: "leave-types", what: "leave_types", rows: async () => q.data || [],
+              columns: [
+                { header: "Code", value: (r: any) => r.code || "" }, { header: "Leave type", value: (r: any) => r.name, width: 28 },
+                { header: "Category", value: (r: any) => r.category || "" }, { header: "Days per year", value: (r: any) => r.days_per_year || "", format: "number" },
+                { header: "Counted in", value: (r: any) => (r.day_basis === "calendar" ? "Calendar days" : "Working days") }, { header: "Paid", value: (r: any) => (r.paid ? "Yes" : "No") },
+                { header: "Legal reference", value: (r: any) => r.legal_reference || "", width: 30 },
+              ],
+            }}
+          />
+          {canEdit && <Button size="sm" variant="outline" onClick={() => setEditing({ active: true, day_basis: "working", paid: true, eligible_gender: "any", category: "other", sort: (q.data?.length || 0) + 1 })}><Plus size={14} /> Add type</Button>}
+        </span>
+      }
     >
       <div className="overflow-x-auto">
         <table className="dnr-grid w-full min-w-[900px] text-[13px]">
@@ -193,7 +211,21 @@ function Holidays({ canEdit }: { canEdit: boolean }) {
       title={<span className="flex items-center gap-2"><CalendarDays size={16} className="text-slate-400" /> Public holidays</span>}
       subtitle="Not counted as leave days. Recurring holidays repeat every year; movable feasts (Easter, Eid, Umuganura) must be added for each year."
       bodyClassName="px-0"
-      action={canEdit && <Button size="sm" variant="outline" onClick={() => setEditing({ recurring: false, confirmed: true, date: "" })}><Plus size={14} /> Add holiday</Button>}
+      action={
+        <span className="flex flex-wrap items-center gap-2">
+          <TableTools
+            importConfig={IMPORTS.publicHolidays}
+            exportConfig={{
+              title: "Public holidays", fileName: "public-holidays", what: "public_holidays", rows: async () => q.data || [],
+              columns: [
+                { header: "Date", value: (r: any) => r.date, format: "date" }, { header: "Holiday", value: (r: any) => r.name, width: 30 },
+                { header: "Every year", value: (r: any) => (r.recurring ? "Yes" : "No") }, { header: "Confirmed", value: (r: any) => (r.confirmed ? "Yes" : "No") },
+              ],
+            }}
+          />
+          {canEdit && <Button size="sm" variant="outline" onClick={() => setEditing({ recurring: false, confirmed: true, date: "" })}><Plus size={14} /> Add holiday</Button>}
+        </span>
+      }
     >
       {q.isLoading ? <div className="px-4"><Skeleton className="h-32 w-full" /></div> : (
         <table className="dnr-grid w-full text-[13px]">

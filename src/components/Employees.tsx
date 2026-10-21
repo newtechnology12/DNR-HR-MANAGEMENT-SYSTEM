@@ -14,6 +14,8 @@ import { useState } from "react";
 import { useQuery } from "react-query";
 import { addDays } from "date-fns";
 import { Button } from "@/components/ui/button";
+import ExportMenu from "@/components/enterprise/ExportMenu";
+import { exportReport } from "@/lib/exporter";
 import Avatar from "@/components/shared/Avatar";
 import useModalState from "@/hooks/useModalState";
 import { EmployeeFormModal } from "@/components/modals/EmployeeFormModal";
@@ -419,6 +421,26 @@ export default function Employees({ ...otherProps }) {
         Action={() => {
           return (
             <div className="mr-3 flex items-center gap-2">
+              <ExportMenu
+                permission={["view_employees", "export_reports"]}
+                onExport={async (format) => {
+                  const rows = await pocketbase.collection("users").getFullList({ sort: "name", expand: "role,department,designation,branch" });
+                  await exportReport({
+                    title: "Staff list", fileName: "staff-list", what: "users", format, rows, orientation: "landscape",
+                    columns: [
+                      { header: "Name", value: (r: any) => r.name || r.names, width: 26 },
+                      { header: "E-mail", value: (r: any) => r.email || "", width: 26 },
+                      { header: "Phone", value: (r: any) => r.phone || "" },
+                      { header: "Department", value: (r: any) => r.expand?.department?.name || "", width: 24 },
+                      { header: "Designation", value: (r: any) => r.expand?.designation?.name || "", width: 24 },
+                      { header: "Office", value: (r: any) => r.expand?.branch?.name || "" },
+                      { header: "Role", value: (r: any) => r.expand?.role?.name || "" },
+                      { header: "Status", value: (r: any) => r.status || "" },
+                      { header: "Joined", value: (r: any) => r.joined_at || "", format: "date" },
+                    ],
+                  });
+                }}
+              />
               <Button size="sm" variant="outline" onClick={() => navigate("/dashboard/hr/employees/import")}>
                 <FileSpreadsheet size={15} className="mr-1.5" />
                 <span>Import from Excel</span>

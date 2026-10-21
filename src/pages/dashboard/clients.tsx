@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "react-query";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 import DataTable from "@/components/DataTable";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
@@ -334,10 +336,28 @@ export default function ClientManagement() {
               items={[{ title: "View Clients", link: "/dashboard" }]}
             />
           </div>
-          <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create new Client</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools
+              importConfig={IMPORTS.clients}
+              onImported={() => recordsQuery.refetch()}
+              exportConfig={{
+                title: "Partners", fileName: "partners", what: "clients",
+                rows: () => pocketbase.collection("clients").getFullList({ sort: "name" }),
+                columns: [
+                  { header: "Name", value: (r: any) => r.name, width: 30 },
+                  { header: "Contact person", value: (r: any) => r.contact_person || "" },
+                  { header: "E-mail", value: (r: any) => r.email || "" },
+                  { header: "Phone", value: (r: any) => r.phone || "" },
+                  { header: "Address", value: (r: any) => r.address || "" },
+                  { header: "Sector", value: (r: any) => r.industry || "" },
+                ],
+              }}
+            />
+            <Button onClick={() => newRecordModal.open()} size="sm">
+              <PlusCircle size={16} className="mr-2" />
+              <span>Create new Client</span>
+            </Button>
+          </div>
         </div>
         <DataTable
           isFetching={recordsQuery.isFetching}

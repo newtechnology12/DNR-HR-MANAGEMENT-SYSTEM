@@ -1,4 +1,6 @@
 import DataTable from "@/components/DataTable";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -261,10 +263,25 @@ export default function AssetsTypes() {
             </h2>
             <BreadCrumb items={[{ title: "All Types", link: "/dashboard" }]} />
           </div>
-          <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create new Type</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools
+              importConfig={IMPORTS.assetTypes}
+              onImported={() => recordsQuery.refetch()}
+              exportConfig={{
+                title: "Equipment types", fileName: "equipment-types", what: "assets_types", permission: ["view_assets_types", "create_assets_type"],
+                rows: () => pocketbase.collection("assets_types").getFullList({ sort: "name", expand: "category" }),
+                columns: [
+                  { header: "Type", value: (r: any) => r.name, width: 30 },
+                  { header: "Category", value: (r: any) => r.expand?.category?.name || "", width: 30 },
+                  { header: "Description", value: (r: any) => r.description || "", width: 40 },
+                ],
+              }}
+            />
+            <Button onClick={() => newRecordModal.open()} size="sm">
+              <PlusCircle size={16} className="mr-2" />
+              <span>Create new Type</span>
+            </Button>
+          </div>
         </div>
         <DataTable
           isFetching={recordsQuery.isFetching}

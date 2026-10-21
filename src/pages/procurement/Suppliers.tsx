@@ -5,6 +5,7 @@ import { AlertTriangle, Building2, Plus, Star } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
 import { Button } from "@/components/ui/button";
+import { IMPORTS } from "@/lib/importConfigs";
 import RecordTable, { RecordColumn, RecordView } from "@/components/enterprise/RecordTable";
 import { Badge, PageHeader, StatusBadge } from "@/components/enterprise/ui";
 import { SUPPLIER_DOC_TYPES, SUPPLIER_STATUS, SUPPLIER_TYPES, expiryState } from "@/lib/procurement";
@@ -93,6 +94,7 @@ export default function Suppliers() {
 
       <RecordTable
         collection="suppliers"
+        importConfig={IMPORTS.suppliers}
         columns={columns}
         views={views}
         activeView={view}

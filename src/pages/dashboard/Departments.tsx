@@ -1,4 +1,6 @@
 import DataTable from "@/components/DataTable";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -273,10 +275,26 @@ export default function Departments() {
               items={[{ title: "View Departments", link: "/dashboard" }]}
             />
           </div>
-          <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} />
-            <span>Create Department</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools
+              importConfig={IMPORTS.departments}
+              onImported={() => recordsQuery.refetch()}
+              exportConfig={{
+                title: "Departments", fileName: "departments", what: "departments", permission: ["view_departments", "create_department"],
+                rows: () => pocketbase.collection("departments").getFullList({ sort: "name", expand: "head" }),
+                columns: [
+                  { header: "Name", value: (r: any) => r.name, width: 34 },
+                  { header: "Code", value: (r: any) => r.code || "" },
+                  { header: "Head of department", value: (r: any) => r.expand?.head?.name || "" },
+                  { header: "Description", value: (r: any) => r.description || "", width: 40 },
+                ],
+              }}
+            />
+            <Button onClick={() => newRecordModal.open()} size="sm">
+              <PlusCircle size={16} />
+              <span>Create Department</span>
+            </Button>
+          </div>
         </div>
         <DataTable
           isFetching={recordsQuery.isFetching}

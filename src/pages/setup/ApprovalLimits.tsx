@@ -15,6 +15,8 @@ import { exportReport } from "@/lib/exporter";
 import { Button } from "@/components/ui/button";
 import { Badge, EmptyState, ListSkeleton, PageHeader, Panel } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
+import { ImportButton } from "@/components/enterprise/ExcelImport";
+import { IMPORTS } from "@/lib/importConfigs";
 import { Field, FormBlock, FormDialog, inputCls, textareaCls } from "@/components/portal/kit";
 import { cn } from "@/utils";
 
@@ -80,6 +82,7 @@ export default function ApprovalLimits() {
         actions={
           <>
             <ExportMenu onExport={doExport} permission={["view_master_data", "view_security_admin"]} disabled={!limits.length} />
+            <ImportButton config={IMPORTS.approvalLimits} size="default" />
             {canManage && <Button onClick={() => setEditing({ document_type: "purchase_order", active: true, max_amount: "" })}><Plus size={15} /> New limit</Button>}
           </>
         }

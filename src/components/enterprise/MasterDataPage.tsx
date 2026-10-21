@@ -13,6 +13,7 @@ import { errorMessage } from "@/lib/procurement";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/enterprise/ui";
 import RecordTable, { RecordColumn, RecordFilter, RecordView } from "@/components/enterprise/RecordTable";
+import { ImportConfig } from "@/components/enterprise/ExcelImport";
 import { Field, FormBlock, FormDialog, inputCls, textareaCls, toInputDate } from "@/components/portal/kit";
 import { cn } from "@/utils";
 
@@ -142,6 +143,26 @@ export default function MasterDataPage<T extends { id: string }>({
     }
   }
 
+  // Excel import built from the same field definitions as the form (same validation, same payload).
+  const importConfig: ImportConfig = {
+    name: collection,
+    title,
+    permission: managePermission,
+    collection,
+    uniqueBy: sections.some((s) => s.fields.some((f) => f.name === "code")) ? "code" : undefined,
+    fields: sections.flatMap((s) => s.fields).map((f) => ({
+      name: f.name, label: f.label, required: f.required, hint: f.hint, upper: f.upper,
+      type: f.type === "textarea" ? "textarea" : f.type,
+      options: f.options, collection: f.collection, relationFilter: f.optionFilter,
+      example: f.type === "bool" ? "Yes" : f.type === "date" ? "2026-07-01" : f.type === "money" ? 1000000 : f.type === "select" ? f.options?.[0]?.label : f.placeholder,
+    })),
+    toPayload: (v) => {
+      const data: Record<string, any> = { ...defaults, ...v };
+      for (const f of sections.flatMap((s) => s.fields)) if (f.type === "bool" && data[f.name] === undefined) data[f.name] = Boolean(defaults[f.name]);
+      return toPayload ? toPayload(data) : data;
+    },
+  };
+
   const set = (name: string, value: any) => setEditing((s) => ({ ...(s || {}), [name]: value }));
   const editColumn: RecordColumn<T>[] = canManage
     ? [{ key: "_edit", header: "", className: "w-12", cell: (r: any) => (
@@ -175,6 +196,7 @@ export default function MasterDataPage<T extends { id: string }>({
         exportPermission={exportPermission}
         onRowClick={canManage ? (r) => open(r) : undefined}
         refreshKey={refresh}
+        importConfig={importConfig}
         empty={{ icon, title: `No ${itemLabel}s yet`, text: canManage ? `Add the first ${itemLabel}.` : `Finance has not set up any ${itemLabel}s yet.` }}
       />
       <FormDialog

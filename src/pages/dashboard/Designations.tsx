@@ -1,4 +1,6 @@
 import DataTable from "@/components/DataTable";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -268,10 +270,32 @@ export default function Designations() {
               items={[{ title: "View Designations", link: "/dashboard" }]}
             />
           </div>
-          <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} />
-            <span>Create Designation</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools
+              importConfig={IMPORTS.designations}
+              onImported={() => recordsQuery.refetch()}
+              exportConfig={{
+                title: "Designations", fileName: "designations", what: "designations", permission: ["view_designations", "create_designations"],
+                rows: async () => {
+                  const [rows, deps] = await Promise.all([
+                    pocketbase.collection("designations").getFullList({ sort: "name" }),
+                    pocketbase.collection("departments").getFullList({ fields: "id,name" }),
+                  ]);
+                  const names = Object.fromEntries(deps.map((d: any) => [d.id, d.name]));
+                  return rows.map((r: any) => ({ ...r, department_name: names[r.department] || "" }));
+                },
+                columns: [
+                  { header: "Designation", value: (r: any) => r.name, width: 34 },
+                  { header: "Department", value: (r: any) => r.department_name, width: 30 },
+                  { header: "Description", value: (r: any) => r.description || "", width: 40 },
+                ],
+              }}
+            />
+            <Button onClick={() => newRecordModal.open()} size="sm">
+              <PlusCircle size={16} />
+              <span>Create Designation</span>
+            </Button>
+          </div>
         </div>
         <DataTable
           isFetching={recordsQuery.isFetching}

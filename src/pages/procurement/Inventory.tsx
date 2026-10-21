@@ -8,6 +8,7 @@ import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { IMPORTS } from "@/lib/importConfigs";
 import RecordTable, { RecordColumn } from "@/components/enterprise/RecordTable";
 import { Badge, EmptyState, ListSkeleton, PageHeader, Panel, StatusBadge } from "@/components/enterprise/ui";
 import { MOVEMENT_TYPES, errorMessage, money, purchasingApi } from "@/lib/procurement";
@@ -123,6 +124,7 @@ function ItemsTab({ canManage }: { canManage: boolean }) {
     <>
       <RecordTable
         collection="inventory_items"
+        importConfig={IMPORTS.inventoryItems}
         columns={columns}
         views={[{ key: "all", label: "All items" }, { key: "low", label: "At or below reorder level", filter: "reorder_level > 0 && total_quantity <= reorder_level" }]}
         searchFields={["name", "code", "category.name"]}

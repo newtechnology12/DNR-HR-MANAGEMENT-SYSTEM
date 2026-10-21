@@ -12,6 +12,8 @@ import { compactMoney, errorMessage } from "@/lib/procurement";
 import { EMPLOYMENT_TYPES, payrollApi, rwf } from "@/lib/hr";
 import { Field, inputCls } from "@/components/portal/kit";
 import { cn } from "@/utils";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 
 export default function SalaryStructures() {
   const { canPerform } = useRoles();
@@ -35,6 +37,27 @@ export default function SalaryStructures() {
         title="Salary structures"
         description="Basic salary, allowances and recurring deductions of each employee — the input of every payroll."
         breadcrumbs={[{ title: "Payroll", link: "/dashboard/hr/payroll" }, { title: "Salary structures", link: "/dashboard/hr/payroll/salaries" }]}
+        actions={
+          <TableTools
+            importConfig={IMPORTS.salaryStructures}
+            exportConfig={{
+              title: "Salary structures", fileName: "salary-structures", what: "salary_structures", orientation: "landscape", permission: ["manage_salaries", "export_payroll"],
+              rows: async () => (q.data || []).filter((r) => r.structure),
+              totals: ["Basic salary", "Transport", "Housing", "Communication", "Gross"],
+              columns: [
+                { header: "Employee", value: (r: any) => r.user.name, width: 26 },
+                { header: "Department", value: (r: any) => r.user.expand?.department?.name || "", width: 24 },
+                { header: "Type", value: (r: any) => r.structure.employment_type || "" },
+                { header: "Basic salary", value: (r: any) => r.structure.basic_salary || 0, format: "money" },
+                { header: "Transport", value: (r: any) => r.structure.transport_allowance || 0, format: "money" },
+                { header: "Housing", value: (r: any) => r.structure.housing_allowance || 0, format: "money" },
+                { header: "Communication", value: (r: any) => r.structure.communication_allowance || 0, format: "money" },
+                { header: "Gross", value: (r: any) => gross(r.structure), format: "money" },
+                { header: "Paid by", value: (r: any) => r.structure.payment_method || "" },
+              ],
+            }}
+          />
+        }
       />
       <MetricGroup
         title="Monthly salary bill"

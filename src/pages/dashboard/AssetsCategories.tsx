@@ -1,4 +1,6 @@
 import DataTable from "@/components/DataTable";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -263,10 +265,21 @@ export default function AssetsCategories() {
               items={[{ title: "All Categories", link: "/dashboard" }]}
             />
           </div>
-          <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create new category</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools
+              importConfig={IMPORTS.assetCategories}
+              onImported={() => recordsQuery.refetch()}
+              exportConfig={{
+                title: "Equipment categories", fileName: "equipment-categories", what: "assets_categories", permission: ["view_assets_categories", "create_assets_category"],
+                rows: () => pocketbase.collection("assets_categories").getFullList({ sort: "name" }),
+                columns: [{ header: "Category", value: (r: any) => r.name, width: 34 }, { header: "Description", value: (r: any) => r.description || "", width: 50 }],
+              }}
+            />
+            <Button onClick={() => newRecordModal.open()} size="sm">
+              <PlusCircle size={16} className="mr-2" />
+              <span>Create new category</span>
+            </Button>
+          </div>
         </div>
         <DataTable
           isFetching={recordsQuery.isFetching}

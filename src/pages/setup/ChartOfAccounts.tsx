@@ -14,6 +14,8 @@ import { exportReport } from "@/lib/exporter";
 import { Button } from "@/components/ui/button";
 import { Badge, EmptyState, ListSkeleton, MetricGroup, PageHeader } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
+import { ImportButton } from "@/components/enterprise/ExcelImport";
+import { IMPORTS } from "@/lib/importConfigs";
 import { Field, FormBlock, FormDialog, inputCls, textareaCls } from "@/components/portal/kit";
 import { cn } from "@/utils";
 
@@ -160,6 +162,7 @@ export default function ChartOfAccounts() {
         actions={
           <>
             <ExportMenu onExport={doExport} permission={["view_master_data", "export_reports"]} disabled={!rows.length} />
+            <ImportButton config={IMPORTS.glAccounts} size="default" />
             {canManage && <Button onClick={() => open()}><Plus size={15} /> New account</Button>}
           </>
         }
