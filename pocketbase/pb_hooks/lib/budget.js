@@ -157,6 +157,7 @@ function assertAvailable(dao, opts) {
 function documentAmount(type, doc) {
   if (type === "purchase_requisition") return r0(doc.getFloat("total"));
   if (type === "purchase_order") return r0(doc.getFloat("grand_total"));
+  if (type === "payment_voucher") return r0(doc.getFloat("gross_amount"));
   return r0(doc.getFloat("total") || doc.getFloat("amount"));
 }
 const DOC_COLLECTION = { purchase_requisition: "purchase_requisitions", purchase_order: "purchase_orders", payment_voucher: "payment_vouchers" };

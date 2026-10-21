@@ -369,21 +369,23 @@ async function seedSourcing(cats) {
 // ------------------------------------------------------------------ purchase orders, receiving, inventory
 async function wipeFinance() {
   // Budget effects of the purchasing documents that are about to be regenerated.
-  for (const r of await admin.collection("budget_ledger").getFullList({ fields: "id", filter: 'source_type = "purchase_order" || source_type = "supplier_invoice"' })) await admin.collection("budget_ledger").delete(r.id);
-  for (const r of await admin.collection("budget_overrides").getFullList({ fields: "id", filter: 'document_type = "purchase_requisition" || document_type = "purchase_order"' })) await admin.collection("budget_overrides").delete(r.id);
-  for (const col of ["payments", "supplier_invoices"]) {
+  for (const r of await admin.collection("budget_ledger").getFullList({ fields: "id", filter: 'source_type = "purchase_order" || source_type = "supplier_invoice" || source_type = "payment_voucher"' })) await admin.collection("budget_ledger").delete(r.id);
+  for (const r of await admin.collection("budget_overrides").getFullList({ fields: "id", filter: 'document_type = "purchase_requisition" || document_type = "purchase_order" || document_type = "payment_voucher"' })) await admin.collection("budget_overrides").delete(r.id);
+  for (const a of await admin.collection("approval_requests").getFullList({ fields: "id", filter: 'document_type = "payment_voucher"' })) await admin.collection("approval_requests").delete(a.id).catch(() => null);
+  for (const col of ["payments", "payment_vouchers", "supplier_invoices"]) {
     const rows = await admin.collection(col).getFullList({ fields: "id" });
     for (const r of rows) await admin.collection(col).delete(r.id);
   }
-  for (const key of ["invoice", "payment"]) {
+  for (const key of ["invoice", "payment", "payment_voucher"]) {
     const seq = await admin.collection("number_sequences").getFirstListItem(`key="${key}"`).catch(() => null);
     if (seq) await admin.collection("number_sequences").update(seq.id, { next_value: 1 });
   }
-  const audit = await admin.collection("audit_logs").getFullList({ fields: "id", filter: `collection_name="supplier_invoices"` });
+  const audit = await admin.collection("audit_logs").getFullList({ fields: "id", filter: `collection_name="supplier_invoices" || collection_name="payment_vouchers"` });
   for (const r of audit) await admin.collection("audit_logs").delete(r.id);
 }
 
-// Supplier invoices matched against POs (three-way match), their approval and payments.
+// Supplier invoices matched against POs (three-way match), their approval, and payment vouchers
+// (Accountant prepares → DAF / SG approve → Cashier executes).
 async function seedFinance() {
   const acc = await as("accountant@dnr-hr.rw");
   const cashier = await as("cashier@dnr-hr.rw"); // only the Cashier executes payments
@@ -400,8 +402,26 @@ async function seedFinance() {
       { name: "Secretary General approval (above DAF limit)", approver_type: "role", role: await roleId(ROLE.SG), above_limit_of: await roleId(ROLE.DAF), skip_if_already_approved: true },
     ],
   });
+  for (const w of await admin.collection("approval_workflows").getFullList({ filter: `document_type="payment_voucher"` })) {
+    if (w.name !== "Payment voucher approval") await admin.collection("approval_workflows").delete(w.id).catch(() => null);
+  }
+  await upsert("approval_workflows", `name="Payment voucher approval" && document_type="payment_voucher"`, {
+    name: "Payment voucher approval", document_type: "payment_voucher", active: true, priority: 10, min_amount: 0, max_amount: 0,
+    description: "Prepared by the Accountant; the DAF approves; the Secretary General also approves above the DAF voucher limit. The Cashier then executes the payment.",
+    departments: [], categories: [], branches: [], funding_sources: [], allow_self_approval: false, overdue_hours: 48,
+    steps: [
+      { name: "Director of Finance approval", approver_type: "role", role: await roleId(ROLE.DAF) },
+      { name: "Secretary General approval (above the DAF limit)", approver_type: "role", role: await roleId(ROLE.SG), above_limit_of: await roleId(ROLE.DAF), skip_if_already_approved: true },
+    ],
+  });
+  const voucherFor = async (inv, whtCode) => {
+    const v = await acc.collection("payment_vouchers").create({ voucher_type: "invoice", supplier: inv.supplier, lines: [{ invoice: inv.id }], wht_code: whtCode, notes: "Supporting documents: invoice, goods received note, purchase order." });
+    const sub = await acc.send(`/api/ims/vouchers/${v.id}/submit`, { method: "POST" });
+    await approveAll(sub.approval);
+    return v;
+  };
   const received = await admin.collection("purchase_orders").getFullList({ filter: `status="fully_received" || status="partially_received"`, sort: "number" });
-  let invoices = 0, paid = 0, exceptions = 0;
+  let invoices = 0, paid = 0, exceptions = 0, toPay = 0;
   for (const [i, po] of received.entries()) {
     const lines = po.items.filter((l) => l.received_qty > 0).map((l) => ({
       line: l.line, quantity: l.received_qty,
@@ -418,13 +438,38 @@ async function seedFinance() {
     if (inv.status === "exception") { exceptions++; continue; }
     const sub = await acc.send(`/api/dnr/invoices/${inv.id}/submit`, { method: "POST" });
     await approveAll(sub.id ? (await admin.collection("supplier_invoices").getOne(inv.id)).approval : sub.approval);
+    const fresh = await admin.collection("supplier_invoices").getOne(inv.id);
+    if (fresh.status !== "approved") continue;
+    // Public institutions withhold tax on goods and services (rate from Setup → Tax & statutory rates).
+    const v = await voucherFor(fresh, "WHT_PUBLIC_TENDER");
     if (po.status === "fully_received") {
-      const fresh = await admin.collection("supplier_invoices").getOne(inv.id);
-      await cashier.send(`/api/dnr/invoices/${inv.id}/pay`, { method: "POST", body: { amount: fresh.balance, method: "bank_transfer", reference: `BK-TRF-${int(100000, 999999)}` } });
+      await cashier.send(`/api/ims/vouchers/${v.id}/pay`, { method: "POST", body: { method: "bank_transfer", reference: `BK-TRF-${int(100000, 999999)}`, payment_date: inDays(0) } });
       paid++;
-    }
+    } else toPay++;
   }
-  console.log(`  ✓ finance: ${invoices} invoices (${exceptions} match exception), ${paid} paid, invoice approval workflows`);
+  // A service paid without a purchase order to a registered supplier: approved, waiting for the Cashier.
+  const repairs = await admin.collection("budget_lines").getFirstListItem('code ~ "FIN-5205" && status = "active"').catch(() => null);
+  const servicer = (await admin.collection("suppliers").getFullList({ filter: 'status = "active" && bank_account_number != "" && bank_change_pending = false', sort: "created" }))[3];
+  if (repairs && servicer) {
+    const v = await acc.collection("payment_vouchers").create({
+      voucher_type: "direct", supplier: servicer.id, budget_line: repairs.id, gross_amount: 850000, wht_code: "WHT_PUBLIC_TENDER",
+      description: "Generator servicing and repair — Head Office, October 2026", notes: "Job card JC-2026-114 signed by the Store & Asset Officer.",
+    });
+    const sub = await acc.send(`/api/ims/vouchers/${v.id}/submit`, { method: "POST" });
+    await approveAll(sub.approval);
+    toPay++;
+  }
+  // A direct expense without a purchase order (utility bill), waiting for the DAF.
+  const fin = await admin.collection("budget_lines").getFirstListItem('code ~ "FIN-5203" && status = "active"').catch(() => null);
+  if (fin) {
+    const direct = await acc.collection("payment_vouchers").create({
+      voucher_type: "direct", payee_name: "MTN Rwanda", budget_line: fin.id, gross_amount: 450000, wht_code: "",
+      description: "Internet and telephone — Head Office, October 2026", payee_bank: { bank_name: "Bank of Kigali", bank_account_name: "MTN Rwandacell PLC", bank_account_number: "000400012345" },
+      notes: "Monthly bill, account 7700112.",
+    });
+    await acc.send(`/api/ims/vouchers/${direct.id}/submit`, { method: "POST" });
+  }
+  console.log(`  ✓ finance: ${invoices} invoices (${exceptions} match exception), vouchers: ${paid} paid, ${toPay} approved to pay, 1 direct expense waiting for approval`);
 }
 
 async function wipePurchasing() {

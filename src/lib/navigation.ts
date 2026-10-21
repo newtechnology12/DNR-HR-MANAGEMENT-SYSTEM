@@ -3,7 +3,7 @@
  * "*" means every signed-in user. The server enforces the same permissions on the data.
  */
 import {
-  AlignEndHorizontal, Banknote, BarChart3, Blocks, Boxes, Building2, CalendarClock, CalendarRange, CandlestickChart, CarFront, CircleDollarSign,
+  AlignEndHorizontal, Banknote, BarChart3, FileCheck2, Blocks, Boxes, Building2, CalendarClock, CalendarRange, CandlestickChart, CarFront, CircleDollarSign,
   ClipboardList, Clock, Container, FileSearch, FileSignature, FolderKanban, GitBranch, GitPullRequest, Inbox, Landmark, Layout, ListChecks,
   ListTree, LucideIcon, Network, Percent, PieChart, Receipt, Scale, ScrollText, ServerCog, Settings, ShieldCheck, ShoppingCart, SlidersHorizontal,
   Split, Table, Tags, Truck, Undo2, User, UserCog, Users, Wallet, WalletCards, Activity, Coins, LayoutGrid, UserCheck,
@@ -71,7 +71,9 @@ export const NAVIGATION: NavGroup[] = [
     label: "Payables",
     items: [
       { key: "invoices", label: "Supplier invoices", link: "/dashboard/finance/invoices", icon: Receipt, perms: ["view_invoices", "manage_invoices", "resolve_invoice_exceptions", "approve_invoices", "record_payments"] },
-      { key: "payments", label: "Payments", link: "/dashboard/finance/payments", icon: Banknote, perms: ["view_invoices", "record_payments"] },
+      { key: "vouchers", label: "Payment vouchers", link: "/dashboard/finance/vouchers", icon: FileCheck2, perms: ["view_payment_vouchers", "manage_payment_vouchers", "approve_payment_vouchers", "record_payments"] },
+      { key: "payments", label: "Payments", link: "/dashboard/finance/payments", icon: Banknote, perms: ["view_invoices", "view_payment_vouchers", "record_payments"] },
+      { key: "payablesReports", label: "Payables reports", link: "/dashboard/finance/reports", icon: BarChart3, perms: ["view_payment_vouchers", "manage_payment_vouchers", "view_invoices", "export_invoices"] },
     ],
   },
   {

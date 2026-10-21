@@ -11,6 +11,7 @@ function approved(dao, type, doc, actor, meta) {
   if (type === "purchase_order") return budget.commitPo(dao, doc, actor, meta);
   if (type === "supplier_invoice") return budget.invoiceApproved(dao, doc, actor, meta);
   if (type === "supplier_bank_change") return require("./supplierbank.js").onApproved(dao, doc, actor, meta);
+  if (type === "payment_voucher") return require("./vouchers.js").onApproved(dao, doc, actor, meta);
 }
 
 /** Rejected or returned by an approver. */

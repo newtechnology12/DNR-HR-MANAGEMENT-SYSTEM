@@ -60,7 +60,7 @@ const requestChange = (supplierId, extra = {}) =>
 
 console.log("Supplier bank details (SoD rule 6)");
 const supplier = (await admin.collection("suppliers").getFullList({ filter: 'status = "active" && bank_change_pending = false', sort: "created" }))[2];
-const original = { bank_name: supplier.bank_name, bank_account_number: supplier.bank_account_number };
+const original = Object.fromEntries(["bank_name", "bank_branch", "bank_account_name", "bank_account_number", "swift_code"].map((k) => [k, supplier[k]]));
 
 await check("an approved supplier's bank details cannot be edited directly", async () => {
   await expectStatus(proc.collection("suppliers").update(supplier.id, { bank_account_number: "111222333" }), 400, "bank change request");
@@ -127,7 +127,7 @@ await check("staff cannot read bank change requests or supplier bank details", a
   assert(seen.bank_account_number, "Finance cannot see bank details");
 });
 // Leave the demo supplier as it was.
-await admin.collection("suppliers").update(supplier.id, { bank_name: original.bank_name, bank_account_number: original.bank_account_number });
+await admin.collection("suppliers").update(supplier.id, original);
 
 console.log("Procurement plans and budget lines");
 const procDept = await admin.collection("departments").getFirstListItem('name = "Procurement"');

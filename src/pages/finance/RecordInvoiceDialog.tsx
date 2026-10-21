@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { errorMessage, money } from "@/lib/procurement";
+import { cn } from "@/utils";
 
 const BILLABLE = `status != "cancelled" && status != "rejected"`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -45,6 +46,8 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
       })
     );
     setRef("");
+    setDup(null);
+    setDupReason("");
     setInvoiceDate(today());
     setDueDate("");
     setNotes("");
@@ -59,6 +62,9 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
     { net: 0, tax: 0 }
   );
   const anyQty = lines.some((l) => Number(l.quantity) > 0);
+  // Duplicate control (server): same reference refused; same amount within N days needs a reason.
+  const [dup, setDup] = React.useState<{ kind: "duplicate_invoice" | "possible_duplicate"; message: string } | null>(null);
+  const [dupReason, setDupReason] = React.useState("");
 
   const save = useMutation(
     () =>
@@ -69,6 +75,7 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
         due_date: dueDate ? `${dueDate} 00:00:00.000Z` : "",
         notes,
         items: lines.filter((l) => Number(l.quantity) > 0).map((l) => ({ line: l.line, quantity: Number(l.quantity), unit_price: Number(l.unit_price), tax_rate: Number(l.tax_rate) })),
+        ...(dup?.kind === "possible_duplicate" && dupReason.trim() ? { duplicate_override: dupReason.trim() } : {}),
       }),
     {
       onSuccess: (inv: any) => {
@@ -77,7 +84,12 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
         onClose();
         navigate(`/dashboard/finance/invoices/${inv.id}`);
       },
-      onError: (e) => {
+      onError: (e: any) => {
+        const code = e?.response?.data?.supplier_invoice_number?.code;
+        if (code === "duplicate_invoice" || code === "possible_duplicate") {
+          setDup({ kind: code, message: errorMessage(e) });
+          return;
+        }
         toast.error(errorMessage(e));
       },
     }
@@ -97,7 +109,7 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="block text-[12.5px] font-medium text-slate-700">
             Supplier invoice number <span className="text-red-600">*</span>
-            <Input className="mt-1" value={ref} onChange={(e) => setRef(e.target.value)} onBlur={() => setTouched(true)} placeholder="e.g. FV-2026-0142" aria-invalid={touched && !ref.trim()} />
+            <Input className="mt-1" value={ref} onChange={(e) => { setRef(e.target.value); setDup(null); }} onBlur={() => setTouched(true)} placeholder="e.g. FV-2026-0142" aria-invalid={touched && !ref.trim()} />
             {touched && !ref.trim() && <span className="mt-1 block text-[12px] text-red-600">Required — as printed on the supplier's bill.</span>}
           </label>
           <label className="block text-[12.5px] font-medium text-slate-700">
@@ -170,9 +182,27 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
           <Info size={14} className="mt-0.5 shrink-0" /> Differences from the order price or the received quantity are allowed but flagged as a match exception, which must be resolved before the bill can be approved.
         </p>
 
+        {dup && (
+          <div role="alert" className={cn("space-y-2 rounded-md border px-3 py-2.5 text-[12.5px]", dup.kind === "duplicate_invoice" ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-900")}>
+            <p className="font-medium">{dup.message}</p>
+            {dup.kind === "possible_duplicate" && (
+              <label className="block">
+                Why is this a different invoice? <span className="text-red-600">*</span>
+                <Textarea className="mt-1 h-16 bg-white" value={dupReason} onChange={(e) => setDupReason(e.target.value)} placeholder="e.g. Second delivery billed separately; confirmed with the supplier by phone." />
+                <span className="mt-1 block text-[11.5px]">At least 15 characters. The bill is recorded as an exception; the Director of Finance must clear it before approval or payment.</span>
+              </label>
+            )}
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={!ref.trim() || !anyQty || save.isLoading} onClick={() => save.mutate()}>{save.isLoading ? "Recording…" : "Record bill"}</Button>
+          <Button
+            disabled={!ref.trim() || !anyQty || save.isLoading || dup?.kind === "duplicate_invoice" || (dup?.kind === "possible_duplicate" && dupReason.trim().length < 15)}
+            onClick={() => save.mutate()}
+          >
+            {save.isLoading ? "Recording…" : dup?.kind === "possible_duplicate" ? "Record with this reason" : "Record bill"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

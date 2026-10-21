@@ -116,6 +116,18 @@ const DOCS = {
       requester: doc.getString("submitted_by"), number: doc.getString("code"), title: `Supplier registration: ${doc.getString("name")}`,
     }),
   },
+  payment_voucher: {
+    collection: "payment_vouchers",
+    approvePermission: "approve_payment_vouchers",
+    label: "payment voucher",
+    link: (id) => `/dashboard/finance/vouchers/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    // The Accountant who prepared the voucher is the requester: preparer ≠ approver (and ≠ cashier, see vouchers.js).
+    context: (doc) => ({
+      amount: doc.getFloat("gross_amount"), currency: doc.getString("currency") || "RWF", department: doc.getString("department"), category: "", branch: "",
+      requester: doc.getString("prepared_by"), number: doc.getString("number"), title: `${doc.getString("payee_name")} — ${doc.getString("description")}`.slice(0, 200),
+    }),
+  },
   supplier_bank_change: {
     collection: "supplier_bank_changes",
     approvePermission: "approve_suppliers",

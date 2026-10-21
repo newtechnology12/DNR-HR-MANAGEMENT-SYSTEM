@@ -109,6 +109,12 @@ const BudgetRevisions = lazy(() => import("./pages/budget/BudgetRevisions"));
 const RevisionDetail = lazy(() => import("./pages/budget/RevisionDetail"));
 const BudgetReports = lazy(() => import("./pages/budget/BudgetReports"));
 const BUDGET_USERS = ["view_budgets", "manage_budgets", "approve_budgets"];
+// RALGA IMS — payables (Step 4).
+const Vouchers = lazy(() => import("./pages/finance/Vouchers"));
+const VoucherForm = lazy(() => import("./pages/finance/VoucherForm"));
+const VoucherDetail = lazy(() => import("./pages/finance/VoucherDetail"));
+const PayablesReports = lazy(() => import("./pages/finance/PayablesReports"));
+const VOUCHER_USERS = ["view_payment_vouchers", "manage_payment_vouchers", "approve_payment_vouchers", "record_payments"];
 const INVOICE_USERS = ["view_invoices", "manage_invoices", "resolve_invoice_exceptions", "approve_invoices", "record_payments"];
 const PO_USERS = ["view_purchase_orders", "manage_purchase_orders", "approve_purchase_orders", "receive_goods"];
 const INVENTORY_USERS = ["view_inventory", "manage_inventory"];
@@ -758,11 +764,16 @@ const router = createBrowserRouter([
                   {
                     path: "payments",
                     element: (
-                      <ProtectedRoute entity={INVOICE_USERS}>
+                      <ProtectedRoute entity={[...INVOICE_USERS, "view_payment_vouchers"]}>
                         <Payments />
                       </ProtectedRoute>
                     ),
                   },
+                  { path: "vouchers", element: <ProtectedRoute entity={VOUCHER_USERS}><Vouchers /></ProtectedRoute> },
+                  { path: "vouchers/new", element: <ProtectedRoute entity="manage_payment_vouchers"><VoucherForm /></ProtectedRoute> },
+                  { path: "vouchers/:voucherId", element: <ProtectedRoute entity={VOUCHER_USERS}><VoucherDetail /></ProtectedRoute> },
+                  { path: "vouchers/:voucherId/edit", element: <ProtectedRoute entity="manage_payment_vouchers"><VoucherForm /></ProtectedRoute> },
+                  { path: "reports", element: <ProtectedRoute entity={["view_payment_vouchers", "manage_payment_vouchers", "view_invoices", "export_invoices"]}><PayablesReports /></ProtectedRoute> },
                   {
                     path: "budgets",
                     element: <Navigate to="/dashboard/budget" replace />,

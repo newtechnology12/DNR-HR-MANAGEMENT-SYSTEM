@@ -57,6 +57,8 @@
   "nav.procurementReports": "Rapports d'achats",
   "nav.invoices": "Factures fournisseurs",
   "nav.payments": "Paiements",
+  "nav.vouchers": "Ordres de paiement",
+  "nav.payablesReports": "Rapports fournisseurs",
   "nav.employees": "Employés",
   "nav.departments": "Départements",
   "nav.designations": "Fonctions",

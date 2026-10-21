@@ -81,6 +81,7 @@ export const DOCUMENT_LINKS: Record<string, (id: string) => string> = {
   budget: (id) => `/dashboard/budget/budgets/${id}`,
   budget_revision: (id) => `/dashboard/budget/revisions/${id}`,
   supplier_bank_change: (id) => `/dashboard/procurement/bank-changes/${id}`,
+  payment_voucher: (id) => `/dashboard/finance/vouchers/${id}`,
 };
 
 const qs = (params: Record<string, unknown>) =>

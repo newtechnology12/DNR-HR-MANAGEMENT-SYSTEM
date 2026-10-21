@@ -5,7 +5,11 @@
  *
  * Nothing mismatched is ever approved automatically: an invoice with a match exception must be
  * resolved by someone with "resolve_invoice_exceptions" (with a written reason) before approval.
- * Separation of duties on payment: whoever received the goods, or approved the invoice, cannot pay it.
+ * Duplicates (IMS M4): the same supplier invoice number (ignoring spaces, dashes and case) is refused;
+ * the same supplier, amount and date within N days is refused unless recorded with a reason, and then
+ * stays an exception until the DAF clears it.
+ * Payments are executed only from approved payment vouchers (lib/vouchers.js). Separation of duties on
+ * payment: whoever received the goods, or approved the invoice, cannot pay it.
  */
 const core = require("./core.js");
 
@@ -31,7 +35,9 @@ function settings(dao) {
   } catch (_) {}
   const priceTol = s && s.getFloat("invoice_price_tolerance_pct");
   const totalTol = s && s.getFloat("invoice_total_tolerance_pct");
+  const dupDays = s && s.getInt("duplicate_invoice_days");
   return {
+    duplicateDays: dupDays > 0 ? dupDays : 7,
     budgetControl: (s && s.getString("budget_control")) || "warn",
     priceTolerance: priceTol > 0 ? priceTol : 2,
     totalTolerance: totalTol > 0 ? totalTol : 0,
@@ -111,6 +117,63 @@ function computeAndMatch(dao, inv, po) {
   return issues;
 }
 
+const normRef = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^0+/, "");
+
+/**
+ * Possible duplicates of an invoice among the supplier's other invoices (cancelled and rejected ones
+ * excluded): same reference once normalised, or same total within N days of the invoice date.
+ */
+function duplicates(dao, inv) {
+  const days = settings(dao).duplicateDays;
+  const ref = normRef(inv.getString("supplier_invoice_number"));
+  const date = toDate(inv.getString("invoice_date")) || new Date();
+  const total = core.money(inv.getFloat("total"));
+  const same = [];
+  const similar = [];
+  for (const o of dao.findRecordsByFilter("supplier_invoices", "supplier = {:s} && status != 'cancelled' && status != 'rejected'", "", 5000, 0, { s: inv.getString("supplier") }) || []) {
+    if (o.id === inv.id) continue;
+    if (ref && normRef(o.getString("supplier_invoice_number")) === ref) {
+      same.push(o);
+      continue;
+    }
+    const od = toDate(o.getString("invoice_date"));
+    if (od && Math.abs(core.money(o.getFloat("total")) - total) < 0.5 && Math.abs(od.getTime() - date.getTime()) <= days * 864e5) similar.push(o);
+  }
+  return { same, similar, days };
+}
+
+/** Refuses duplicates; a "similar" invoice is accepted only with a reason and stays an exception. */
+function checkDuplicates(dao, inv, actor, reason) {
+  const d = duplicates(dao, inv);
+  const label = (o) => `${o.getString("number")} (${o.getString("supplier_invoice_number")}, ${core.formatMoney(o.getFloat("total"), o.getString("currency"))}, ${String(o.getString("invoice_date")).slice(0, 10)})`;
+  if (d.same.length) {
+    throw new ApiError(400, `Duplicate invoice: this supplier's invoice ${inv.getString("supplier_invoice_number")} is already recorded as ${d.same.map(label).join(", ")}.`, {
+      supplier_invoice_number: { code: "duplicate_invoice", message: d.same.map((o) => o.getString("number")).join(", ") },
+    });
+  }
+  const check = { checked_at: new Date().toISOString(), window_days: d.days, similar: d.similar.map((o) => ({ id: o.id, number: o.getString("number"), reference: o.getString("supplier_invoice_number"), total: o.getFloat("total"), date: String(o.getString("invoice_date")).slice(0, 10) })) };
+  inv.set("duplicate_check", check);
+  if (!d.similar.length) {
+    inv.set("duplicate_override", "");
+    inv.set("duplicate_override_by", "");
+    return;
+  }
+  const why = String(reason || inv.getString("duplicate_override") || "").trim();
+  if (why.length < 15) {
+    throw new ApiError(400, `Possible duplicate: same supplier and amount as ${d.similar.map(label).join(", ")} within ${d.days} days. If this is a different invoice, record it with a reason (at least 15 characters); the Director of Finance must clear it before it can be approved or paid.`, {
+      supplier_invoice_number: { code: "possible_duplicate", message: d.similar.map((o) => o.getString("number")).join(", ") },
+    });
+  }
+  inv.set("duplicate_override", why);
+  if (actor) inv.set("duplicate_override_by", actor.id);
+  // Stays an exception until someone with resolve_invoice_exceptions clears it.
+  const m = core.parseJson(inv, "match_result", {}) || {};
+  m.issues = (m.issues || []).concat([`Possible duplicate of ${d.similar.map((o) => o.getString("number")).join(", ")} (same amount within ${d.days} days) — recorded because: ${why}`]);
+  inv.set("match_result", m);
+  inv.set("match_status", "exception");
+  inv.set("status", "exception");
+}
+
 function syncPo(dao, poId) {
   const po = dao.findRecordById("purchase_orders", poId);
   const invs = otherInvoices(dao, poId, "");
@@ -155,6 +218,7 @@ function invoiceBeforeCreate(e) {
   if (!inv.getString("due_date")) inv.set("due_date", new Date((toDate(inv.getString("invoice_date")) || new Date()).getTime() + 30 * 864e5).toISOString());
   if (auth) inv.set("recorded_by", auth.id);
   computeAndMatch(dao, inv, po);
+  checkDuplicates(dao, inv, auth, inv.getString("duplicate_override"));
   let n = "";
   dao.runInTransaction((tx) => {
     n = core.nextNumber(tx, "invoice");
@@ -189,9 +253,10 @@ function invoiceBeforeUpdate(e) {
   if (["received", "exception", "matched", "returned"].indexOf(before.getString("status")) === -1) {
     throw new BadRequestError(`${before.getString("number")} is ${before.getString("status").replace(/_/g, " ")} and can no longer be edited.`);
   }
-  const editable = ["supplier_invoice_number", "invoice_date", "due_date", "items", "notes", "attachments"];
+  const editable = ["supplier_invoice_number", "invoice_date", "due_date", "items", "notes", "attachments", "duplicate_override"];
   for (const f of inv.collection().schema.fields().map((x) => x.name)) if (editable.indexOf(f) === -1) inv.set(f, before.get(f));
   computeAndMatch(dao, inv, load(dao, "purchase_orders", inv.getString("purchase_order"), "Purchase order"));
+  checkDuplicates(dao, inv, auth, inv.getString("duplicate_override"));
   inv.set("exception_overridden", false);
   inv.set("exception_resolution", "");
   const changes = core.diff(before, inv, ["supplier_invoice_number", "invoice_date", "due_date", "total", "match_status"]);
@@ -247,9 +312,14 @@ function invoiceAction(dao, id, actor, action, input, meta) {
   throw new NotFoundError(`Unknown invoice action "${action}".`);
 }
 
-function pay(dao, id, actor, input, meta) {
+/** Payments are executed from approved payment vouchers only. */
+function pay() {
+  throw new BadRequestError("Supplier invoices are paid through a payment voucher (Payables → Payment vouchers): the Accountant prepares it, the DAF approves it and the Cashier executes it.");
+}
+
+/** One payment against an invoice, from a voucher being executed. `dao` is a transaction DAO. */
+function recordPayment(dao, inv, actor, input) {
   core.requirePermission(dao, actor, "record_payments", "record payments");
-  const inv = load(dao, "supplier_invoices", id, "Invoice");
   const number = inv.getString("number");
   if (["approved", "partially_paid"].indexOf(inv.getString("status")) === -1) throw new BadRequestError(`${number} must be approved before it can be paid (currently ${inv.getString("status").replace(/_/g, " ")}).`);
   const amount = core.money(Number(input.amount) || 0);
@@ -278,6 +348,10 @@ function pay(dao, id, actor, input, meta) {
   p.set("reference", String(input.reference || ""));
   p.set("notes", String(input.notes || ""));
   p.set("paid_by", actor.id);
+  const wht = Math.round(Number(input.wht) || 0);
+  p.set("voucher", input.voucher ? input.voucher.id : "");
+  p.set("wht_amount", wht);
+  p.set("net_amount", Math.round(amount) - wht);
   dao.saveRecord(p);
   const paid = core.money(inv.getFloat("paid_amount") + amount);
   const old = inv.getString("status");
@@ -286,9 +360,9 @@ function pay(dao, id, actor, input, meta) {
   inv.set("status", inv.getFloat("balance") <= 0.01 ? "paid" : "partially_paid");
   dao.saveRecord(inv);
   syncPo(dao, inv.getString("purchase_order"));
-  core.audit(dao, { actor, action: "payment_recorded", collection: "supplier_invoices", recordId: inv.id, label: number, meta, comment: `${p.getString("number")} · ${method.replace(/_/g, " ")} ${p.getString("reference")}`, changes: { status: { old, new: inv.getString("status") }, paid: { old: null, new: amount } } });
+  core.audit(dao, { actor, action: "payment_recorded", collection: "supplier_invoices", recordId: inv.id, label: number, meta: input.meta, comment: `${p.getString("number")}${input.voucher ? ` (${input.voucher.getString("number")})` : ""} · ${method.replace(/_/g, " ")} ${p.getString("reference")}${wht ? ` · tax withheld ${core.formatMoney(wht, inv.getString("currency"))}` : ""}`, changes: { status: { old, new: inv.getString("status") }, paid: { old: null, new: amount } } });
   core.notify(dao, [inv.getString("recorded_by")].filter((x) => x !== actor.id), { title: `${number} ${inv.getString("status") === "paid" ? "paid in full" : "partially paid"}`, body: core.formatMoney(amount, inv.getString("currency")), link: `/dashboard/finance/invoices/${inv.id}`, type: "success" });
   return p;
 }
 
-module.exports = { settings, invoiceBeforeCreate, invoiceAfterCreate, invoiceBeforeUpdate, invoiceAfterUpdate, invoiceAction, pay, syncPo };
+module.exports = { settings, invoiceBeforeCreate, invoiceAfterCreate, invoiceBeforeUpdate, invoiceAfterUpdate, invoiceAction, pay, recordPayment, syncPo, duplicates };

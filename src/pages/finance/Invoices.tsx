@@ -146,18 +146,21 @@ export function Payments() {
     { key: "number", header: "Payment", sortField: "number", cell: (r) => <span className="whitespace-nowrap font-medium">{r.number}</span> },
     { key: "date", header: "Date", sortField: "payment_date", cell: (r) => <span className="whitespace-nowrap text-slate-600">{dateOf(r.payment_date)}</span>, csv: (r) => r.payment_date?.slice(0, 10) },
     { key: "vendor", header: "Vendor", cell: (r) => r.expand?.supplier?.name, csv: (r) => r.expand?.supplier?.name },
-    { key: "bill", header: "Bill", cell: (r) => <span className="whitespace-nowrap">{r.expand?.invoice?.number}</span>, csv: (r) => r.expand?.invoice?.number },
+    { key: "voucher", header: "Voucher", cell: (r) => <span className="whitespace-nowrap font-mono text-[12.5px]">{r.expand?.voucher?.number || "—"}</span>, csv: (r) => r.expand?.voucher?.number || "" },
+    { key: "bill", header: "Bill", cell: (r) => <span className="whitespace-nowrap">{r.expand?.invoice?.number || "—"}</span>, csv: (r) => r.expand?.invoice?.number || "" },
     { key: "po", header: "Purchase order", cell: (r) => <span className="whitespace-nowrap text-slate-600">{r.expand?.purchase_order?.number}</span>, csv: (r) => r.expand?.purchase_order?.number },
     { key: "method", header: "Method", cell: (r) => PAYMENT_METHODS[r.method] || r.method, csv: (r) => PAYMENT_METHODS[r.method] || r.method },
     { key: "ref", header: "Reference", cell: (r) => <span className="text-slate-600">{r.reference || "—"}</span>, csv: (r) => r.reference },
     { key: "by", header: "Paid by", cell: (r) => r.expand?.paid_by?.name, csv: (r) => r.expand?.paid_by?.name },
-    { key: "amount", header: "Amount", sortField: "amount", align: "right", cell: (r) => <span className="whitespace-nowrap font-medium tabular-nums">{money(r.amount, r.currency)}</span>, csv: (r) => r.amount },
+    { key: "amount", header: "Settled", sortField: "amount", align: "right", format: "money", cell: (r) => <span className="whitespace-nowrap tabular-nums">{money(r.amount, r.currency)}</span>, csv: (r) => r.amount },
+    { key: "wht", header: "Tax withheld", sortField: "wht_amount", align: "right", format: "money", cell: (r) => <span className="whitespace-nowrap tabular-nums text-slate-600">{r.wht_amount ? money(r.wht_amount, r.currency) : "—"}</span>, csv: (r) => r.wht_amount || 0 },
+    { key: "net", header: "Net paid", sortField: "net_amount", align: "right", format: "money", cell: (r) => <span className="whitespace-nowrap font-medium tabular-nums">{money(r.voucher ? r.net_amount : r.amount, r.currency)}</span>, csv: (r) => (r.voucher ? r.net_amount : r.amount) },
   ];
   return (
     <div className="space-y-4 px-4 py-4 sm:px-6">
       <PageHeader
         title="Payments"
-        description="Every supplier payment, with the bill and purchase order it settles."
+        description="Every payment executed by the Cashier, with its voucher, the bill it settles, the tax withheld and the net paid."
         breadcrumbs={[{ title: "Accounts payable", link: "/dashboard/finance/invoices" }, { title: "Payments", link: "/dashboard/finance/payments" }]}
       />
       <RecordTable
@@ -166,12 +169,12 @@ export function Payments() {
         views={views}
         activeView={view}
         onViewChange={(v) => setParams(v === "all" ? {} : { view: v })}
-        searchFields={["number", "reference", "supplier.name", "invoice.number", "purchase_order.number"]}
-        expand="supplier,invoice,purchase_order,paid_by"
+        searchFields={["number", "reference", "supplier.name", "invoice.number", "purchase_order.number", "voucher.number"]}
+        expand="supplier,invoice,purchase_order,paid_by,voucher"
         defaultSort="-payment_date"
         exportName="payments"
-        onRowClick={(r) => navigate(`/dashboard/finance/invoices/${r.invoice}?tab=payments`)}
-        empty={{ icon: Banknote, title: "No payments found", text: "Payments are registered from an approved vendor bill." }}
+        onRowClick={(r) => navigate(r.voucher ? `/dashboard/finance/vouchers/${r.voucher}` : `/dashboard/finance/invoices/${r.invoice}?tab=payments`)}
+        empty={{ icon: Banknote, title: "No payments found", text: "Payments are executed by the Cashier from approved payment vouchers." }}
       />
     </div>
   );

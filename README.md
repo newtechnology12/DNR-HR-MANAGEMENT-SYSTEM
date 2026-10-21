@@ -14,7 +14,7 @@ Built by DNR Partners.
 | 1 | Foundation: 13 roles, permission matrix (two-person confirmation), users & security (2FA, lockout, password policy, session timeout), audit log, approval engine (limits, delegations, overdue escalation), master data (fiscal years, chart of accounts, funding sources, projects, cost centres, tax rates) | **Done** |
 | 2 | Budgeting & budget control (M2): budgets by line with monthly phasing and Excel import, revisions (supplementary, reduction, virement, re-phasing), hard-stop control with DAF override, commitments from POs, actuals from invoices, utilisation dashboard, budget vs actual, commitments and overrides reports | **Done** |
 | 3 | Procurement, suppliers, PO, GRN (M3): requisitions, POs and procurement plan lines charged to budget lines (plans cannot exceed a line), supplier bank-detail changes verified by Finance, supplier balances and plan execution reports | **Done** |
-| 4 | Supplier invoices & payment vouchers (M4) | Planned |
+| 4 | Supplier invoices & payment vouchers (M4): duplicate invoice control, payment vouchers for invoices or direct expenses with withholding tax from the dated table, approval Accountant → DAF → SG above limit, execution by the Cashier, supplier ageing, outstanding liabilities, payment register, WHT schedule | **Done** |
 | 5 | Bank & cash, reconciliation (M5) | Planned |
 | 6 | Payroll (M6) | Existing module — GL posting and funding split to add |
 | 7 | Fixed assets & depreciation (M7) | Planned |
@@ -133,6 +133,22 @@ SG approve. Only approved lines can be charged.
 - Revisions change approved lines only after their own approval (DAF → SG); a reduction can never go below
   what is committed or spent; a virement must net to zero.
 - Utilisation status: green < 75 %, amber 75–90 %, red > 90 % (settings `budget_amber_pct` / `budget_red_pct`).
+
+## Payment vouchers
+
+Payables → Payment vouchers. Every supplier payment and direct expense goes through a voucher:
+
+- **Accountant** prepares it: approved invoices of one supplier (the amount to pay on each), or a direct
+  expense charged to a budget line (budget control applies at submission; the actual is charged on approval).
+- **Withholding tax** comes from Setup → Tax & statutory rates and is computed on the amount before VAT.
+- **DAF** approves; the **Secretary General** also approves above the DAF voucher limit (Setup → Approval limits).
+- **Cashier** executes it (method, date, reference): one payment per invoice with the tax withheld and the net
+  paid. Whoever prepared or approved the voucher cannot execute it; if the supplier's verified bank details
+  changed after preparation, the payment stops.
+- An invoice cannot be on two open vouchers for the same money; invoices are never paid outside a voucher.
+- **Duplicate invoices:** the same supplier reference (ignoring case and punctuation) is refused; the same
+  amount within 7 days (setting `duplicate_invoice_days`) needs a reason and stays an exception until the DAF
+  clears it.
 
 ## Supplier bank details
 

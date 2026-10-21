@@ -149,12 +149,14 @@ await check("an approved purchase order commits the budget; cancelling it releas
   const after = await figures(lineId);
   assert(after.committed === before.committed && after.available === before.available, `after cancel committed ${after.committed}`);
 });
-await check("approved invoices turned commitments into actuals (ledger reconciles with invoices)", async () => {
+await check("actuals reconcile: approved invoices plus approved direct-expense vouchers", async () => {
   const invoices = await admin.collection("supplier_invoices").getFullList({ filter: "actual_amount > 0" });
+  const vouchers = await admin.collection("payment_vouchers").getFullList({ filter: "actual_amount > 0" });
   assert(invoices.length > 0, "no approved invoice in the demo data");
   const u = await daf.send("/api/ims/budget/usage", {});
   const actual = u.items.reduce((a, i) => a + i.actual, 0);
-  assert(actual === invoices.reduce((a, i) => a + i.actual_amount, 0), `ledger actual ${actual} ≠ invoices`);
+  const expected = invoices.reduce((a, i) => a + i.actual_amount, 0) + vouchers.reduce((a, v) => a + v.actual_amount, 0);
+  assert(actual === expected, `ledger actual ${actual} ≠ invoices + vouchers ${expected}`);
   for (const i of u.items) assert(i.available === i.budget - i.committed - i.actual, `${i.code} does not reconcile`);
 });
 

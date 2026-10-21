@@ -7,7 +7,6 @@ import { AlertTriangle, ArrowUpRight, Ban, Banknote, Check, CheckCircle2, Clock,
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -40,12 +39,11 @@ export default function InvoiceDetail() {
   const me = pocketbase.authStore.model as any;
   const [decision, setDecision] = React.useState<ActionKind | null>(null);
   const [resolving, setResolving] = React.useState(false);
-  const [paying, setPaying] = React.useState(false);
 
   const q = useQuery(["supplier_invoice", invoiceId], async () => {
     const inv = await pocketbase.collection("supplier_invoices").getOne(invoiceId!, { expand: "supplier,purchase_order,department,recorded_by,resolved_by,approval" });
     const [payments, actions, audit] = await Promise.all([
-      pocketbase.collection("payments").getFullList({ filter: `invoice = "${invoiceId}"`, sort: "-payment_date", expand: "paid_by" }).catch(() => [] as any[]),
+      pocketbase.collection("payments").getFullList({ filter: `invoice = "${invoiceId}"`, sort: "-payment_date", expand: "paid_by,voucher" }).catch(() => [] as any[]),
       pocketbase.collection("approval_actions").getFullList({ filter: `document_type = "supplier_invoice" && document_id = "${invoiceId}"`, sort: "created", expand: "actor,target_user" }),
       procurementApi.audit({ collection: "supplier_invoices", record: invoiceId, perPage: 100 }).then((r) => r.items).catch(() => []),
     ]);
@@ -88,7 +86,7 @@ export default function InvoiceDetail() {
       )}
       {canPerform("resolve_invoice_exceptions") && inv.status === "exception" && <Button size="sm" onClick={() => setResolving(true)}><ShieldAlert size={14} /> Resolve exception</Button>}
       {canPerform("manage_invoices") && ["matched", "returned"].includes(inv.status) && <Button size="sm" onClick={() => setDecision("submit")}><Send size={14} /> Submit for approval</Button>}
-      {canPerform("record_payments") && ["approved", "partially_paid"].includes(inv.status) && <Button size="sm" onClick={() => setPaying(true)}><Banknote size={14} /> Register payment</Button>}
+      {canPerform("manage_payment_vouchers") && ["approved", "partially_paid"].includes(inv.status) && <Button size="sm" onClick={() => navigate(`/dashboard/finance/vouchers/new?supplier=${inv.supplier}&invoice=${inv.id}`)}><Banknote size={14} /> Prepare payment voucher</Button>}
       {canPerform("manage_invoices") && !["partially_paid", "paid", "cancelled"].includes(inv.status) && <Button size="sm" variant="ghost" onClick={() => setDecision("cancel")}><Ban size={14} /> Cancel</Button>}
       {approval && <Button size="sm" variant="ghost" onClick={() => setDecision("comment")}><MessageSquare size={14} /> Log note</Button>}
     </>
@@ -224,20 +222,23 @@ export default function InvoiceDetail() {
 
           {tab === "payments" && (
             !payments.length ? (
-              <EmptyState icon={Banknote} text={["approved", "partially_paid"].includes(inv.status) ? "No payment registered yet." : "Payments can be registered once the bill is approved."} action={canPerform("record_payments") && ["approved", "partially_paid"].includes(inv.status) && <Button size="sm" onClick={() => setPaying(true)}><Banknote size={14} /> Register payment</Button>} />
+              <EmptyState icon={Banknote} text={["approved", "partially_paid"].includes(inv.status) ? "Not paid yet. Payments are made through a payment voucher: the Accountant prepares it, the DAF approves, the Cashier executes." : "The bill can be paid once it is approved."} action={canPerform("manage_payment_vouchers") && ["approved", "partially_paid"].includes(inv.status) && <Button size="sm" onClick={() => navigate(`/dashboard/finance/vouchers/new?supplier=${inv.supplier}&invoice=${inv.id}`)}><Banknote size={14} /> Prepare payment voucher</Button>} />
             ) : (
               <div className="overflow-x-auto">
                 <table className="dnr-grid w-full min-w-[640px] text-[13px]">
-                  <thead><tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Payment</th><th className={th}>Date</th><th className={th}>Method</th><th className={th}>Reference</th><th className={th}>Paid by</th><th className={cn(th, "text-right")}>Amount</th></tr></thead>
+                  <thead><tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Payment</th><th className={th}>Voucher</th><th className={th}>Date</th><th className={th}>Method</th><th className={th}>Reference</th><th className={th}>Paid by</th><th className={cn(th, "text-right")}>Settled</th><th className={cn(th, "text-right")}>Tax withheld</th><th className={cn(th, "text-right")}>Net paid</th></tr></thead>
                   <tbody className="divide-y divide-slate-100">
                     {payments.map((p: any) => (
                       <tr key={p.id}>
                         <td className="px-3 py-2.5 font-medium">{p.number}</td>
+                        <td className="px-3 py-2.5">{p.voucher ? <Link to={`/dashboard/finance/vouchers/${p.voucher}`} className="text-primaryDark hover:underline">{p.expand?.voucher?.number || "voucher"}</Link> : "—"}</td>
                         <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">{dateOf(p.payment_date)}</td>
                         <td className="px-3 py-2.5">{PAYMENT_METHODS[p.method] || p.method}</td>
                         <td className="px-3 py-2.5 text-slate-600">{p.reference || "—"}</td>
                         <td className="px-3 py-2.5">{p.expand?.paid_by?.name}</td>
-                        <td className="px-3 py-2.5 text-right font-medium tabular-nums">{money(p.amount, p.currency)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{money(p.amount, p.currency)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{p.wht_amount ? money(p.wht_amount, p.currency) : "—"}</td>
+                        <td className="px-3 py-2.5 text-right font-medium tabular-nums">{money(p.voucher ? p.net_amount : p.amount, p.currency)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -265,8 +266,7 @@ export default function InvoiceDetail() {
         }}
       />
       <ResolveDialog inv={inv} issues={issues} open={resolving} onClose={() => setResolving(false)} onDone={() => { setResolving(false); refresh(); }} />
-      <PayDialog inv={inv} open={paying} onClose={() => setPaying(false)} onDone={() => { setPaying(false); refresh(); }} />
-    </DocumentPage>
+          </DocumentPage>
   );
 }
 
@@ -294,58 +294,6 @@ function ResolveDialog({ inv, issues, open, onClose, onDone }: { inv: any; issue
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Back</Button>
           <Button disabled={short || run.isLoading} onClick={() => run.mutate()}>{run.isLoading ? "Saving…" : "Resolve exception"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function PayDialog({ inv, open, onClose, onDone }: { inv: any; open: boolean; onClose: () => void; onDone: () => void }) {
-  const [v, setV] = React.useState({ amount: "", method: "bank_transfer", payment_date: "", reference: "", notes: "" });
-  React.useEffect(() => setV({ amount: String(inv.balance || ""), method: "bank_transfer", payment_date: new Date().toISOString().slice(0, 10), reference: "", notes: "" }), [open, inv.balance]);
-  const run = useMutation(() => financeApi.pay(inv.id, { ...v, amount: Number(v.amount) }), {
-    onSuccess: (p) => { toast.success(`${p.number} registered`); onDone(); },
-    onError: (e) => { toast.error(errorMessage(e)); },
-  });
-  const amount = Number(v.amount);
-  const invalid = !(amount > 0) || amount > inv.balance + 0.01;
-  const set = (k: string) => (e: any) => setV((x) => ({ ...x, [k]: e.target.value }));
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg bg-white">
-        <DialogHeader>
-          <DialogTitle>Register payment · {inv.number}</DialogTitle>
-          <DialogDescription>{inv.expand?.supplier?.name} · amount due {money(inv.balance, inv.currency)}</DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block text-[12.5px] font-medium text-slate-700">
-            Amount <span className="text-red-600">*</span>
-            <Input type="number" min={0} max={inv.balance} className="mt-1 text-right tabular-nums" value={v.amount} onChange={set("amount")} aria-invalid={invalid} />
-            {amount > inv.balance + 0.01 && <span className="mt-1 block text-[12px] text-red-600">More than the amount due.</span>}
-          </label>
-          <label className="block text-[12.5px] font-medium text-slate-700">
-            Payment date <span className="text-red-600">*</span>
-            <Input type="date" className="mt-1" value={v.payment_date} onChange={set("payment_date")} />
-          </label>
-          <label className="block text-[12.5px] font-medium text-slate-700">
-            Journal / method
-            <select className="mt-1 h-[38px] w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" value={v.method} onChange={set("method")}>
-              {Object.entries(PAYMENT_METHODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-          </label>
-          <label className="block text-[12.5px] font-medium text-slate-700">
-            Reference
-            <Input className="mt-1" value={v.reference} onChange={set("reference")} placeholder="Bank / cheque / transaction no." />
-          </label>
-          <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">
-            Memo
-            <Textarea className="mt-1 h-16" value={v.notes} onChange={set("notes")} />
-          </label>
-        </div>
-        <p className="text-[12px] text-slate-500">Separation of duties: people who received the goods or approved this bill cannot register its payment.</p>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={invalid || run.isLoading} onClick={() => run.mutate()}>{run.isLoading ? "Saving…" : "Create payment"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

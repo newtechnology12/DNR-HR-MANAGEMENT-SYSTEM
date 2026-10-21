@@ -82,7 +82,7 @@ function BvaReport({ fy }: { fy: string }) {
         { header: "Actual", value: (r) => r.actual, format: "money" },
         { header: "Committed", value: (r) => r.committed, format: "money" },
         { header: "Variance", value: (r) => r.variance, format: "money" },
-        { header: "Execution %", value: (r) => r.execution_pct / 100, format: "percent" },
+        { header: "Execution %", value: (r) => r.execution_pct, format: "percent" },
         { header: "Overrides", value: (r) => r.overrides, format: "number" },
       ],
     });

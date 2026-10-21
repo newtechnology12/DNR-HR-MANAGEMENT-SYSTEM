@@ -294,13 +294,13 @@ await check("resolving an exception needs a written reason", async () => {
   const inv = await financeMgr.collection("supplier_invoices").getFirstListItem(`status = "exception"`);
   await expectStatus(financeMgr.send(`/api/dnr/invoices/${inv.id}/resolve`, { method: "POST", body: { reason: "ok" } }), 400, "at least 15 characters");
 });
-await check("unapproved invoices cannot be paid", async () => {
+await check("unapproved invoices cannot be put on a payment voucher", async () => {
   const inv = await accountant.collection("supplier_invoices").getFirstListItem(`status = "exception"`);
-  await expectStatus(cashier.send(`/api/dnr/invoices/${inv.id}/pay`, { method: "POST", body: { amount: 1 } }), 400, "must be approved");
+  await expectStatus(accountant.collection("payment_vouchers").create({ voucher_type: "invoice", supplier: inv.supplier, lines: [{ invoice: inv.id }] }), 400, "only approved invoices");
 });
-await check("the finance manager (approver) has no payment permission", async () => {
+await check("invoices are never paid directly — only through an approved payment voucher", async () => {
   const inv = await financeMgr.collection("supplier_invoices").getFirstListItem(`status = "paid" || status = "approved"`);
-  await expectStatus(financeMgr.send(`/api/dnr/invoices/${inv.id}/pay`, { method: "POST", body: { amount: 1 } }), 403, "record_payments");
+  await expectStatus(cashier.send(`/api/dnr/invoices/${inv.id}/pay`, { method: "POST", body: { amount: 1 } }), 400, "payment voucher");
 });
 await check("a fully paid, fully received order is completed", async () => {
   const paid = await admin().collection("supplier_invoices").getFirstListItem(`status = "paid"`, { expand: "purchase_order" });

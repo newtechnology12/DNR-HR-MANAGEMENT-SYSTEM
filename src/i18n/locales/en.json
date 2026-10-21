@@ -56,6 +56,8 @@
   "nav.procurementReports": "Procurement reports",
   "nav.invoices": "Supplier invoices",
   "nav.payments": "Payments",
+  "nav.vouchers": "Payment vouchers",
+  "nav.payablesReports": "Payables reports",
   "nav.employees": "Employees",
   "nav.departments": "Departments",
   "nav.designations": "Designations",
