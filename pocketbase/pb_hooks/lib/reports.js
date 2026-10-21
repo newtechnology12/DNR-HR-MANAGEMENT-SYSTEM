@@ -237,10 +237,69 @@ const REPORTS = {
       return { columns: [["number", "Bill"], ["reference", "Supplier ref."], ["supplier", "Supplier"], ["po", "PO"], ["date", "Bill date", "date"], ["total", "Total", "money"], ["match", "Match", "status"], ["issues", "Differences"], ["status", "Status", "status"]], rows, totals: { total: sum(rows, "total") } };
     },
   },
+  supplier_balances: {
+    title: "Supplier balances",
+    run: (dao, f, n) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const by = {};
+      const row = (id) => (by[id] = by[id] || { supplier: n.sup[id] || "—", open_orders: 0, on_order: 0, invoiced: 0, paid: 0, due: 0, overdue: 0, link: `/dashboard/procurement/suppliers/${id}` });
+      for (const p of find(dao, "purchase_orders", f, "order_date", { department: "department", supplier: "supplier", category: "category" })) {
+        if (OPEN_PO.concat(["fully_received", "partially_invoiced"]).indexOf(p.getString("status")) === -1) continue;
+        const left = p.getFloat("grand_total") - p.getFloat("invoiced_value");
+        if (left <= 0) continue;
+        const r = row(p.getString("supplier"));
+        r.open_orders++;
+        r.on_order += left;
+      }
+      const invoices = dao.findRecordsByFilter("supplier_invoices", "status = 'approved' || status = 'partially_paid' || status = 'paid'", "", 20000, 0) || [];
+      for (const i of invoices) {
+        if (f.supplier && i.getString("supplier") !== f.supplier) continue;
+        if (f.department && i.getString("department") !== f.department) continue;
+        const r = row(i.getString("supplier"));
+        const balance = i.getFloat("total") - i.getFloat("paid_amount");
+        r.invoiced += i.getFloat("total");
+        r.paid += i.getFloat("paid_amount");
+        r.due += balance;
+        if (balance > 0 && i.getString("due_date") && d10(i.getString("due_date")) < today) r.overdue += balance;
+      }
+      const rows = Object.values(by).map((r) => ({ ...r, on_order: money(r.on_order), invoiced: money(r.invoiced), paid: money(r.paid), due: money(r.due), overdue: money(r.overdue) })).sort((a, b) => b.due + b.on_order - (a.due + a.on_order));
+      return {
+        columns: [["supplier", "Supplier"], ["open_orders", "Open orders", "number"], ["on_order", "Ordered, not yet billed", "money"], ["invoiced", "Billed (approved)", "money"], ["paid", "Paid", "money"], ["due", "Balance due", "money"], ["overdue", "Overdue", "money"]],
+        rows, totals: { open_orders: rows.reduce((a, r) => a + r.open_orders, 0), on_order: sum(rows, "on_order"), invoiced: sum(rows, "invoiced"), paid: sum(rows, "paid"), due: sum(rows, "due"), overdue: sum(rows, "overdue") },
+        note: "Balance due = approved bills not yet paid. Ordered, not yet billed = open purchase orders (commitments).",
+      };
+    },
+  },
+  plan_execution: {
+    title: "Procurement plan execution",
+    run: (dao, f, n) => {
+      const plans = dao.findRecordsByFilter("procurement_plans", "status = 'approved' || status = 'closed'", "-fiscal_year", 500, 0) || [];
+      const rows = [];
+      for (const plan of plans) {
+        if (f.department && plan.getString("department") !== f.department) continue;
+        const p = require("./planning.js").progress(dao, plan.id);
+        const codes = {};
+        for (const c of p.coverage || []) codes[c.id] = c.code;
+        for (const l of dao.findRecordsByFilter("procurement_plan_lines", "plan = {:p}", "planned_month", 5000, 0, { p: plan.id }) || []) {
+          const g = p.lines[l.id] || { requested: 0, ordered: 0, received: 0 };
+          const planned = l.getFloat("estimated_total");
+          rows.push({
+            plan: plan.getString("number"), department: n.dept[plan.getString("department")], item: l.getString("description"), budget_line: codes[l.getString("budget_line")] || "",
+            month: l.getInt("planned_month"), planned: money(planned), requested: money(g.requested), ordered: money(g.ordered), received: money(g.received),
+            execution: planned ? Math.round((g.ordered / planned) * 1000) / 10 : 0, status: l.getString("status"), link: `/dashboard/procurement/plans/${plan.id}`,
+          });
+        }
+      }
+      return {
+        columns: [["plan", "Plan"], ["department", "Department"], ["item", "Planned purchase"], ["budget_line", "Budget line"], ["month", "Month", "number"], ["planned", "Planned", "money"], ["requested", "Requested", "money"], ["ordered", "Ordered", "money"], ["received", "Received", "money"], ["execution", "Ordered vs plan", "pct"], ["status", "Status", "status"]],
+        rows, totals: { planned: sum(rows, "planned"), requested: sum(rows, "requested"), ordered: sum(rows, "ordered"), received: sum(rows, "received") },
+      };
+    },
+  },
   audit: {
     title: "Procurement audit trail",
     run: (dao, f) => {
-      const cols = ["purchase_requisitions", "rfqs", "quotations", "purchase_orders", "goods_receipts", "supplier_invoices", "suppliers", "contracts", "purchase_returns", "procurement_plans", "budgets", "approval_workflows"];
+      const cols = ["purchase_requisitions", "rfqs", "quotations", "purchase_orders", "goods_receipts", "supplier_invoices", "suppliers", "supplier_bank_changes", "contracts", "purchase_returns", "procurement_plans", "budgets", "approval_workflows"];
       const q = filterFor(f, "created", {});
       const rows = (dao.findRecordsByFilter("audit_logs", `(${q.filter}) && (${cols.map((c) => `collection_name = '${c}'`).join(" || ")})`, "-created", 5000, 0, q.params) || []).map((a) => ({
         date: a.getString("created").slice(0, 16), who: a.getString("actor_name"), action: a.getString("action").replace(/_/g, " "), document: a.getString("record_label"),

@@ -19,6 +19,7 @@ const DOCUMENT_TYPES: Record<string, string> = {
   supplier_invoice: "Supplier invoices (vendor bills)",
   payroll: "Payroll",
   supplier: "Supplier registrations",
+  supplier_bank_change: "Supplier bank details changes",
   purchase_return: "Purchase returns",
   contract: "Contracts",
   procurement_plan: "Procurement plans",

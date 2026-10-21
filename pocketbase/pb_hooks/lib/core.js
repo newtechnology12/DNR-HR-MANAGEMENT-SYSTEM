@@ -237,6 +237,7 @@ const DEFAULT_SEQUENCES = {
   asset_disposal: { name: "Asset disposal", prefix: "DSP" },
   depreciation_run: { name: "Depreciation run", prefix: "DEP" },
   role_change: { name: "Permission change", prefix: "PCR" },
+  supplier_bank_change: { name: "Supplier bank details change", prefix: "BCH" },
 };
 
 /**

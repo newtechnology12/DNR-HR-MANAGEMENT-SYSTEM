@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { Building2, FileText, Landmark, Mail, Pencil, Phone, Plus, Star, Trash2, Upload, User } from "lucide-react";
+import { AlertTriangle, Building2, FileText, Landmark, Mail, Pencil, Phone, Plus, ShieldCheck, Star, Trash2, Upload, User } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ import {
 } from "@/lib/procurement";
 import { ActionDialog, ActionKind, ApprovalTracker } from "@/components/enterprise/Approval";
 import SupplierFormDialog from "./SupplierFormDialog";
+import { BANK_LABELS } from "./BankChangeDetail";
+import { Link } from "react-router-dom";
 import { Rating } from "./Suppliers";
 
 const inputCls =
@@ -39,6 +41,7 @@ export default function SupplierDetail() {
   const { canPerform } = useRoles();
   const canManage = canPerform("manage_suppliers");
   const [editing, setEditing] = React.useState(false);
+  const [changingBank, setChangingBank] = React.useState(false);
 
   const q = useQuery(["supplier", supplierId], async () => {
     const [supplier, contacts, documents, evaluations, invitations, quotations] = await Promise.all([
@@ -49,7 +52,9 @@ export default function SupplierDetail() {
       pocketbase.collection("rfq_suppliers").getFullList({ filter: `supplier = "${supplierId}"`, sort: "-created", expand: "rfq" }).catch(() => []),
       pocketbase.collection("quotations").getFullList({ filter: `supplier = "${supplierId}"`, sort: "-created", expand: "rfq" }).catch(() => []),
     ]);
-    return { supplier, contacts, documents, evaluations, invitations, quotations };
+    const bankChanges = await pocketbase.collection("supplier_bank_changes").getFullList({ filter: `supplier = "${supplierId}"`, sort: "-created", expand: "requested_by" }).catch(() => [] as any[]);
+    const verifiedBy = (supplier as any).bank_verified_by ? await pocketbase.collection("users").getOne((supplier as any).bank_verified_by, { fields: "id,name" }).catch(() => null) : null;
+    return { supplier, contacts, documents, evaluations, invitations, quotations, bankChanges, verifiedBy };
   });
   const s: any = q.data?.supplier;
 
@@ -141,7 +146,20 @@ export default function SupplierDetail() {
             />
             {s.notes && <p className="mt-4 whitespace-pre-line rounded-md bg-slate-50 px-3 py-2 text-[13px] text-slate-700">{s.notes}</p>}
           </Panel>
-          <Panel title={<span className="flex items-center gap-2"><Landmark size={15} /> Bank details</span>} subtitle="Changes are audited and alert supplier managers">
+          <Panel
+            title={<span className="flex items-center gap-2"><Landmark size={15} /> Bank details</span>}
+            subtitle={["draft", "under_review", "rejected"].includes(s.status) ? "Checked by Finance as part of the supplier approval" : "Verified by Finance — a change needs Finance approval before payments use it"}
+            action={canManage && !["draft", "under_review", "rejected"].includes(s.status) && !s.bank_change_pending && <Button size="sm" variant="outline" onClick={() => setChangingBank(true)}><Pencil size={13} /> Change bank details</Button>}
+          >
+            {s.bank_change_pending && (() => {
+              const open = (q.data?.bankChanges || []).find((c: any) => ["pending_approval", "returned"].includes(c.status));
+              return (
+                <p className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                  <span>New bank details are waiting for Finance verification{open ? <> (<Link className="font-medium underline" to={`/dashboard/procurement/bank-changes/${open.id}`}>{open.number}</Link>)</> : null}. Payments keep going to the verified account below until it is approved.</span>
+                </p>
+              );
+            })()}
             <KeyValues
               items={[
                 { label: "Bank", value: s.bank_name },
@@ -149,12 +167,28 @@ export default function SupplierDetail() {
                 { label: "Account name", value: s.bank_account_name },
                 { label: "Account number", value: s.bank_account_number && <span className="font-mono">{s.bank_account_number}</span> },
                 { label: "SWIFT / BIC", value: s.swift_code },
+                ...(s.bank_verified_at ? [{ label: "Verified", value: <span className="inline-flex items-center gap-1.5 text-emerald-700"><ShieldCheck size={14} /> {format(new Date(s.bank_verified_at.replace(" ", "T")), "d MMM yyyy")}{q.data?.verifiedBy ? ` by ${(q.data.verifiedBy as any).name}` : ""}</span> }] : []),
               ]}
             />
+            {(q.data?.bankChanges || []).length > 0 && (
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <p className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-slate-500">Change requests</p>
+                <ul className="space-y-1.5">
+                  {(q.data?.bankChanges || []).slice(0, 5).map((c: any) => (
+                    <li key={c.id} className="flex items-center justify-between gap-2 text-[12.5px]">
+                      <Link to={`/dashboard/procurement/bank-changes/${c.id}`} className="font-mono font-medium text-primaryDark hover:underline">{c.number}</Link>
+                      <span className="truncate text-slate-500">{c.expand?.requested_by?.name} · {format(new Date(c.created.replace(" ", "T")), "d MMM yyyy")}</span>
+                      <StatusBadge status={c.status} map={BANK_CHANGE_STATUS} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Panel>
         </div>
       )}
 
+      {changingBank && <BankChangeDialog supplier={s} onClose={() => setChangingBank(false)} onDone={(id) => { setChangingBank(false); navigate(`/dashboard/procurement/bank-changes/${id}`); }} />}
       {tab === "contacts" && <Contacts supplierId={s.id} contacts={q.data!.contacts} canManage={canManage} />}
       {tab === "documents" && <Documents supplierId={s.id} documents={q.data!.documents} canManage={canManage} />}
 
@@ -200,6 +234,57 @@ export default function SupplierDetail() {
 
       <SupplierFormDialog open={editing} onClose={() => setEditing(false)} supplier={s} />
     </div>
+  );
+}
+
+const BANK_CHANGE_STATUS: Record<string, { label: string; tone: any }> = {
+  pending_approval: { label: "Waiting for Finance", tone: "warning" },
+  returned: { label: "Returned", tone: "warning" },
+  approved: { label: "Applied", tone: "success" },
+  rejected: { label: "Rejected", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+};
+
+/** New bank details for an approved supplier: a request to Finance, never a direct edit. */
+function BankChangeDialog({ supplier, onClose, onDone }: { supplier: any; onClose: () => void; onDone: (id: string) => void }) {
+  const [v, setV] = React.useState<Record<string, string>>(() => Object.fromEntries(BANK_LABELS.map(([k]) => [k, supplier[k] || ""])));
+  const [reason, setReason] = React.useState("");
+  const changed = BANK_LABELS.some(([k]) => (supplier[k] || "") !== (v[k] || "").trim());
+  const save = useMutation(() => pocketbase.send(`/api/ims/suppliers/${supplier.id}/bank-change`, { method: "POST", body: { ...v, reason: reason.trim() } }), {
+    onSuccess: (r: any) => {
+      toast.success(`${r.number} sent to Finance for verification`);
+      onDone(r.id);
+    },
+    onError: (e) => {
+      toast.error(errorMessage(e));
+    },
+  });
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg bg-white">
+        <DialogHeader>
+          <DialogTitle>Change bank details · {supplier.name}</DialogTitle>
+          <DialogDescription>Finance verifies the new details before they are used. Until then, payments go to the current verified account.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {BANK_LABELS.map(([k, label]) => (
+            <label key={k} className={cn("block text-[12.5px] font-medium text-slate-700", k === "bank_account_name" && "sm:col-span-2")}>
+              {label}{["bank_name", "bank_account_name", "bank_account_number"].includes(k) && <span className="text-red-600"> *</span>}
+              <input className={cn(inputCls, "mt-1", (supplier[k] || "") !== (v[k] || "").trim() && "border-amber-400 bg-amber-50/50", k === "bank_account_number" && "font-mono")} value={v[k]} onChange={(e) => setV((x) => ({ ...x, [k]: e.target.value }))} />
+            </label>
+          ))}
+          <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">
+            Reason and how the change was confirmed <span className="text-red-600">*</span>
+            <textarea className={cn(inputCls, "mt-1 h-20 py-2")} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Supplier moved its account to Equity Bank; bank letter uploaded under Documents; confirmed by phone with the finance manager on the number on file." />
+          </label>
+        </div>
+        <p className="text-[12px] text-slate-500">Upload the bank confirmation letter under Documents → Bank confirmation so Finance can check it.</p>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => save.mutate()} disabled={!changed || reason.trim().length < 10 || save.isLoading}><ShieldCheck size={14} /> Send to Finance</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

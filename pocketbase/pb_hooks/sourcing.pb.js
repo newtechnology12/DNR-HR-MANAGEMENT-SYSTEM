@@ -121,3 +121,32 @@ routerAdd("GET", "/api/dnr/suppliers/performance", (c) => {
   const one = c.queryParam("supplier");
   return c.json(200, { items: supplier.performance($app.dao(), one ? [one] : null) });
 }, $apis.requireRecordAuth());
+
+// ------------------------------------------------------------------ supplier bank details (IMS §3 rule 6)
+// POST /api/ims/suppliers/:id/bank-change   { bank_name, bank_branch, bank_account_name, bank_account_number, swift_code, reason }
+routerAdd("POST", "/api/ims/suppliers/:id/bank-change", (c) => {
+  const core = require(`${__hooks}/lib/core.js`);
+  const info = $apis.requestInfo(c);
+  let out;
+  $app.dao().runInTransaction((tx) => {
+    out = require(`${__hooks}/lib/supplierbank.js`).request(tx, c.pathParam("id"), info.authRecord, info.data || {}, core.requestMeta(c));
+  });
+  return c.json(200, { id: out.id, number: out.getString("number"), status: out.getString("status") });
+}, $apis.requireRecordAuth("users"));
+
+// POST /api/ims/supplier-bank-changes/:id/cancel   { reason }
+routerAdd("POST", "/api/ims/supplier-bank-changes/:id/cancel", (c) => {
+  const core = require(`${__hooks}/lib/core.js`);
+  const info = $apis.requestInfo(c);
+  let out;
+  $app.dao().runInTransaction((tx) => {
+    out = require(`${__hooks}/lib/supplierbank.js`).cancel(tx, c.pathParam("id"), info.authRecord, (info.data || {}).reason, core.requestMeta(c));
+  });
+  return c.json(200, { id: out.id, status: out.getString("status") });
+}, $apis.requireRecordAuth("users"));
+
+// Bank details are not shown to staff without a supplier, payables or audit role.
+onRecordsListRequest((e) => require(`${__hooks}/lib/supplierbank.js`).hideBankFields(e), "suppliers");
+onRecordViewRequest((e) => require(`${__hooks}/lib/supplierbank.js`).hideBankFields(e), "suppliers");
+onRecordsListRequest((e) => require(`${__hooks}/lib/supplierbank.js`).guardRequests(e), "supplier_bank_changes");
+onRecordViewRequest((e) => require(`${__hooks}/lib/supplierbank.js`).guardRequests(e), "supplier_bank_changes");

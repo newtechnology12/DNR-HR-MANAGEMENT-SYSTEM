@@ -11,7 +11,7 @@
     "seed:demo": "node scripts/seed-demo.mjs && node scripts/seed-ims.mjs && node scripts/seed-budget.mjs && node scripts/seed-procurement.mjs && node scripts/seed-procurement2.mjs && node scripts/seed-portal.mjs && node scripts/seed-hr.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite build && vite preview",
-    "test:api": "node scripts/test-procurement.mjs && node scripts/test-portal.mjs && node scripts/test-hr.mjs && node scripts/test-procurement2.mjs && node scripts/test-ims.mjs && node scripts/test-budget.mjs",
+    "test:api": "node scripts/test-procurement.mjs && node scripts/test-portal.mjs && node scripts/test-hr.mjs && node scripts/test-procurement2.mjs && node scripts/test-ims.mjs && node scripts/test-budget.mjs && node scripts/test-procurement-links.mjs",
     "seed:ralga": "node scripts/seed-demo.mjs && node scripts/seed-org-ralga.mjs && node scripts/seed-ims.mjs && node scripts/seed-budget.mjs && node scripts/seed-procurement.mjs && node scripts/seed-procurement2.mjs && node scripts/seed-portal.mjs && node scripts/seed-hr.mjs"
   },
   "dependencies": {

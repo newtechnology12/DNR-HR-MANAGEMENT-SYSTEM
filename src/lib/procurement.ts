@@ -390,7 +390,13 @@ export const phase5Api = {
   contractAlerts: () => pocketbase.send("/api/dnr/contracts/alerts", {}) as Promise<{ items: { contract: string; number: string; title: string; key: string; level: string; text: string }[] }>,
   contractUse: (id: string) => pocketbase.send(`/api/dnr/contracts/${id}/utilisation`, {}) as Promise<{ value: number; used: number; orders: number; remaining: number }>,
   planAction: (id: string, action: "submit" | "close", body: Record<string, unknown> = {}) => pocketbase.send(`/api/dnr/plans/${id}/${action}`, { method: "POST", body }),
-  planProgress: (id: string) => pocketbase.send(`/api/dnr/plans/${id}/progress`, {}) as Promise<{ lines: Record<string, { requested: number; ordered: number; received: number; requisitions: any[] }>; budget: any }>,
+  planProgress: (id: string) =>
+    pocketbase.send(`/api/dnr/plans/${id}/progress`, {}) as Promise<{
+      lines: Record<string, { requested: number; ordered: number; received: number; requisitions: any[] }>;
+      budget: any;
+      /** Planned total per budget line against what the line holds. */
+      coverage?: { id: string; code: string; name: string; budget: number; available: number; planned: number; over: number }[];
+    }>,
   report: (key: string, f: Record<string, string>) =>
     pocketbase.send(`/api/dnr/procurement/reports/${key}?${new URLSearchParams(Object.fromEntries(Object.entries(f).filter(([, v]) => v)))}`, {}) as Promise<{ key: string; title: string; columns: { key: string; label: string; type: string }[]; rows: any[]; totals: Record<string, number>; note: string; generated_at: string }>,
 };

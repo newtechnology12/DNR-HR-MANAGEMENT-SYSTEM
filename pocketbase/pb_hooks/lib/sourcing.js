@@ -73,6 +73,8 @@ function supplierBeforeCreate(e) {
 function supplierBeforeUpdate(e) {
   need(e, "manage_suppliers", "edit suppliers");
   require("./supplier.js").guardStatus(e);
+  // Approved suppliers: bank details change only through a Finance-approved request (IMS §3 rule 6).
+  require("./supplierbank.js").guardDirectEdit(e);
   restore(e.record, ["code", "rating", "evaluations_count", "created_by"]);
   assertNoDuplicateSupplier($app.dao(), e.record);
   const changes = core.diff(e.record.originalCopy(), e.record);

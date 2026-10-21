@@ -2,8 +2,9 @@
 /**
  * Procurement phase 5 demo data, created through the API by real users (so approvals, separation of
  * duties and stock rules are exercised): rights, settings, approval workflows for suppliers, returns,
- * contracts and plans; a supplier in onboarding; contracts (one expiring); department procurement plans;
- * a purchase return that is approved, dispatched and credited.
+ * contracts and plans; a supplier in onboarding; contracts (one expiring); department procurement plans
+ * charged to budget lines; a supplier bank-details change waiting for Finance; a purchase return that is
+ * approved, dispatched and credited.
  *
  * Run after seed-procurement.mjs. Re-running replaces this data.
  */
@@ -18,6 +19,8 @@ if (!/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(PB_URL) && process.e
 const admin = new PocketBase(PB_URL);
 admin.autoCancellation(false);
 const Y = new Date().getFullYear();
+// Plans follow the fiscal year (July–June): the plan year is the year the current fiscal year starts.
+const FY0 = new Date().getMonth() >= 6 ? Y : Y - 1;
 const day = (n) => new Date(Date.now() + n * 864e5).toISOString().replace("T", " ");
 async function login(email) {
   const pb = new PocketBase(PB_URL);
@@ -51,7 +54,9 @@ async function main() {
   for (const col of ["purchase_returns", "procurement_plan_lines", "procurement_plans"]) for (const r of await admin.collection(col).getFullList({ fields: "id" })) await admin.collection(col).delete(r.id).catch(() => null);
   for (const r of await admin.collection("contracts").getFullList({ fields: "id" })) await admin.collection("contracts").delete(r.id).catch(() => null);
   for (const s of await admin.collection("suppliers").getFullList({ filter: 'status = "draft" || status = "under_review" || status = "rejected"', fields: "id" })) await admin.collection("suppliers").delete(s.id).catch(() => null);
-  for (const t of ["supplier", "purchase_return", "contract", "procurement_plan"]) {
+  for (const r of await admin.collection("supplier_bank_changes").getFullList({ fields: "id" })) await admin.collection("supplier_bank_changes").delete(r.id).catch(() => null);
+  for (const s of await admin.collection("suppliers").getFullList({ filter: "bank_change_pending = true", fields: "id" })) await admin.collection("suppliers").update(s.id, { bank_change_pending: false });
+  for (const t of ["supplier", "supplier_bank_change", "purchase_return", "contract", "procurement_plan"]) {
     for (const a of await admin.collection("approval_requests").getFullList({ filter: `document_type = "${t}"`, fields: "id" })) await admin.collection("approval_requests").delete(a.id).catch(() => null);
     for (const w of await admin.collection("approval_workflows").getFullList({ filter: `document_type = "${t}"`, fields: "id" })) await admin.collection("approval_workflows").delete(w.id);
   }
@@ -65,6 +70,9 @@ async function main() {
   await wf("Supplier onboarding", "supplier", [
     { name: "Finance check (bank details, tax clearance)", approver_type: "role", role: FM },
   ], 0, 0, "Procurement registers and submits; Finance checks bank details and tax clearance before the supplier can receive RFQs or orders. Changes to bank details need this approval again.");
+  await wf("Supplier bank details change", "supplier_bank_change", [
+    { name: "Finance verification of the new bank details", approver_type: "role", role: FM },
+  ], 0, 0, "Procurement requests new bank details for an approved supplier; Finance checks the bank letter and calls the supplier back before payments use them.");
   await wf("Purchase return approval", "purchase_return", [{ name: "Procurement approval", approver_type: "role", role: PM, fallback_role: FM }]);
   await wf("Contract approval", "contract", [
     { name: "Finance and legal review", approver_type: "role", role: FM },
@@ -137,6 +145,20 @@ async function main() {
   // Procurement plans.
   const depts = Object.fromEntries((await admin.collection("departments").getFullList()).map((d) => [d.name, d.id]));
   const catBy = (re) => (cats.find((c) => re.test(c.name)) || cats[0]).id;
+  // Each planned purchase goes on the department's budget line for the category's account when it has room,
+  // otherwise on the department line with the most room left.
+  const fy = await admin.collection("fiscal_years").getFirstListItem(`start_date >= "${FY0}-01-01 00:00:00" && start_date <= "${FY0}-12-31 23:59:59"`).catch(() => null);
+  const room = {};
+  const lineFor = async (deptId, categoryId, amount) => {
+    if (!fy) return "";
+    const lines = await admin.collection("budget_lines").getFullList({ filter: `status = "active" && kind != "revenue" && department = "${deptId}" && fiscal_year = "${fy.id}"`, sort: "code" });
+    for (const l of lines) if (room[l.id] === undefined) room[l.id] = l.revised_amount;
+    const account = cats.find((c) => c.id === categoryId)?.expense_account;
+    const pick = lines.find((l) => l.gl_account === account && room[l.id] >= amount) || lines.filter((l) => room[l.id] >= amount).sort((a, b) => room[b.id] - room[a.id])[0];
+    if (!pick) return "";
+    room[pick.id] -= amount;
+    return pick.id;
+  };
   const PLANS = [
     // Plans are consolidated by the Procurement Officer (the only role allowed to prepare them) per department.
     [proc, "ICT and Digital Services", [["Laptops for new staff", 12, "Each", 1150000, 2, "high", "rfq", /it|ict|computer/i], ["E-learning platform hosting renewal", 1, "Year", 9600000, 7, "high", "direct", /service|software|ict/i], ["Network switches (48 ports)", 3, "Each", 2100000, 4, "medium", "rfq", /it|ict/i], ["UPS for server room", 2, "Each", 3200000, 5, "medium", "rfq", /it|ict/i]], true],
@@ -144,14 +166,28 @@ async function main() {
     [proc, "Procurement", [["Office stationery (annual)", 1, "Lot", 7800000, 1, "medium", "framework", /stationer|office/i], ["Toner cartridges", 60, "Each", 87000, 4, "medium", "framework", /stationer|office|it/i]], false],
   ];
   for (const [who, dept, lines, approve] of PLANS) {
-    const plan = await who.collection("procurement_plans").create({ fiscal_year: Y + 1, department: depts[dept], notes: `Prepared from the ${Y + 1} action plan of the department.` });
+    const plan = await who.collection("procurement_plans").create({ fiscal_year: FY0, department: depts[dept], notes: `Prepared from the FY ${FY0}/${String(FY0 + 1).slice(2)} action plan of the department.` });
     for (const [i, [description, quantity, unit, cost, month, priority, method, cre]] of lines.entries()) {
-      await who.collection("procurement_plan_lines").create({ plan: plan.id, description, quantity, unit, estimated_unit_cost: cost, planned_month: month, priority, method, category: catBy(cre), sort: i + 1 });
+      const category = catBy(cre);
+      const budget_line = await lineFor(depts[dept], category, quantity * cost);
+      await who.collection("procurement_plan_lines").create({ plan: plan.id, description, quantity, unit, estimated_unit_cost: cost, planned_month: month, priority, method, category, budget_line, sort: i + 1 });
     }
     if (approve) {
       await who.send(`/api/dnr/plans/${plan.id}/submit`, { method: "POST" });
       await approveAll("procurement_plans", plan.id);
     }
+  }
+
+  // A supplier moves its account: Procurement requests the change, Finance has not verified it yet.
+  const mover = active[1] || active[0];
+  if (mover) {
+    await proc.send(`/api/ims/suppliers/${mover.id}/bank-change`, {
+      method: "POST",
+      body: {
+        bank_name: "Equity Bank Rwanda", bank_branch: "Kigali City Tower", bank_account_name: mover.bank_account_name || mover.name, bank_account_number: "4002100778812", swift_code: "EQBLRWRW",
+        reason: "The supplier moved its operating account to Equity Bank. Bank letter dated this week is under Documents; the change was confirmed by phone with their finance manager on the number on file.",
+      },
+    });
   }
 
   // Purchase return from a goods receipt with stock.
@@ -168,7 +204,7 @@ async function main() {
   }
 
   const count = async (c, f = "") => (await admin.collection(c).getList(1, 1, { filter: f })).totalItems;
-  console.log(`  ✓ workflows, rights and settings · suppliers under review: ${await count("suppliers", 'status = "under_review"')} · contracts: ${await count("contracts")} (${await count("contracts", 'status = "active"')} active) · plans: ${await count("procurement_plans")} (${await count("procurement_plans", 'status = "approved"')} approved) · returns: ${await count("purchase_returns")}`);
+  console.log(`  ✓ workflows, rights and settings · suppliers under review: ${await count("suppliers", 'status = "under_review"')} · bank changes waiting: ${await count("supplier_bank_changes", 'status = "pending_approval"')} · contracts: ${await count("contracts")} (${await count("contracts", 'status = "active"')} active) · plans: ${await count("procurement_plans")} (${await count("procurement_plans", 'status = "approved"')} approved) · returns: ${await count("purchase_returns")}`);
 }
 
 main().catch((e) => {

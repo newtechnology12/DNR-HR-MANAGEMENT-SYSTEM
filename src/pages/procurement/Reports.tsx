@@ -14,8 +14,8 @@ import { cn } from "@/utils";
 const GROUPS: { title: string; items: [string, string][] }[] = [
   { title: "Spend", items: [["spend", "Spend by month"], ["supplier_spend", "Spend by supplier"], ["category_spend", "Spend by category"], ["department_spend", "Spend by department"], ["budget", "Budget vs actual"]] },
   { title: "Documents", items: [["requisitions", "Purchase requisitions"], ["rfqs", "Requests for quotation"], ["quotations", "Supplier quotations"], ["purchase_orders", "Purchase orders"], ["goods_receipts", "Goods received"], ["returns", "Purchase returns"], ["contracts", "Contracts"]] },
-  { title: "Follow-up", items: [["pending_approvals", "Pending approvals"], ["outstanding_pos", "Outstanding purchase orders"], ["overdue_deliveries", "Overdue deliveries"], ["invoice_matching", "Invoice matching"]] },
-  { title: "Suppliers and control", items: [["supplier_performance", "Supplier performance"], ["audit", "Procurement audit trail"]] },
+  { title: "Follow-up", items: [["pending_approvals", "Pending approvals"], ["outstanding_pos", "Outstanding purchase orders"], ["overdue_deliveries", "Overdue deliveries"], ["invoice_matching", "Invoice matching"], ["plan_execution", "Procurement plan execution"]] },
+  { title: "Suppliers and control", items: [["supplier_balances", "Supplier balances"], ["supplier_performance", "Supplier performance"], ["audit", "Procurement audit trail"]] },
 ];
 const STATUS_MAPS = { ...DOC_STATUS, ...RFQ_STATUS, ...PO_STATUS, ...INVOICE_STATUS, ...RETURN_STATUS, ...CONTRACT_STATUS, matched: { label: "Matched", tone: "success" }, partial: { label: "Partial match", tone: "warning" }, exception: { label: "Exception", tone: "danger" } } as any;
 const fmt = (type: string, v: any) => {

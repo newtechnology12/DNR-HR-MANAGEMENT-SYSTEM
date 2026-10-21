@@ -10,6 +10,12 @@ function approved(dao, type, doc, actor, meta) {
   if (type === "budget_revision") return budget.onRevisionApproved(dao, doc, actor, meta);
   if (type === "purchase_order") return budget.commitPo(dao, doc, actor, meta);
   if (type === "supplier_invoice") return budget.invoiceApproved(dao, doc, actor, meta);
+  if (type === "supplier_bank_change") return require("./supplierbank.js").onApproved(dao, doc, actor, meta);
 }
 
-module.exports = { approved };
+/** Rejected or returned by an approver. */
+function closed(dao, type, doc) {
+  if (type === "supplier_bank_change") return require("./supplierbank.js").onClosed(dao, doc);
+}
+
+module.exports = { approved, closed };

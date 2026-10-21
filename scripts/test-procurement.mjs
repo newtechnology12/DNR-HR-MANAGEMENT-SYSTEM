@@ -168,12 +168,18 @@ await check("duplicate suppliers are refused (same name, different case)", async
   const existing = await procurement.collection("suppliers").getFirstListItem(`status = "active"`);
   await expectStatus(procurement.collection("suppliers").create({ name: existing.name.toUpperCase() }), 400, "already exists");
 });
-await check("changing supplier bank details is separately audited", async () => {
+await check("bank details of an approved supplier change only through an audited request", async () => {
   const s = await procurement.collection("suppliers").getFirstListItem(`status = "active"`);
-  await procurement.collection("suppliers").update(s.id, { bank_account_number: `${s.bank_account_number}9` });
-  await procurement.collection("suppliers").update(s.id, { bank_account_number: s.bank_account_number });
-  const log = await procurement.send(`/api/dnr/audit?collection=suppliers&record=${s.id}`, {});
-  assert(log.items.some((i) => i.action === "bank_details_changed"), "no bank_details_changed audit entry");
+  try {
+    await procurement.collection("suppliers").update(s.id, { bank_account_number: `${s.bank_account_number}9` });
+    throw new Error("direct bank detail change was accepted");
+  } catch (e) {
+    assert(e.status === 400, `expected 400, got ${e.status}: ${e.message}`);
+  }
+  // Requests and approvals are covered in test-procurement-links.mjs; the seeded request is audited here.
+  const pending = await procurement.collection("supplier_bank_changes").getFirstListItem(`status = "pending_approval"`);
+  const log = await procurement.send(`/api/dnr/audit?collection=suppliers&record=${pending.supplier}`, {});
+  assert(log.items.some((i) => i.action === "bank_change_requested"), "no bank_change_requested audit entry");
 });
 await check("quotation totals are computed by the server", async () => {
   const q = await procurement.collection("quotations").getFirstListItem(`id != ""`);

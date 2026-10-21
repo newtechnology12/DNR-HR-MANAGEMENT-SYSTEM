@@ -116,6 +116,18 @@ const DOCS = {
       requester: doc.getString("submitted_by"), number: doc.getString("code"), title: `Supplier registration: ${doc.getString("name")}`,
     }),
   },
+  supplier_bank_change: {
+    collection: "supplier_bank_changes",
+    approvePermission: "approve_suppliers",
+    label: "supplier bank details change",
+    link: (id) => `/dashboard/procurement/bank-changes/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    // Whoever asked for the new details cannot verify them.
+    context: (doc) => ({
+      amount: 0, currency: "RWF", department: "", category: "", branch: "",
+      requester: doc.getString("requested_by"), number: doc.getString("number"), title: `New bank details for ${doc.getString("supplier_name")}`,
+    }),
+  },
   purchase_return: {
     collection: "purchase_returns",
     approvePermission: "approve_purchase_returns",
@@ -705,6 +717,7 @@ function act(dao, approvalId, actor, input, meta) {
   dao.saveRecord(doc);
   // Module effects of a final approval (budget activation, commitments, actuals…) run in this transaction.
   if (docStatusChange && docStatusChange === def.status.approved) require("./effects.js").approved(dao, type, doc, actor, meta);
+  else if (docStatusChange) require("./effects.js").closed(dao, type, doc, actor, meta);
 
   core.audit(dao, {
     actor, action: `approval_${action}`, collection: def.collection, recordId: doc.id, label: number, meta,

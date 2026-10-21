@@ -87,9 +87,7 @@ onRecordAfterCreateRequest((e) => require(`${__hooks}/lib/planning.js`).recount(
 onRecordAfterUpdateRequest((e) => require(`${__hooks}/lib/planning.js`).recount($app.dao(), e.record.getString("plan")), "procurement_plan_lines");
 onRecordAfterDeleteRequest((e) => require(`${__hooks}/lib/planning.js`).recount($app.dao(), e.record.getString("plan")), "procurement_plan_lines");
 
-// Requisitions raised against a plan line must fit an approved plan of the same department.
-onRecordBeforeCreateRequest((e) => require(`${__hooks}/lib/planning.js`).checkRequisition($app.dao(), e.record), "purchase_requisitions");
-onRecordBeforeUpdateRequest((e) => require(`${__hooks}/lib/planning.js`).checkRequisition($app.dao(), e.record), "purchase_requisitions");
+// Requisitions raised against a plan line are checked in lib/requisitions.js (after the department is set).
 
 // POST /api/dnr/plans/:id/{submit|close}
 routerAdd("POST", "/api/dnr/plans/:id/:action", (c) => {

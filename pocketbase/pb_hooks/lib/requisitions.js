@@ -73,6 +73,8 @@ function beforeCreate(e) {
   normalizeItems(r);
   // The budget line must belong to the requester's department (organisation-wide scope may pick any).
   require("./budget.js").attachLine(dao, r, { department: r.getString("department"), anyDepartment: Boolean(requester) && core.permissionsOf(dao, requester).__scope === "all" });
+  // A planned purchase must come from an approved plan of the department; it brings its budget line.
+  require("./planning.js").checkRequisition(dao, r);
   let number = "";
   dao.runInTransaction((tx) => {
     number = core.nextNumber(tx, "purchase_requisition");
@@ -97,6 +99,7 @@ function beforeUpdate(e) {
   }
   normalizeItems(r);
   require("./budget.js").attachLine($app.dao(), r, { department: r.getString("department"), anyDepartment: Boolean(auth) && core.permissionsOf($app.dao(), auth).__scope === "all" });
+  require("./planning.js").checkRequisition($app.dao(), r);
   // An override covers one line and amount; a new line needs a new override.
   if (before.getString("budget_line") !== r.getString("budget_line")) r.set("budget_override", "");
   const changes = core.diff(before, r);

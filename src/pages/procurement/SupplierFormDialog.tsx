@@ -53,6 +53,8 @@ export default function SupplierFormDialog({
   const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setV((x) => ({ ...x, [k]: e.target.value }));
   const bankChanged = supplier && BANK.some((k) => (supplier[k] || "") !== (v[k] || ""));
+  // Approved suppliers: bank details change only through a request verified by Finance (IMS §3 rule 6).
+  const bankLocked = Boolean(supplier && !["draft", "rejected"].includes(supplier.status));
 
   const save = useMutation(
     () => {
@@ -154,12 +156,18 @@ export default function SupplierFormDialog({
 
           <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <legend className="mb-2 text-[13px] font-semibold text-slate-900">Bank details</legend>
-            <F label="Bank"><input className={inputCls} value={v.bank_name} onChange={set("bank_name")} /></F>
-            <F label="Branch"><input className={inputCls} value={v.bank_branch} onChange={set("bank_branch")} /></F>
-            <F label="SWIFT / BIC"><input className={inputCls} value={v.swift_code} onChange={set("swift_code")} /></F>
-            <F label="Account name" className="sm:col-span-2"><input className={inputCls} value={v.bank_account_name} onChange={set("bank_account_name")} /></F>
-            <F label="Account number"><input className={inputCls} value={v.bank_account_number} onChange={set("bank_account_number")} /></F>
-            {bankChanged && (
+            <F label="Bank"><input className={inputCls} value={v.bank_name} onChange={set("bank_name")} disabled={bankLocked} /></F>
+            <F label="Branch"><input className={inputCls} value={v.bank_branch} onChange={set("bank_branch")} disabled={bankLocked} /></F>
+            <F label="SWIFT / BIC"><input className={inputCls} value={v.swift_code} onChange={set("swift_code")} disabled={bankLocked} /></F>
+            <F label="Account name" className="sm:col-span-2"><input className={inputCls} value={v.bank_account_name} onChange={set("bank_account_name")} disabled={bankLocked} /></F>
+            <F label="Account number"><input className={inputCls} value={v.bank_account_number} onChange={set("bank_account_number")} disabled={bankLocked} /></F>
+            {bankLocked && (
+              <p className="flex items-start gap-2 rounded-md bg-slate-50 px-3 py-2 text-[12.5px] text-slate-600 sm:col-span-3">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0 text-slate-400" />
+                Bank details of an approved supplier are changed with “Change bank details” on the supplier page and verified by Finance before any payment uses them.
+              </p>
+            )}
+            {bankChanged && !bankLocked && (
               <p className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 sm:col-span-3">
                 <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                 Bank detail changes are recorded separately in the audit log and alert all supplier managers. Confirm the change with the supplier by phone before saving.

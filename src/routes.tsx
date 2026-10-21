@@ -66,6 +66,7 @@ const ProcurementSettings = lazy(() => import("./pages/procurement/ProcurementSe
 const AuditLog = lazy(() => import("./pages/procurement/AuditLog"));
 const Suppliers = lazy(() => import("./pages/procurement/Suppliers"));
 const SupplierDetail = lazy(() => import("./pages/procurement/SupplierDetail"));
+const BankChangeDetail = lazy(() => import("./pages/procurement/BankChangeDetail"));
 const Rfqs = lazy(() => import("./pages/procurement/Rfqs"));
 const RfqDetail = lazy(() => import("./pages/procurement/RfqDetail"));
 const RfqPrint = lazy(() => import("./pages/procurement/RfqPrint"));
@@ -594,6 +595,14 @@ const router = createBrowserRouter([
                     element: (
                       <ProtectedRoute entity={SUPPLIER_USERS}>
                         <SupplierDetail />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "bank-changes/:changeId",
+                    element: (
+                      <ProtectedRoute entity={[...SUPPLIER_USERS, "approve_suppliers"]}>
+                        <BankChangeDetail />
                       </ProtectedRoute>
                     ),
                   },

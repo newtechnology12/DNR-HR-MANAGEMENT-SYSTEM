@@ -61,6 +61,7 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   payroll: "Payroll",
   budget: "Budget",
   budget_revision: "Budget revision",
+  supplier_bank_change: "Supplier bank details change",
   payment_voucher: "Payment voucher",
   journal_entry: "Journal entry",
   asset_disposal: "Asset disposal",
@@ -79,6 +80,7 @@ export const DOCUMENT_LINKS: Record<string, (id: string) => string> = {
   payroll: (id) => `/dashboard/hr/payroll/${id}`,
   budget: (id) => `/dashboard/budget/budgets/${id}`,
   budget_revision: (id) => `/dashboard/budget/revisions/${id}`,
+  supplier_bank_change: (id) => `/dashboard/procurement/bank-changes/${id}`,
 };
 
 const qs = (params: Record<string, unknown>) =>

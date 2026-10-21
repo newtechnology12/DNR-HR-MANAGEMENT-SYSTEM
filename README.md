@@ -13,7 +13,7 @@ Built by DNR Partners.
 |---|---|---|
 | 1 | Foundation: 13 roles, permission matrix (two-person confirmation), users & security (2FA, lockout, password policy, session timeout), audit log, approval engine (limits, delegations, overdue escalation), master data (fiscal years, chart of accounts, funding sources, projects, cost centres, tax rates) | **Done** |
 | 2 | Budgeting & budget control (M2): budgets by line with monthly phasing and Excel import, revisions (supplementary, reduction, virement, re-phasing), hard-stop control with DAF override, commitments from POs, actuals from invoices, utilisation dashboard, budget vs actual, commitments and overrides reports | **Done** |
-| 3 | Procurement, suppliers, PO, GRN (M3) | Existing module — requisitions and POs now charged to budget lines; supplier bank-detail re-approval and plan ↔ budget links next |
+| 3 | Procurement, suppliers, PO, GRN (M3): requisitions, POs and procurement plan lines charged to budget lines (plans cannot exceed a line), supplier bank-detail changes verified by Finance, supplier balances and plan execution reports | **Done** |
 | 4 | Supplier invoices & payment vouchers (M4) | Planned |
 | 5 | Bank & cash, reconciliation (M5) | Planned |
 | 6 | Payroll (M6) | Existing module — GL posting and funding split to add |
@@ -134,6 +134,14 @@ SG approve. Only approved lines can be charged.
   what is committed or spent; a virement must net to zero.
 - Utilisation status: green < 75 %, amber 75–90 %, red > 90 % (settings `budget_amber_pct` / `budget_red_pct`).
 
+## Supplier bank details
+
+Once a supplier is approved, its bank details are locked. Procurement asks for new details with
+*Change bank details* on the supplier page (reason required; the bank letter goes under Documents). Finance
+(`approve_suppliers`) verifies them — the requester cannot — and only then are they applied; until then
+payments keep going to the verified account. Old and new details stay on the request; every step is
+audited. Bank details are visible only to supplier, payables and audit roles.
+
 ## Security
 
 | Control | Default (Settings) |
@@ -190,4 +198,5 @@ and press *Confirm* (the source is recorded in the audit log).
 self-approval blocked, double approval blocked, admins / auditors cannot approve, roles cannot be changed
 without confirmation, lockout and 2FA, password policy, settings guards, chart-of-accounts rules,
 overlapping tax rates, approval limits and delegations, budget hard stop and override rules, commitments and
-actuals reconciling to the ledger, virement and reduction rules, and department scoping of budget figures.
+actuals reconciling to the ledger, virement and reduction rules, department scoping of budget figures, supplier
+bank-detail changes (no direct edit, no self-verification, visibility), and plan lines tied to budget lines.

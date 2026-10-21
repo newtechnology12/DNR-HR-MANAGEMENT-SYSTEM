@@ -10,6 +10,7 @@ import RecordTable, { RecordColumn, RecordView } from "@/components/enterprise/R
 import { PageHeader, StatusBadge } from "@/components/enterprise/ui";
 import { PLAN_STATUS, errorMessage, money } from "@/lib/procurement";
 import { Field, FormBlock, FormDialog, inputCls, useMe } from "@/components/portal/kit";
+import { fyLabel, useFiscalYears } from "@/lib/fiscal";
 
 export default function Plans() {
   const navigate = useNavigate();
@@ -17,18 +18,18 @@ export default function Plans() {
   const { canPerform } = useRoles();
   const [creating, setCreating] = React.useState(false);
   const view = params.get("view") || "all";
-  const y = new Date().getFullYear();
+  const years = useFiscalYears();
+  const current = years.data?.find((f) => f.is_current);
   const views: RecordView[] = [
     { key: "all", label: "All plans" },
-    { key: "next", label: `${y + 1}`, filter: `fiscal_year = ${y + 1}` },
-    { key: "current", label: `${y}`, filter: `fiscal_year = ${y}` },
+    ...(current ? [{ key: "current", label: current.name, filter: `fiscal_year = ${current.year}` }, { key: "next", label: fyLabel(current.year + 1), filter: `fiscal_year = ${current.year + 1}` }] : []),
     { key: "approval", label: "In approval", filter: `status = "pending_approval"` },
     { key: "approved", label: "Approved", filter: `status = "approved"` },
   ];
   const columns: RecordColumn<any>[] = [
     { key: "number", header: "Plan", sortField: "number", cell: (r) => <span className="whitespace-nowrap font-medium">{r.number}</span> },
     { key: "name", header: "Name", className: "max-w-[320px]", cell: (r) => <span className="line-clamp-1">{r.name}</span>, csv: (r) => r.name },
-    { key: "year", header: "Year", sortField: "fiscal_year", cell: (r) => r.fiscal_year, csv: (r) => r.fiscal_year },
+    { key: "year", header: "Fiscal year", sortField: "fiscal_year", cell: (r) => fyLabel(r.fiscal_year), csv: (r) => fyLabel(r.fiscal_year) },
     { key: "department", header: "Department", cell: (r) => <span className="whitespace-nowrap">{r.expand?.department?.name}</span>, csv: (r) => r.expand?.department?.name },
     { key: "lines", header: "Planned purchases", align: "right", cell: (r) => <span className="tabular-nums">{r.lines_count}</span>, csv: (r) => r.lines_count },
     { key: "total", header: "Estimated total", sortField: "total_estimated", align: "right", cell: (r) => <span className="whitespace-nowrap font-medium tabular-nums">{money(r.total_estimated)}</span>, csv: (r) => r.total_estimated },
@@ -64,8 +65,12 @@ export default function Plans() {
 function NewPlanDialog({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const me = useMe();
-  const y = new Date().getFullYear();
-  const [v, setV] = React.useState({ fiscal_year: y + 1, department: "", notes: "" });
+  const years = useFiscalYears();
+  const [v, setV] = React.useState({ fiscal_year: 0, department: "", notes: "" });
+  React.useEffect(() => {
+    const open = (years.data || []).filter((f) => f.status === "open");
+    if (!v.fiscal_year && open.length) setV((x) => ({ ...x, fiscal_year: (open.find((f) => f.is_current) || open[0]).year }));
+  }, [years.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const depts = useQuery(["departments-simple"], () => pocketbase.collection("departments").getFullList({ sort: "name", fields: "id,name" }));
   React.useEffect(() => {
     if (me.data && !v.department) setV((x) => ({ ...x, department: me.data!.department }));
@@ -80,11 +85,11 @@ function NewPlanDialog({ onClose }: { onClose: () => void }) {
     },
   });
   return (
-    <FormDialog open onClose={onClose} icon={CalendarRange} title="New procurement plan" description="One plan per department and year." submitLabel="Create plan" busy={save.isLoading} onSubmit={() => v.department && save.mutate()}>
+    <FormDialog open onClose={onClose} icon={CalendarRange} title="New procurement plan" description="One plan per department and fiscal year. Each planned purchase is charged to a budget line." submitLabel="Create plan" busy={save.isLoading} onSubmit={() => v.department && v.fiscal_year && save.mutate()}>
       <FormBlock icon={ClipboardList} title="Plan">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Fiscal year" required>
-            <select className={inputCls} value={v.fiscal_year} onChange={(e) => setV((x) => ({ ...x, fiscal_year: Number(e.target.value) }))}>{[y, y + 1, y + 2].map((n) => <option key={n}>{n}</option>)}</select>
+            <select className={inputCls} value={v.fiscal_year} onChange={(e) => setV((x) => ({ ...x, fiscal_year: Number(e.target.value) }))}>{(years.data || []).filter((f) => f.status === "open").map((f) => <option key={f.id} value={f.year}>{f.name}{f.is_current ? " (current)" : ""}</option>)}</select>
           </Field>
           <Field label="Department" required>
             <select className={inputCls} value={v.department} onChange={(e) => setV((x) => ({ ...x, department: e.target.value }))}>{(depts.data || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
