@@ -179,6 +179,7 @@ const MyPlans = lazy(() => import("./pages/my/MyPlans"));
 const PlanEditor = lazy(() => import("./pages/my/PlanEditor"));
 const WorkPlanDetail = lazy(() => import("./pages/my/PlanDetail"));
 const Help = lazy(() => import("./pages/my/Help"));
+const UiKit = lazy(() => import("./pages/UiKit"));
 const AttendanceCorrections = lazy(() => import("./pages/hr/AttendanceCorrections"));
 const APPROVAL_USERS = [...APPROVER_PERMISSIONS, "create_purchase_requisition"];
 const DELEGATION_USERS = [...APPROVER_PERMISSIONS, "manage_delegations"];
@@ -309,6 +310,7 @@ const router = createBrowserRouter([
                     element: <ProtectedRoute entity="access_employee_portal">{page}</ProtectedRoute>,
                   })),
                   { path: "help", element: <Help /> },
+                  { path: "ui-kit", element: <UiKit /> },
                   ...[
                     ["employee-portal/plans/new", <ActionPlanForm />],
                     ["employee-portal/plans/:planId", <ActionPlanDetail />],

@@ -4,30 +4,33 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/utils";
 
+// Same four kinds as the ims kit (src/components/ims/Button.tsx): primary navy, secondary white with a
+// border, danger red, link blue. Older colour variants (info / success / warning) map onto them.
+const PRIMARY = "bg-ims-primary text-white hover:bg-ims-primary-hover";
+const SECONDARY = "border border-ims-field bg-ims-card text-ims-text hover:bg-ims-subtle";
+const DANGER = "bg-ims-danger text-white hover:bg-ims-danger-hover";
+
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-btn text-[14px] font-medium ring-offset-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 dark:ring-offset-slate-950 dark:focus-visible:ring-slate-300",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-control text-[14px] font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-55 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primaryDark",
-        info: "bg-info text-info-foreground hover:bg-info/90",
-        success: "bg-success text-success-foreground hover:bg-success/90",
-        warning: "bg-warning text-warning-foreground hover:bg-warning/90",
-        destructive: "bg-danger text-danger-foreground hover:bg-danger/90",
-        danger: "bg-danger text-danger-foreground hover:bg-danger/90",
-        outline:
-          "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-600 dark:hover:text-slate-50",
-        secondary:
-          "bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-50 dark:hover:bg-slate-800/80",
-        ghost:
-          "hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-50",
-        link: "text-primary underline-offset-4 hover:underline",
+        default: PRIMARY,
+        info: PRIMARY,
+        success: PRIMARY,
+        warning: SECONDARY,
+        destructive: DANGER,
+        danger: DANGER,
+        outline: SECONDARY,
+        secondary: SECONDARY,
+        ghost: "text-ims-muted hover:bg-ims-subtle hover:text-ims-text",
+        link: "h-auto px-0 text-ims-link underline-offset-4 hover:text-ims-primary hover:underline",
       },
       size: {
-        default: "h-9 px-4 text-[13.5px] py-2",
-        sm: "h-8 text-[12.7px] rounded-btn px-3",
-        lg: "h-11 rounded-btn px-6 text-[15px]",
-        icon: "h-9 w-9",
+        default: "h-button px-4",
+        sm: "h-[34px] px-3 text-[13px]",
+        lg: "h-control px-5",
+        icon: "h-button w-10",
       },
     },
     defaultVariants: {

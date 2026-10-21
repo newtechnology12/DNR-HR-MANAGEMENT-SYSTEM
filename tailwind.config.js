@@ -1,4 +1,9 @@
 /** @type {import('tailwindcss').Config} */
+// Colours, type, radius, heights and shadows come from src/design/tokens.json (the one design source).
+const tokens = require("./src/design/tokens.json");
+
+const fontSize = Object.fromEntries(Object.entries(tokens.fontSize).map(([k, v]) => [`t-${k}`, v]));
+
 module.exports = {
   darkMode: ["class"],
   content: [
@@ -22,11 +27,15 @@ module.exports = {
         ms: "500px",
       },
       fontFamily: {
-        sans: ["InterVariable", "Inter", "sans-serif"],
+        sans: tokens.font.sans,
+        mono: tokens.font.mono,
       },
+      // text-t-title, text-t-section, text-t-body, text-t-small, text-t-label, text-t-hint, text-t-kpi…
+      fontSize,
       colors: {
-        // RALGA brand (www.ralga.rw): navy buttons and links, deep navy footer, sky-blue accents,
-        // the logo blue, and the Rwanda flag's yellow and green.
+        // bg-ims-page, text-ims-muted, border-ims-border, bg-ims-success-bg…
+        ims: tokens.color,
+        // RALGA brand (www.ralga.rw), used by the logo and the sign-in pages.
         ralga: {
           navy: "#003F82",
           "navy-dark": "#003268",
@@ -40,37 +49,51 @@ module.exports = {
           mist: "#F4F4F4",
         },
         primary: {
-          DEFAULT: "#003F82",
+          DEFAULT: tokens.color.primary,
           foreground: "#FFFFFF",
         },
-        primaryDark: "#003268",
+        primaryDark: tokens.color["primary-hover"],
         info: {
-          DEFAULT: "#2563EB",
+          DEFAULT: tokens.color.link,
           foreground: "#FFFFFF",
         },
         success: {
-          DEFAULT: "#22C55E",
+          DEFAULT: tokens.color.success,
           foreground: "#FFFFFF",
         },
         warning: {
-          DEFAULT: "#F59E0B",
-          foreground: "#1F2937",
+          DEFAULT: tokens.color.warning,
+          foreground: "#FFFFFF",
         },
         danger: {
-          DEFAULT: "#EF4444",
+          DEFAULT: tokens.color.danger,
           foreground: "#FFFFFF",
         },
       },
       borderRadius: {
-        btn: "10px",
-        input: "10px",
-        card: "14px",
+        btn: tokens.radius.control,
+        input: tokens.radius.control,
+        control: tokens.radius.control,
+        card: tokens.radius.card,
         modal: "16px",
+        pill: tokens.radius.pill,
+      },
+      height: {
+        control: tokens.height.control,
+        button: tokens.height.button,
+        row: tokens.height.row,
+      },
+      minHeight: {
+        control: tokens.height.control,
+        button: tokens.height.button,
+        row: tokens.height.row,
       },
       boxShadow: {
-        card: "0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.06)",
-        "card-hover": "0 4px 12px 0 rgb(0 0 0 / 0.08)",
-        modal: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+        // Cards have a border and no shadow; only modals and menus float.
+        card: "none",
+        "card-hover": "none",
+        modal: tokens.shadow.modal,
+        menu: tokens.shadow.menu,
       },
       keyframes: {
         "accordion-down": {

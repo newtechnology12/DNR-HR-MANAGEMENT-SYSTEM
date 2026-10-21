@@ -26,7 +26,7 @@ export default function App() {
       </I18nProvider>
 
       <Toaster
-        duration={1000}
+        duration={4000}
         position="bottom-right"
         className="flex h-full w-full flex-col items-center justify-center"
       />
