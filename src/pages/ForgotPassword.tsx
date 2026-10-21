@@ -39,8 +39,6 @@ export function ForgotPassword() {
 
   return (
     <AuthShell>
-      <div className="flex flex-1 flex-col items-center px-4 pb-10 sm:px-8">
-        <div className="my-auto w-full max-w-[420px]">
           <AuthCard>
             {sent ? (
               <div>
@@ -49,7 +47,7 @@ export function ForgotPassword() {
                 <p className="mt-1 text-[13.5px] leading-relaxed text-slate-500">
                   {t("forgot.sentText")} <span className="font-semibold text-slate-800">{email.trim()}</span>
                 </p>
-                <Link to="/" className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[14px] font-semibold text-white hover:bg-primaryDark">
+                <Link to="/" className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0A2647] text-[14px] font-semibold text-white hover:bg-[#0F3460]">
                   <ArrowLeft size={16} /> {t("forgot.back")}
                 </Link>
               </div>
@@ -74,7 +72,7 @@ export function ForgotPassword() {
                   />
                   {emailError && <span className="mt-1 block text-[12px] text-red-600">{emailError}</span>}
                 </label>
-                <button type="submit" disabled={busy} className={cn("mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[14px] font-semibold text-white shadow-sm transition-colors hover:bg-primaryDark disabled:opacity-60")}>
+                <button type="submit" disabled={busy} className={cn("mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0A2647] text-[14px] font-semibold text-white transition-colors hover:bg-[#0F3460] disabled:opacity-60")}>
                   {busy ? <><Loader2 size={16} className="animate-spin" /> {t("forgot.sending")}</> : <><Send size={15} /> {t("forgot.send")}</>}
                 </button>
               </form>
@@ -83,8 +81,6 @@ export function ForgotPassword() {
               <ShieldCheck size={14} className="mt-0.5 shrink-0 text-ralga-green" /> {t("forgot.note")}
             </p>
           </AuthCard>
-        </div>
-      </div>
     </AuthShell>
   );
 }

@@ -10,7 +10,9 @@ export const BRAND = {
   orgShort: env.VITE_ORG_SHORT_NAME || "RALGA",
   orgName: env.VITE_ORG_NAME || "Rwanda Association of Local Government Authorities",
   orgAddress: env.VITE_ORG_ADDRESS || "General Secretariat, Kigali, Rwanda",
-  vendor: env.VITE_VENDOR_NAME || "DNR Partners",
+  vendor: env.VITE_VENDOR_NAME || "Infinity Core Solutions Ltd",
+  /** Where "Need access? Contact the ICT unit" on the sign-in page writes to (optional). */
+  supportEmail: env.VITE_SUPPORT_EMAIL || "",
   currency: "RWF",
 };
 
