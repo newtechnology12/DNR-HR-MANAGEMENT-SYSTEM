@@ -37,8 +37,8 @@ export function DataTableToolbar<TData>({
   );
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex flex-1 items-center space-x-2">
+    <div className="flex items-start justify-between gap-2">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <Input
           placeholder="Search here..."
           value={search}
@@ -49,7 +49,7 @@ export function DataTableToolbar<TData>({
         {facets.map((e, i) => {
           return (
             <Fragment key={i}>
-              {table.getColumn(e.name) && (
+              {table.getAllLeafColumns().some((c) => c.id === e.name) && (
                 <DataTableFacetedFilter
                   column={table.getColumn(e.name)}
                   title={e.title}

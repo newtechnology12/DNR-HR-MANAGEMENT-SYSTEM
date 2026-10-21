@@ -3,7 +3,7 @@
  * those requests (not merely see them); the counts only include records the API lets them read,
  * so a department head counts their department and a store officer the whole organisation.
  */
-import { CarFront, FileCheck2, Laptop, LucideIcon, Palmtree, Receipt, Wallet } from "lucide-react";
+import { CarFront, ClipboardCheck, FileCheck2, Laptop, LucideIcon, Palmtree, Receipt, Target, Wallet } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { APPROVER_PERMISSIONS } from "@/lib/navigation";
 
@@ -21,6 +21,8 @@ export const QUEUES: Queue[] = [
   { key: "expenses", label: "Expense requests", icon: Receipt, link: "/dashboard/hr/prepayments", perms: ["approve_or_reject_expense"], count: (uid) => total("prepayments", `status = "pending" && employee != "${uid}"`) },
   { key: "petty", label: "Petty cash requests", icon: Wallet, link: "/dashboard/finance/petty-cash-requests", perms: ["approve_or_reject_request"], count: (uid) => total("petty_cash_requests", `status = "pending" && requested_by != "${uid}"`) },
   { key: "assets", label: "Equipment requests", icon: Laptop, link: "/dashboard/assets/requests", perms: ["reject_or_approve_assets_requests"], count: (uid) => total("assets_requests", `status = "pending" && requested_by != "${uid}"`) },
+  { key: "plans", label: "Work plans and reports to review", icon: Target, link: "/dashboard/my/plans?tab=team", perms: ["evaluate_staff", ...APPROVER_PERMISSIONS], count: (uid) => total("work_plans", `supervisor = "${uid}" && (status = "submitted" || status = "reported")`) },
+  { key: "corrections", label: "Attendance corrections", icon: ClipboardCheck, link: "/dashboard/hr/attendance-corrections", perms: ["update_attendance"], count: () => total("attendance_corrections", "status = \"pending\"") },
   { key: "cars", label: "Vehicle requests", icon: CarFront, link: "/dashboard/finance/carmanagement", perms: ["approve_or_reject_request"], count: (uid) => total("CarRequests", `status = "pending" && employee != "${uid}"`) },
 ];
 

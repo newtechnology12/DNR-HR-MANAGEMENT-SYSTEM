@@ -147,6 +147,22 @@ const SetupProjects = lazy(() => import("./pages/setup/MasterData").then((m) => 
 const CostCentres = lazy(() => import("./pages/setup/MasterData").then((m) => ({ default: m.CostCentres })));
 const TaxRates = lazy(() => import("./pages/setup/TaxRates"));
 const ApprovalLimits = lazy(() => import("./pages/setup/ApprovalLimits"));
+const StrategicObjectives = lazy(() => import("./pages/setup/MasterData").then((m) => ({ default: m.StrategicObjectives })));
+// My workspace: every staff member's own pages.
+const MyDashboard = lazy(() => import("./pages/dashboard/MyDashboard"));
+const MyAttendance = lazy(() => import("./pages/my/MyPages").then((m) => ({ default: m.MyAttendance })));
+const MyLeave = lazy(() => import("./pages/my/MyPages").then((m) => ({ default: m.MyLeave })));
+const MyPayslipsPage = lazy(() => import("./pages/my/MyPages").then((m) => ({ default: m.MyPayslipsPage })));
+const MyRequests = lazy(() => import("./pages/my/MyPages").then((m) => ({ default: m.MyRequests })));
+const MyPerformance = lazy(() => import("./pages/my/MyPages").then((m) => ({ default: m.MyPerformance })));
+const MyDocuments = lazy(() => import("./pages/my/MyPages").then((m) => ({ default: m.MyDocuments })));
+const MyExpenses = lazy(() => import("./pages/my/MyPages").then((m) => ({ default: m.MyExpenses })));
+const MyEquipment = lazy(() => import("./pages/my/MyPages").then((m) => ({ default: m.MyEquipment })));
+const MyPlans = lazy(() => import("./pages/my/MyPlans"));
+const PlanEditor = lazy(() => import("./pages/my/PlanEditor"));
+const WorkPlanDetail = lazy(() => import("./pages/my/PlanDetail"));
+const Help = lazy(() => import("./pages/my/Help"));
+const AttendanceCorrections = lazy(() => import("./pages/hr/AttendanceCorrections"));
 const APPROVAL_USERS = [...APPROVER_PERMISSIONS, "create_purchase_requisition"];
 const DELEGATION_USERS = [...APPROVER_PERMISSIONS, "manage_delegations"];
 const ADMIN_USERS = ["access_general_settings", "view_security_admin"];
@@ -159,6 +175,23 @@ const RFQ_USERS = ["view_rfqs", "manage_rfqs", "award_rfqs"];
 const CONTRACT_USERS = ["manage_contracts", "approve_contracts", "view_suppliers", "manage_suppliers", "view_purchase_orders"];
 const PLAN_USERS = ["manage_procurement_plan", "view_procurement_plans", "approve_procurement_plans", "view_procurement_dashboard", "create_purchase_requisition"];
 const REPORT_USERS = ["view_procurement_reports", "view_procurement_dashboard"];
+
+/** The old employee portal's tabs now have their own pages; old links (notifications, bookmarks) land there. */
+const PORTAL_TABS: Record<string, string> = {
+  "Attendance Log": "/dashboard/my/attendance",
+  Documents: "/dashboard/my/documents",
+  Leaves: "/dashboard/my/leave",
+  "Action Plans": "/dashboard/my/plans?tab=department",
+  Reports: "/dashboard/my/plans?tab=reports",
+  "Expense Request": "/dashboard/my/expenses",
+  Payslips: "/dashboard/my/payslips",
+  Performance: "/dashboard/my/performance",
+  Assets: "/dashboard/my/equipment?tab=assigned",
+};
+function PortalRedirect() {
+  const tab = new URLSearchParams(window.location.search).get("tab") || "";
+  return <Navigate to={PORTAL_TABS[tab] || "/dashboard/my"} replace />;
+}
 
 const router = createBrowserRouter([
   {
@@ -228,10 +261,37 @@ const router = createBrowserRouter([
                     path: "employee-portal",
                     element: (
                       <ProtectedRoute entity="access_employee_portal">
+                        <PortalRedirect />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "employee-portal/classic",
+                    element: (
+                      <ProtectedRoute entity="access_employee_portal">
                         <EmployeePortal />
                       </ProtectedRoute>
                     ),
                   },
+                  { path: "my", element: <ProtectedRoute entity={["access_employee_portal", "view_dashboard"]}><MyDashboard /></ProtectedRoute> },
+                  ...([
+                    ["my/attendance", <MyAttendance />],
+                    ["my/leave", <MyLeave />],
+                    ["my/plans", <MyPlans />],
+                    ["my/plans/new", <PlanEditor />],
+                    ["my/plans/:planId", <WorkPlanDetail />],
+                    ["my/plans/:planId/edit", <PlanEditor />],
+                    ["my/payslips", <MyPayslipsPage />],
+                    ["my/requests", <MyRequests />],
+                    ["my/performance", <MyPerformance />],
+                    ["my/documents", <MyDocuments />],
+                    ["my/expenses", <MyExpenses />],
+                    ["my/equipment", <MyEquipment />],
+                  ] as [string, JSX.Element][]).map(([path, page]) => ({
+                    path,
+                    element: <ProtectedRoute entity="access_employee_portal">{page}</ProtectedRoute>,
+                  })),
+                  { path: "help", element: <Help /> },
                   ...[
                     ["employee-portal/plans/new", <ActionPlanForm />],
                     ["employee-portal/plans/:planId", <ActionPlanDetail />],
@@ -299,6 +359,7 @@ const router = createBrowserRouter([
               {
                 path: "hr",
                 children: [
+                  { path: "attendance-corrections", element: <ProtectedRoute entity="update_attendance"><AttendanceCorrections /></ProtectedRoute> },
                   {
                     path: "employees",
                     element: (
@@ -925,6 +986,14 @@ const router = createBrowserRouter([
                     element: (
                       <ProtectedRoute entity={["view_master_data", "manage_payroll_settings"]}>
                         <TaxRates />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "strategic-objectives",
+                    element: (
+                      <ProtectedRoute entity={MASTER_DATA_USERS}>
+                        <StrategicObjectives />
                       </ProtectedRoute>
                     ),
                   },

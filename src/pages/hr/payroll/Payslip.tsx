@@ -8,6 +8,15 @@ import { rwf } from "@/lib/hr";
 import { cn } from "@/utils";
 
 /** Printable payslip with the full Rwanda statutory breakdown. */
+/** The payroll run of a payslip: expanded for HR, otherwise the copy kept on the payslip (staff cannot read runs). */
+export const payrollOf = (slip: any) =>
+  slip?.expand?.payroll || (slip ? { period_label: slip.period_label, number: slip.payroll_number, status: slip.payroll_status, year: slip.period_year, month: slip.period_month, paid_at: slip.paid_at } : null);
+/** Newest period first. */
+export const byPeriodDesc = (a: any, b: any) => {
+  const k = (s: any) => { const p = payrollOf(s); return (Number(p?.year) || 0) * 100 + (Number(p?.month) || 0); };
+  return k(b) - k(a);
+};
+
 export function PayslipView({ slip, payroll }: { slip: any; payroll: any }) {
   const settings = useQuery(["settings-record"], () => pocketbase.collection("settings").getList(1, 1).then((r) => r.items[0]), { staleTime: 5 * 60_000 });
   const org: any = settings.data || {};

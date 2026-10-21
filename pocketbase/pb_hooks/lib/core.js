@@ -206,6 +206,8 @@ const DEFAULT_SEQUENCES = {
   bank_transfer: { name: "Inter-account transfer", prefix: "TRF" },
   bank_reconciliation: { name: "Bank reconciliation", prefix: "REC" },
   bank_statement: { name: "Bank statement import", prefix: "STM" },
+  work_plan: { name: "Work plan", prefix: "WP" },
+  attendance_correction: { name: "Attendance correction", prefix: "ATC" },
   asset_transfer: { name: "Asset transfer", prefix: "ATR" },
   asset_disposal: { name: "Asset disposal", prefix: "DSP" },
   depreciation_run: { name: "Depreciation run", prefix: "DEP" },

@@ -21,6 +21,7 @@ Developed by Infinity Core Solutions Ltd.
 | 8 | General ledger, period close (M8) | Planned |
 | 9 | Reports, financial statements, role dashboards (M9) | Planned |
 | 10 | Data migration, tests, documentation | Planned |
+| + | Staff workspace: every staff member's own pages (attendance, leave, plans, payslips, requests, performance, documents), attendance corrections approved by HR, work planning and reporting (annual performance contract → quarter → month → week, supervisor approval, reports and assessment), Help & HR policies | **Done** |
 
 ## Architecture
 
@@ -59,7 +60,7 @@ npm run seed:ralga
 # 3. Frontend (http://localhost:5173, proxies /api to the backend)
 npm run dev:frontend
 
-# 4. API tests (must stay green: 281 checks in 11 suites)
+# 4. API tests on a freshly seeded server (must stay green: 298 checks in 12 suites)
 npm run test:api
 ```
 
@@ -86,6 +87,50 @@ One account per role. Password for all: **`password123`** (development / demo on
 
 The RALGA organisation structure in the demo is **illustrative** (RALGA does not publish its internal
 organigram). Confirm departments and designations with RALGA before go-live.
+
+## My workspace (every staff member)
+
+Everyone lands on **My workspace** (`/dashboard/my`):
+
+- clock in and out (the location is recorded; the clock-in window comes from Settings → Attendance), the
+  attendance calendar for the last 30 working days, and a notice when days have no clock-in;
+- the annual leave balance with what is coming up (approved leave, public holidays), the latest payslip (amounts
+  can be hidden), every request in one table with its next step, this week's plan, and what is waiting for the
+  person's decision.
+
+The sidebar lists every page the person can use: My attendance, My leave, My plans & reports, My payslips,
+My requests, My performance, My documents; Requests (purchase requisitions, expenses & petty cash, equipment);
+Help & HR policies (working hours, leave types, public holidays, PAYE bands and contributions, read from the
+settings). People who oversee staff also get **Team overview** (their department or the whole organisation).
+Old employee-portal links open the new pages.
+
+**Attendance corrections:** for a working day without a clock-in (mission, training, a meeting outside the
+office, clock-in failure) the staff member asks HR to correct the log, with the reason and the evidence.
+HR & payroll → Attendance corrections: HR approves (the days are recorded as *correction* with the normal
+hours) or rejects with a reason; nobody decides their own request.
+
+## Work planning and reporting
+
+My plans & reports follows the public-service planning cycle — an Imihigo-style performance contract
+cascaded down to the week:
+
+| Plan | Period | Content |
+|---|---|---|
+| Annual performance contract | Fiscal year (July–June) | 3–6 objectives: output, indicator, baseline, target, weight (together 100 %), quarters, means of verification, strategic objective |
+| Quarterly plan | Quarter of the fiscal year | Outputs with indicator, baseline, target, means of verification and cost |
+| Monthly plan | Calendar month | Activities with expected output, due date, cost and the department-plan activity they serve |
+| Weekly plan | Monday–Friday | Activities by day |
+
+- A plan says which higher plan it implements and can take its items; *Next week / month / …* starts the next
+  period from the items still open. One plan per person, kind and period.
+- Draft → sent to the supervisor (the head of department; heads, and units without a head, report to the
+  Secretary General, whose own plan is approved when sent) → approved, or returned with comments → progress
+  updates → report at the end of the period (achievements, challenges, next steps, support needed,
+  self-rating) → the supervisor's assessment (1–5 with feedback), or returned for more detail.
+- Supervisors work from the *My team* tab: plans to approve, reports to assess. Evidence documents can be
+  attached; every step is in the plan's history and the audit log; any plan exports to Excel or PDF.
+- **Strategic objectives** (Setup → Strategic objectives) are the list plans link to. The five seeded objectives
+  are **illustrative** — replace them with RALGA's approved Strategic Plan before go-live.
 
 ## Roles, permissions and segregation of duties
 
@@ -203,7 +248,7 @@ Bank & cash in the menu (Cashier, Accountant, DAF, SG, Internal Auditor).
 - **Export** (button *Export*): Excel, PDF or CSV with the RALGA header, the filters used and who generated it,
   on every list; exports are audited and follow each person's access (staff export only their own records).
 - **Supporting documents** (tab *Documents* on budgets, revisions, purchase orders, invoices, vouchers, returns,
-  bank-detail changes, receipts, transfers, bank statements and reconciliations): drag and drop several files (PDF, images, Office, CSV, e-mail, zip; 20 MB each).
+  bank-detail changes, receipts, transfers, bank statements and reconciliations; evidence on work plans): drag and drop several files (PDF, images, Office, CSV, e-mail, zip; 20 MB each).
   Files can be added at any stage; they can only be removed while the document is being prepared. Each
   upload and removal is audited.
 
@@ -282,4 +327,8 @@ actuals reconciling to the ledger, virement and reduction rules, department scop
 bank-detail changes (no direct edit, no self-verification, visibility), plan lines tied to budget lines, and
 bank and cash (accounts set up by the DAF only, receipts and transfers verified before posting, no future or
 pre-opening dates, no overdraft, restricted donor accounts, statements that do not add up or overlap refused,
-automatic and manual matching, preparer ≠ approver of reconciliations, locked periods after approval, reversal).
+automatic and manual matching, preparer ≠ approver of reconciliations, locked periods after approval, reversal),
+work plans (private to the person, the supervisor and HR; only the supervisor approves and assesses; activity
+dates inside the period; annual weights add up to 100 %; approved plans locked except progress) and attendance
+corrections (HR only, never one's own; approved days added to the log). Run them on a freshly seeded server
+(`npm run seed:ralga` first): some checks use the seeded documents.

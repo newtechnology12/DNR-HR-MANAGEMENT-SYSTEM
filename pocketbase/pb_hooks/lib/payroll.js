@@ -244,6 +244,7 @@ function compute(dao, auth, id, meta) {
     const r = new Record(col);
     r.load({
       employee: u.id, payroll: p.id, employee_name: u.getString("name"), department_name: x.department, designation_name: x.designation,
+      period_label: p.getString("period_label"), period_year: p.getInt("year"), period_month: p.getInt("month"), payroll_number: p.getString("number"), payroll_status: "computed",
       employment_type: s.employment_type, bank_name: s.bank_name || "", bank_account: s.bank_account || "", rssb_number: s.rssb_number || "", tin: s.tin || "", payment_method: s.payment_method,
       working_days: x.working_days,
       ...c,
@@ -299,7 +300,7 @@ function markPaid(dao, auth, id, input, meta) {
       } catch (_) {}
     }
   }
-  core.notify(dao, slips.map((s) => s.getString("employee")), { title: `Your payslip for ${p.getString("period_label")} is available`, body: "Salary paid.", link: "/dashboard/employee-portal?tab=Payslips", type: "success" });
+  core.notify(dao, slips.map((s) => s.getString("employee")), { title: `Your payslip for ${p.getString("period_label")} is available`, body: "Salary paid.", link: "/dashboard/my/payslips", type: "success" });
   core.audit(dao, { actor: auth, action: "payroll_paid", collection: "payrolls", recordId: p.id, label: p.getString("number"), comment: p.getString("payment_reference"), meta, changes: { status: { old: "approved", new: "paid" } } });
   return p;
 }
@@ -357,4 +358,20 @@ function preview(dao, input) {
   }, { factor: 1, advances: 0 });
 }
 
-module.exports = { config, paye, computeSlip, calculate, create, compute, submit, markPaid, cancel, preview, previewRun, MONTHS };
+/**
+ * Staff read their payslips but not the payroll run, so each payslip keeps a copy of the run's status and
+ * payment date; called after every save of a run.
+ */
+function syncSlips(dao, p) {
+  const status = p.getString("status");
+  const paid = p.getString("paid_at");
+  const slips = dao.findRecordsByFilter("employees_payrolls", "payroll = {:p}", "", 0, 0, { p: p.id }) || [];
+  for (const slip of slips) {
+    if (slip.getString("payroll_status") === status && slip.getString("paid_at") === paid) continue;
+    slip.set("payroll_status", status);
+    slip.set("paid_at", paid);
+    dao.saveRecord(slip);
+  }
+}
+
+module.exports = { config, paye, computeSlip, calculate, create, compute, submit, markPaid, cancel, preview, previewRun, syncSlips, MONTHS };

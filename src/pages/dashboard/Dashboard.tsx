@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery } from "react-query";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { format, formatDistanceToNow, startOfMonth, subDays } from "date-fns";
 import {
   Bar,
@@ -34,7 +34,6 @@ import StatCard from "@/components/StatCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import BreadCrumb from "@/components/breadcrumb";
 import { ChartTooltip, EmptyState, HorizontalBars, Initials, ListSkeleton, Panel, StatusBadge } from "@/components/enterprise/ui";
-import MyDashboard from "./MyDashboard";
 import { queueCounts, queuesFor } from "./queues";
 
 // Chart colours: reference data-viz palette, slots 1–2 (validated for colour-blind separation).
@@ -206,7 +205,7 @@ export default function Dashboard() {
   const { canPerform } = useRoles();
   if (canPerform("view_employees")) return <TeamDashboard scope="organisation" />;
   if (canPerform("view_attendance_logs") || canPerform("view_leaves")) return <TeamDashboard scope="department" />;
-  return <MyDashboard />;
+  return <Navigate to="/dashboard/my" replace />;
 }
 
 function TeamDashboard({ scope }: { scope: "organisation" | "department" }) {

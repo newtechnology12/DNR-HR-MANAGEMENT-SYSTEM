@@ -4,7 +4,7 @@ import { FileText, Wallet } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { Skeleton } from "@/components/ui/skeleton";
 import { rwf } from "@/lib/hr";
-import { PayslipDialog } from "@/pages/hr/payroll/Payslip";
+import { PayslipDialog, byPeriodDesc, payrollOf } from "@/pages/hr/payroll/Payslip";
 
 /** The employee's payslips from approved and paid payrolls. */
 export default function MyPayslips({ employeeId }: { employeeId: string }) {
@@ -13,7 +13,7 @@ export default function MyPayslips({ employeeId }: { employeeId: string }) {
     pocketbase.collection("employees_payrolls").getFullList({ filter: `employee = "${employeeId}" && (payroll.status = "approved" || payroll.status = "paid")`, sort: "-created", expand: "payroll" })
   );
   if (q.isLoading) return <Skeleton className="h-40 w-full rounded-xl" />;
-  const rows = ((q.data || []) as any[]).sort((a, b) => (b.expand?.payroll?.year * 100 + b.expand?.payroll?.month) - (a.expand?.payroll?.year * 100 + a.expand?.payroll?.month));
+  const rows = ((q.data || []) as any[]).sort(byPeriodDesc);
   if (!rows.length)
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center">
@@ -27,7 +27,7 @@ export default function MyPayslips({ employeeId }: { employeeId: string }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {[
-          ["Last net pay", `RWF ${rwf(last.net)}`, last.expand?.payroll?.period_label],
+          ["Last net pay", `RWF ${rwf(last.net)}`, payrollOf(last)?.period_label],
           ["Gross salary", `RWF ${rwf(last.gross)}`, "Basic + allowances"],
           ["Tax and contributions", `RWF ${rwf(last.total_deductions)}`, "PAYE, RSSB, CBHI and other deductions"],
         ].map(([k, v, s]) => (
@@ -40,18 +40,18 @@ export default function MyPayslips({ employeeId }: { employeeId: string }) {
             <button type="button" onClick={() => setOpen(s)} className="flex w-full items-center gap-3 px-3.5 py-3 text-left hover:bg-slate-50">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primaryDark"><FileText size={18} /></span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-medium text-slate-900">{s.expand?.payroll?.period_label}</span>
+                <span className="block text-[14px] font-medium text-slate-900">{payrollOf(s)?.period_label}</span>
                 <span className="text-[12px] text-slate-500">Gross {rwf(s.gross)} · PAYE {rwf(s.paye)} · RSSB {rwf(s.pension_ee + s.maternity_ee)} · CBHI {rwf(s.cbhi)}</span>
               </span>
               <span className="text-right">
                 <span className="block text-[15px] font-semibold tabular-nums">{rwf(s.net)}</span>
-                <span className="text-[11.5px] text-slate-500">{s.expand?.payroll?.status === "paid" ? "Paid" : "Approved"}</span>
+                <span className="text-[11.5px] text-slate-500">{payrollOf(s)?.status === "paid" ? "Paid" : "Approved"}</span>
               </span>
             </button>
           </li>
         ))}
       </ul>
-      <PayslipDialog slip={open} payroll={open?.expand?.payroll} onClose={() => setOpen(null)} />
+      <PayslipDialog slip={open} payroll={payrollOf(open)} onClose={() => setOpen(null)} />
     </div>
   );
 }

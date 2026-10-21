@@ -162,6 +162,14 @@ await check("the preparer cannot record the payment; the cashier can", async () 
   await cashier.send(`/api/dnr/payroll/${run.id}/paid`, { method: "POST", body: { reference: "TEST" } });
   assert((await admin.collection("payrolls").getOne(run.id)).status === "paid", "not paid");
 });
+await check("each payslip carries its period and the run's status, so staff see them without reading the run", async () => {
+  const mine = await employee.collection("employees_payrolls").getFullList({ filter: `payroll = "${run.id}"` });
+  assert(mine.length === 1, `${mine.length} own payslips in the run`);
+  const s = mine[0];
+  assert(s.period_label === `January ${Y + 1}` && s.period_year === Y + 1 && s.period_month === 1, `period ${s.period_label}`);
+  assert(s.payroll_status === "paid" && s.paid_at && s.payroll_number === run.number, `status ${s.payroll_status} / ${s.payroll_number}`);
+  await expectStatus(employee.collection("payrolls").getOne(run.id), 404);
+});
 await check("only authorised users change tax settings", async () => {
   const b = await admin.collection("paye_bands").getFirstListItem("rate = 30");
   await expectStatus(employee.collection("paye_bands").update(b.id, { rate: 1 }), 404);

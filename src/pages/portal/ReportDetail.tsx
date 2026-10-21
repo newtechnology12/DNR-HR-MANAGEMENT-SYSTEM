@@ -83,7 +83,7 @@ export default function ReportDetail() {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-3 pb-10 pt-3 sm:px-6 sm:pt-5">
-      <button type="button" onClick={() => navigate("/dashboard/employee-portal?tab=Reports")} className="mb-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-slate-600 hover:text-slate-900 print:hidden">
+      <button type="button" onClick={() => navigate("/dashboard/my/plans?tab=reports")} className="mb-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-slate-600 hover:text-slate-900 print:hidden">
         <ArrowLeft size={15} /> Reports
       </button>
 

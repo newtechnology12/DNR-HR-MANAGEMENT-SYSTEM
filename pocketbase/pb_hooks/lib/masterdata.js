@@ -15,6 +15,7 @@ const WRITE_PERMISSION = {
   tax_rates: ["manage_tax_rates", "change tax rates"],
   fiscal_years: ["manage_fiscal_years", "change fiscal years"],
   approval_limits: ["manage_approval_workflows", "change approval limits"],
+  strategic_objectives: ["manage_projects", "change the strategic objectives"],
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -129,7 +130,7 @@ function validate(e) {
   const r = e.record;
   const name = r.collection().name;
   if (name === "gl_accounts") validateAccount(dao, r);
-  if (name === "funding_sources" || name === "projects" || name === "cost_centres") {
+  if (name === "funding_sources" || name === "projects" || name === "cost_centres" || name === "strategic_objectives") {
     r.set("code", String(r.getString("code") || "").trim().toUpperCase());
     if (!r.getString("code") || !r.getString("name").trim()) throw new BadRequestError("Code and name are required.");
     if (name === "funding_sources" && !r.getString("type")) r.set("type", "other");

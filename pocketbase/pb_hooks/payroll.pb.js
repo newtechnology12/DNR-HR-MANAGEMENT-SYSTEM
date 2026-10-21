@@ -68,3 +68,6 @@ routerAdd("POST", "/api/dnr/payroll/:id/:action", (c) => {
   onRecordBeforeCreateRequest(guard, col);
   onRecordBeforeUpdateRequest(guard, col);
 });
+
+// Payslips keep a copy of their run's status (staff cannot read the run itself).
+onModelAfterUpdate((e) => require(`${__hooks}/lib/payroll.js`).syncSlips(e.dao, e.model), "payrolls");

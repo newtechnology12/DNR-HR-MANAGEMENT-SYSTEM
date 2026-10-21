@@ -21,13 +21,13 @@ export const EXPENSE_STATUS: Record<string, { label: string; tone: Tone }> = {
   cancelled: { label: "Withdrawn", tone: "neutral" },
 };
 
-export default function EmployeePrePayments({ employeeId }: { employeeId: string }) {
+export default function EmployeePrePayments({ employeeId, autoOpen = false }: { employeeId: string; autoOpen?: boolean }) {
   const queryClient = useQueryClient();
   const me = useMe();
   const isSelf = me.data?.id === employeeId;
   const [status, setStatus] = React.useState("all");
   const [search, setSearch] = React.useState("");
-  const [form, setForm] = React.useState<{ open: boolean; record?: any }>({ open: false });
+  const [form, setForm] = React.useState<{ open: boolean; record?: any }>({ open: autoOpen });
   const [viewing, setViewing] = React.useState<any>(null);
   const [withdrawing, setWithdrawing] = React.useState<any>(null);
 

@@ -29,7 +29,7 @@ export default function RootLayout() {
     if (location.pathname === "/") {
       if (permitions?.some((permission) => permission?.name === "view_dashboard"))
         return <Navigate to="/dashboard" />;
-      return <Navigate to={"/dashboard/employee-portal"} />;
+      return <Navigate to={"/dashboard/my"} />;
     }
     return <Outlet />;
   }

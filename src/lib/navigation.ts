@@ -6,7 +6,8 @@ import {
   AlignEndHorizontal, ArrowRightLeft, Banknote, FileSpreadsheet, PiggyBank, BarChart3, FileCheck2, Blocks, Boxes, Building2, CalendarClock, CalendarRange, CandlestickChart, CarFront, CircleDollarSign,
   ClipboardList, Clock, Container, FileSearch, FileSignature, FolderKanban, GitBranch, GitPullRequest, Inbox, Landmark, Layout, ListChecks,
   ListTree, LucideIcon, Network, Percent, PieChart, Receipt, Scale, ScrollText, ServerCog, Settings, ShieldCheck, ShoppingCart, SlidersHorizontal,
-  Split, Table, Tags, Truck, Undo2, User, UserCog, Users, Wallet, WalletCards, Activity, Coins, LayoutGrid, UserCheck,
+  Split, Table, Tags, Truck, Undo2, UserCog, Users, Wallet, WalletCards, Activity, Coins, LayoutGrid, UserCheck,
+  ClipboardCheck, FileText, FolderOpen, HelpCircle, Laptop, MessageSquareText, Target,
 } from "lucide-react";
 
 export interface NavItem {
@@ -15,6 +16,8 @@ export interface NavItem {
   link: string;
   icon: LucideIcon;
   perms: string[] | "*";
+  /** Hidden for people who also hold one of these (they reach the same page from a management group). */
+  hideIf?: string[];
 }
 export interface NavGroup {
   key: string;
@@ -30,15 +33,33 @@ export const APPROVER_PERMISSIONS = [
 
 const TREASURY_PERMISSIONS = ["view_treasury", "manage_treasury", "manage_bank_accounts", "approve_treasury", "record_payments", "prepare_bank_reconciliation", "approve_bank_reconciliation", "export_treasury"];
 
+/** Everyone's own pages: attendance, leave, plans, pay, requests. */
+const SELF = ["access_employee_portal"];
+
 export const NAVIGATION: NavGroup[] = [
   {
-    key: "overview",
-    label: "Overview",
+    key: "workspace",
+    label: "My workspace",
     items: [
-      { key: "dashboard", label: "Dashboard", link: "/dashboard", icon: LayoutGrid, perms: ["view_dashboard"] },
-      { key: "approvals", label: "My approvals", link: "/dashboard/approvals", icon: Inbox, perms: [...APPROVER_PERMISSIONS, "create_purchase_requisition"] },
-      { key: "portal", label: "My portal", link: "/dashboard/employee-portal", icon: User, perms: ["access_employee_portal"] },
-      { key: "leavePlan", label: "My leave plan", link: "/dashboard/leave-plan", icon: CalendarRange, perms: ["access_employee_portal"] },
+      { key: "dashboard", label: "Dashboard", link: "/dashboard/my", icon: LayoutGrid, perms: ["access_employee_portal", "view_dashboard"] },
+      { key: "teamOverview", label: "Team overview", link: "/dashboard", icon: BarChart3, perms: ["view_employees", "view_attendance_logs", "view_leaves"] },
+      { key: "approvals", label: "My approvals", link: "/dashboard/approvals", icon: Inbox, perms: APPROVER_PERMISSIONS },
+      { key: "myAttendance", label: "My attendance", link: "/dashboard/my/attendance", icon: Clock, perms: SELF },
+      { key: "myLeave", label: "My leave", link: "/dashboard/my/leave", icon: CalendarRange, perms: SELF },
+      { key: "myPlans", label: "My plans & reports", link: "/dashboard/my/plans", icon: Target, perms: SELF },
+      { key: "myPayslips", label: "My payslips", link: "/dashboard/my/payslips", icon: FileText, perms: SELF },
+      { key: "myRequests", label: "My requests", link: "/dashboard/my/requests", icon: MessageSquareText, perms: SELF },
+      { key: "myPerformance", label: "My performance", link: "/dashboard/my/performance", icon: UserCheck, perms: SELF },
+      { key: "myDocuments", label: "My documents", link: "/dashboard/my/documents", icon: FolderOpen, perms: SELF },
+    ],
+  },
+  {
+    key: "requests",
+    label: "Requests",
+    items: [
+      { key: "myRequisitions", label: "Purchase requisitions", link: "/dashboard/procurement/requisitions", icon: ClipboardList, perms: ["create_purchase_requisition"], hideIf: ["view_purchase_requisitions", "approve_purchase_requisitions"] },
+      { key: "myExpenses", label: "Expenses & petty cash", link: "/dashboard/my/expenses", icon: Banknote, perms: ["create_expense", "access_employee_portal"] },
+      { key: "myEquipment", label: "Equipment requests", link: "/dashboard/my/equipment", icon: Laptop, perms: ["view_assets_requests", "access_employee_portal"] },
     ],
   },
   {
@@ -57,7 +78,7 @@ export const NAVIGATION: NavGroup[] = [
     items: [
       { key: "procurementOverview", label: "Procurement overview", link: "/dashboard/procurement", icon: CandlestickChart, perms: ["view_procurement_dashboard"] },
       { key: "procurementPlans", label: "Procurement plans", link: "/dashboard/procurement/plans", icon: CalendarClock, perms: ["manage_procurement_plan", "view_procurement_plans", "approve_procurement_plans"] },
-      { key: "requisitions", label: "Purchase requisitions", link: "/dashboard/procurement/requisitions", icon: ClipboardList, perms: ["view_purchase_requisitions", "create_purchase_requisition", "approve_purchase_requisitions"] },
+      { key: "requisitions", label: "Purchase requisitions", link: "/dashboard/procurement/requisitions", icon: ClipboardList, perms: ["view_purchase_requisitions", "approve_purchase_requisitions"] },
       { key: "rfqs", label: "RFQs & quotations", link: "/dashboard/procurement/rfqs", icon: FileSearch, perms: ["view_rfqs", "manage_rfqs", "award_rfqs"] },
       { key: "suppliers", label: "Suppliers", link: "/dashboard/procurement/suppliers", icon: Building2, perms: ["view_suppliers", "manage_suppliers", "approve_suppliers"] },
       { key: "contracts", label: "Contracts", link: "/dashboard/procurement/contracts", icon: FileSignature, perms: ["manage_contracts", "approve_contracts", "view_suppliers", "view_purchase_orders"] },
@@ -104,6 +125,7 @@ export const NAVIGATION: NavGroup[] = [
       { key: "salaries", label: "Salary structures", link: "/dashboard/hr/payroll/salaries", icon: WalletCards, perms: ["manage_salaries"] },
       { key: "performance", label: "Performance & appraisals", link: "/dashboard/hr/performance", icon: UserCheck, perms: ["view_employee_perfomances", "evaluate_staff", "manage_appraisals"] },
       { key: "attendanceLogs", label: "Attendance logs", link: "/dashboard/attendance/attendance-logs", icon: ListChecks, perms: ["view_attendance_logs"] },
+      { key: "attendanceCorrections", label: "Attendance corrections", link: "/dashboard/hr/attendance-corrections", icon: ClipboardCheck, perms: ["update_attendance"] },
       { key: "attendanceReport", label: "Attendance report", link: "/dashboard/attendance/attendance-report", icon: AlignEndHorizontal, perms: ["view_attendace_report"] },
       { key: "timesheet", label: "Employee timesheet", link: "/dashboard/reports/employee-timesheet", icon: Table, perms: ["view_employee_timesheet"] },
       { key: "timesheetReport", label: "Timesheet report", link: "/dashboard/reports/timesheet-report", icon: Clock, perms: ["view_timesheet_report"] },
@@ -116,7 +138,7 @@ export const NAVIGATION: NavGroup[] = [
       { key: "assetInventory", label: "Equipment inventory", link: "/dashboard/assets", icon: Blocks, perms: ["view_assets"] },
       { key: "assetCategories", label: "Equipment categories", link: "/dashboard/assets/categories", icon: Tags, perms: ["view_assets_categories"] },
       { key: "assetTypes", label: "Equipment types", link: "/dashboard/assets/types", icon: Container, perms: ["view_assets_types"] },
-      { key: "assetRequests", label: "Equipment requests", link: "/dashboard/assets/requests", icon: GitPullRequest, perms: ["view_assets_requests"] },
+      { key: "assetRequests", label: "Equipment requests", link: "/dashboard/assets/requests", icon: GitPullRequest, perms: ["view_all_assets_requests", "reject_or_approve_assets_requests", "view_assets"] },
     ],
   },
   {
@@ -138,6 +160,7 @@ export const NAVIGATION: NavGroup[] = [
       { key: "chartOfAccounts", label: "Chart of accounts", link: "/dashboard/setup/accounts", icon: ListTree, perms: ["view_master_data"] },
       { key: "fundingSources", label: "Funding sources", link: "/dashboard/setup/funding-sources", icon: Landmark, perms: ["view_master_data"] },
       { key: "projects", label: "Projects", link: "/dashboard/setup/projects", icon: FolderKanban, perms: ["view_master_data"] },
+      { key: "strategicObjectives", label: "Strategic objectives", link: "/dashboard/setup/strategic-objectives", icon: Target, perms: ["view_master_data"] },
       { key: "costCentres", label: "Cost centres", link: "/dashboard/setup/cost-centres", icon: Network, perms: ["view_master_data"] },
       { key: "taxRates", label: "Tax & statutory rates", link: "/dashboard/setup/tax-rates", icon: Percent, perms: ["view_master_data", "manage_payroll_settings"] },
       { key: "workflows", label: "Approval workflows", link: "/dashboard/settings/general-settings/approval-workflows", icon: GitBranch, perms: ["manage_approval_workflows", "view_security_admin"] },
@@ -156,6 +179,11 @@ export const NAVIGATION: NavGroup[] = [
       { key: "health", label: "System health", link: "/dashboard/admin/health", icon: Activity, perms: ["view_system_health"] },
       { key: "generalSettings", label: "General settings", link: "/dashboard/settings/general-settings", icon: Settings, perms: ["access_general_settings"] },
     ],
+  },
+  {
+    key: "support",
+    label: "Support",
+    items: [{ key: "help", label: "Help & HR policies", link: "/dashboard/help", icon: HelpCircle, perms: "*" }],
   },
 ];
 

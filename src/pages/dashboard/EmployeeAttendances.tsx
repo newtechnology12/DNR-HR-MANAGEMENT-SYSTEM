@@ -644,8 +644,8 @@ export default function EmployeeAttendances({ employeeId }) {
                       new Date(e.clockin_time)
                     )
                   ) || "---",
-                clockin_location: e.clockin_location || "is loading...",
-                clockout_location: e.clockout_location || "is loading...",
+                clockin_location: e.clockin_location || "—",
+                clockout_location: e.clockout_location || "—",
                 lunch_start_time: e.lunch_start_time
                   ? new Date(e.lunch_start_time).toLocaleTimeString()
                   : "N.A",

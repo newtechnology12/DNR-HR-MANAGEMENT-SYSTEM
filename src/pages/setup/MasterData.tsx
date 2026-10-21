@@ -1,8 +1,8 @@
 /**
- * Setup → funding sources, projects and cost centres (IMS M1). Finance (DAF) maintains them;
+ * Setup → funding sources, projects, cost centres and strategic objectives (IMS M1). Finance (DAF) maintains them;
  * every transaction later carries budget line, funding source, department and project.
  */
-import { CalendarRange, FolderKanban, Info, Landmark, Network, Wallet } from "lucide-react";
+import { CalendarRange, FolderKanban, Info, Landmark, Network, Target, Wallet } from "lucide-react";
 import MasterDataPage from "@/components/enterprise/MasterDataPage";
 import { Badge } from "@/components/enterprise/ui";
 import { rwf, showDay } from "@/lib/ims";
@@ -143,6 +143,50 @@ export function CostCentres() {
       aside={
         <p className="flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-[12.5px] text-blue-900">
           <Info size={14} className="mt-0.5 shrink-0" /> Cost centres are maintained by Finance together with the chart of accounts.
+        </p>
+      }
+    />
+  );
+}
+
+
+export function StrategicObjectives() {
+  return (
+    <MasterDataPage<any>
+      title="Strategic objectives"
+      description="RALGA's strategic objectives. Staff link each objective of their annual performance contract, and each activity of their plans, to one of them."
+      icon={Target}
+      collection="strategic_objectives"
+      managePermission="manage_projects"
+      exportPermission={["export_reports", "view_master_data"]}
+      itemLabel="strategic objective"
+      searchFields={["code", "name", "description"]}
+      defaultSort="sort"
+      views={[{ key: "active", label: "Active", filter: "active = true" }, { key: "all", label: "All" }]}
+      columns={[
+        { key: "code", header: "Code", sortField: "code", cell: (r) => <span className="font-mono text-[12.5px] font-semibold text-slate-800">{r.code}</span> },
+        { key: "name", header: "Strategic objective", sortField: "name", cell: (r) => (
+          <span className="block min-w-0">
+            <span className="block font-medium text-slate-900">{r.name}</span>
+            {r.description && <span className="block truncate text-[12px] text-slate-500">{r.description}</span>}
+          </span>
+        ) },
+        { key: "sort", header: "Order", sortField: "sort", align: "right", cell: (r) => <span className="tabular-nums">{r.sort}</span> },
+        { key: "active", header: "Status", sortField: "active", csv: (r) => (r.active ? "Active" : "Inactive"), cell: (r) => <ActiveBadge active={r.active} /> },
+      ]}
+      defaults={{ active: true, sort: 0 }}
+      sections={[
+        { title: "Strategic objective", icon: Target, fields: [
+          { name: "code", label: "Code", type: "text", required: true, half: true, upper: true, placeholder: "SO1" },
+          { name: "sort", label: "Order", type: "number", half: true, hint: "Position in lists" },
+          { name: "name", label: "Objective", type: "text", required: true },
+          { name: "description", label: "What it covers", type: "textarea" },
+          { name: "active", label: "Active", type: "bool", placeholder: "Staff can link new plans to it" },
+        ] },
+      ]}
+      aside={
+        <p className="flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-[12.5px] text-blue-900">
+          <Info size={14} className="mt-0.5 shrink-0" /> Keep these in line with the approved Strategic Plan. A deactivated objective stays on the plans that already use it.
         </p>
       }
     />

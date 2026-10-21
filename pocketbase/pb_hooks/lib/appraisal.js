@@ -197,7 +197,7 @@ function launch(dao, auth, cycleId, meta) {
   for (const uid in evaluatorLoad) {
     core.notify(dao, [uid], { title: `Appraisals to complete: ${cycle.getString("name")}`, body: `${evaluatorLoad[uid]} staff member(s) to evaluate`, link: "/dashboard/hr/performance", type: "approval" });
   }
-  if (tpl.allow_self_assessment) core.notify(dao, users.map((u) => u.id), { title: `${cycle.getString("name")}: self-assessment open`, body: "Rate your own performance before your supervisor's review.", link: "/dashboard/employee-portal?tab=Performance", type: "info" });
+  if (tpl.allow_self_assessment) core.notify(dao, users.map((u) => u.id), { title: `${cycle.getString("name")}: self-assessment open`, body: "Rate your own performance before your supervisor's review.", link: "/dashboard/my/performance", type: "info" });
   core.audit(dao, { actor: auth, action: "appraisal_cycle_launched", collection: "appraisal_cycles", recordId: cycle.id, label: cycle.getString("name"), meta, changes: { appraisals: { old: null, new: created } } });
   return { created };
 }
@@ -266,7 +266,7 @@ function share(dao, auth, id, input, meta) {
   a.set("shared_at", new Date().toISOString());
   if (input.summary !== undefined) a.set("manager_summary", String(input.summary || ""));
   dao.saveRecord(a);
-  core.notify(dao, [a.getString("employee")], { title: "Your appraisal results are available", body: `Score ${a.getFloat("final_score")} — grade ${a.getString("grade")} (${a.getString("grade_label")})`, link: "/dashboard/employee-portal?tab=Performance", type: "info" });
+  core.notify(dao, [a.getString("employee")], { title: "Your appraisal results are available", body: `Score ${a.getFloat("final_score")} — grade ${a.getString("grade")} (${a.getString("grade_label")})`, link: "/dashboard/my/performance", type: "info" });
   core.audit(dao, { actor: auth, action: "appraisal_shared", collection: "appraisals", recordId: a.id, label: userOf(dao, a.getString("employee")).getString("name"), meta });
   return a;
 }
@@ -328,7 +328,7 @@ function respond(dao, auth, claimId, input, meta) {
     a.set("status", "shared");
     dao.saveRecord(a);
   }
-  core.notify(dao, [a.getString("employee")], { title: `Your appraisal claim was ${decision === "upheld" ? "accepted" : decision === "rejected" ? "not accepted" : "answered"}`, body: response.slice(0, 160), link: "/dashboard/employee-portal?tab=Performance", type: decision === "rejected" ? "warning" : "info" });
+  core.notify(dao, [a.getString("employee")], { title: `Your appraisal claim was ${decision === "upheld" ? "accepted" : decision === "rejected" ? "not accepted" : "answered"}`, body: response.slice(0, 160), link: "/dashboard/my/performance", type: decision === "rejected" ? "warning" : "info" });
   core.audit(dao, { actor: auth, action: `appraisal_claim_${decision}`, collection: "appraisals", recordId: a.id, label: c.getString("criterion") || "claim", comment: response, meta });
   return c;
 }

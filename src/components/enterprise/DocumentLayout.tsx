@@ -256,7 +256,15 @@ const AUDIT_TEXT: Record<string, string> = {
   closed: "closed the order",
   cancelled: "cancelled the document",
   over_budget_warning: "flagged: over budget",
+  // documents decided outside the approval engine (work plans, attendance corrections)
+  approval_approve: "approved",
+  approval_return: "returned it for changes",
+  approval_reject: "rejected",
+  progress_updated: "updated the progress",
+  reported: "wrote the report",
+  assessed: "assessed the report",
 };
+const AUDIT_TONE: Record<string, ChatterItem["tone"]> = { approval_approve: "success", assessed: "success", payment_recorded: "success", approval_return: "warning", exception_resolved: "warning", over_budget_warning: "warning", approval_reject: "danger" };
 
 /** Merge approval decisions and audit-trail entries into one newest-first chatter feed. */
 export function toChatter(actions: any[], audit: any[]): ChatterItem[] {
@@ -270,8 +278,8 @@ export function toChatter(actions: any[], audit: any[]): ChatterItem[] {
       tone: (a.action === "approve" ? "success" : a.action === "reject" ? "danger" : a.action === "return" ? "warning" : "default") as ChatterItem["tone"],
     })),
     ...audit
-      // Approval decisions already come from the workflow actions above.
-      .filter((e) => !e.action.startsWith("approval_") && !(e.action === "submitted" && actions.some((a) => a.action === "submit")) && (e.action !== "updated" || Object.keys(e.changes || {}).length))
+      // Approval decisions already come from the workflow actions above (when the document has a workflow).
+      .filter((e) => !(e.action.startsWith("approval_") && actions.length) && !(e.action === "submitted" && actions.some((a) => a.action === "submit")) && (e.action !== "updated" || Object.keys(e.changes || {}).length))
       .map((e) => {
         const changes = Object.entries(e.changes || {}).filter(([k]) => !["items", "attachments", "match_result"].includes(k));
         return {
@@ -292,7 +300,7 @@ export function toChatter(actions: any[], audit: any[]): ChatterItem[] {
               AUDIT_TEXT[e.action] || e.action.replace(/_/g, " ")
             ),
           comment: e.comment,
-          tone: (e.action === "payment_recorded" ? "success" : ["exception_resolved", "over_budget_warning"].includes(e.action) ? "warning" : "default") as ChatterItem["tone"],
+          tone: AUDIT_TONE[e.action] || "default",
         };
       }),
   ].sort((a, b) => b.at.localeCompare(a.at));
