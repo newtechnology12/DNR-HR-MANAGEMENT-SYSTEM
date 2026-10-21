@@ -314,9 +314,9 @@ function Controls({ canManage }: { canManage: boolean }) {
           {num("invoice_total_tolerance_pct", "Invoice total tolerance", "Total of all bills above the order value.")}
         </div>
       </Panel>
-      <Panel title="Budget control" subtitle="Checked when a requisition or a purchase order is submitted.">
+      <Panel title="Budget control" subtitle="Checked against the budget line when a requisition or a purchase order is submitted.">
         <div className="flex flex-wrap gap-2">
-          {[["none", "Off", "No budget check"], ["warn", "Warn", "Allowed, but flagged to approvers"], ["block", "Block", "Cannot be submitted over budget"]].map(([k, l, d]) => (
+          {[["none", "Off", "No budget check"], ["warn", "Warn", "Allowed; Budget Officer and DAF are notified"], ["block", "Hard stop", "Blocked over budget unless the DAF overrides"]].map(([k, l, d]) => (
             <button key={k} type="button" disabled={!canManage} onClick={() => setV((x: any) => ({ ...x, budget_control: k }))} className={cn("min-w-[180px] rounded-lg border px-3 py-2 text-left", (v.budget_control || "warn") === k ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-slate-200")}>
               <span className="block text-[13px] font-medium">{l}</span><span className="text-[12px] text-slate-500">{d}</span>
             </button>

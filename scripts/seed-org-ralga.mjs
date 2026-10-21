@@ -142,7 +142,7 @@ async function main() {
     company_email: "",
     currency: "RWF",
     timezone: "Africa/Kigali",
-    budget_control: "warn",
+    budget_control: "block",
     invoice_price_tolerance_pct: 2,
     invoice_total_tolerance_pct: 0,
   };

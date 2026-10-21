@@ -9,6 +9,7 @@ const core = require("./core.js");
 const SYSTEM_FIELDS = [
   "number", "requester", "status", "approval", "pending_approvers", "approver_history",
   "submitted_at", "approved_at", "cancel_reason", "created_by", "subtotal", "tax_total", "total",
+  "funding_source", "budget_override", "budget_check",
 ];
 const EDITABLE_STATUSES = ["draft", "returned"];
 
@@ -70,6 +71,8 @@ function beforeCreate(e) {
   if (!r.getString("currency")) r.set("currency", "RWF");
   if (!r.getString("priority")) r.set("priority", "medium");
   normalizeItems(r);
+  // The budget line must belong to the requester's department (organisation-wide scope may pick any).
+  require("./budget.js").attachLine(dao, r, { department: r.getString("department"), anyDepartment: Boolean(requester) && core.permissionsOf(dao, requester).__scope === "all" });
   let number = "";
   dao.runInTransaction((tx) => {
     number = core.nextNumber(tx, "purchase_requisition");
@@ -93,6 +96,9 @@ function beforeUpdate(e) {
     r.set("branch", before.getString("branch"));
   }
   normalizeItems(r);
+  require("./budget.js").attachLine($app.dao(), r, { department: r.getString("department"), anyDepartment: Boolean(auth) && core.permissionsOf($app.dao(), auth).__scope === "all" });
+  // An override covers one line and amount; a new line needs a new override.
+  if (before.getString("budget_line") !== r.getString("budget_line")) r.set("budget_override", "");
   const changes = core.diff(before, r);
   delete changes.updated;
   e.httpContext.set("dnrAudit", JSON.stringify(changes));
@@ -103,6 +109,7 @@ function assertReadyToSubmit(doc) {
   if (!doc.getString("title").trim()) missing.push("title");
   if (!doc.getString("request_type")) missing.push("request type");
   if (!doc.getString("category")) missing.push("purchase category");
+  if (!doc.getString("budget_line")) missing.push("budget line");
   if (!doc.getString("required_date")) missing.push("required date");
   if (!doc.getString("justification").trim()) missing.push("business justification");
   if (!core.parseJson(doc, "items", []).length) missing.push("at least one item");

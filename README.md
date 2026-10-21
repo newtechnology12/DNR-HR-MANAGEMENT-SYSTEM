@@ -12,8 +12,8 @@ Built by DNR Partners.
 | Step | Scope | Status |
 |---|---|---|
 | 1 | Foundation: 13 roles, permission matrix (two-person confirmation), users & security (2FA, lockout, password policy, session timeout), audit log, approval engine (limits, delegations, overdue escalation), master data (fiscal years, chart of accounts, funding sources, projects, cost centres, tax rates) | **Done** |
-| 2 | Budgeting & budget control (M2) | Next |
-| 3 | Procurement, suppliers, PO, GRN (M3) | Existing module — to be linked to budget lines |
+| 2 | Budgeting & budget control (M2): budgets by line with monthly phasing and Excel import, revisions (supplementary, reduction, virement, re-phasing), hard-stop control with DAF override, commitments from POs, actuals from invoices, utilisation dashboard, budget vs actual, commitments and overrides reports | **Done** |
+| 3 | Procurement, suppliers, PO, GRN (M3) | Existing module — requisitions and POs now charged to budget lines; supplier bank-detail re-approval and plan ↔ budget links next |
 | 4 | Supplier invoices & payment vouchers (M4) | Planned |
 | 5 | Bank & cash, reconciliation (M5) | Planned |
 | 6 | Payroll (M6) | Existing module — GL posting and funding split to add |
@@ -116,6 +116,24 @@ Administration of flows: Setup → Approval workflows and Setup → Approval lim
 - Notifications: in-app always; e-mail when SMTP is configured (Admin UI → Settings → Mail); every e-mail /
   SMS attempt is logged in `outbound_messages` (SMS gateway can be plugged in there).
 
+## Budget control
+
+Budget → Budgets / Revisions / Overview / Reports. The Budget Officer prepares the annual budget (lines =
+GL account × department × funding source × project, phased over 12 months; Excel template import), DAF and
+SG approve. Only approved lines can be charged.
+
+- **Available = revised budget − open commitments − actuals.** Ledger entries are never edited:
+  commitments are released and actuals reversed by new entries (`budget_ledger`, no API access).
+- Requisitions are checked against their line at submission; an approved PO **commits** its total; an
+  approved supplier invoice turns the commitment into an **actual**; cancelling or closing a PO releases what
+  is left; cancelling an approved invoice reverses the actual.
+- Setup → Numbering & procurement → *Budget control* (changed only by holders of `manage_finance_settings`): `block` (hard stop, default), `warn` (notify the Budget Officer and
+  DAF) or `none`. When blocked, only the DAF can **override** one document, with a reason; overrides are
+  permanent and listed in Budget reports → Budget overrides for the Internal Auditor.
+- Revisions change approved lines only after their own approval (DAF → SG); a reduction can never go below
+  what is committed or spent; a virement must net to zero.
+- Utilisation status: green < 75 %, amber 75–90 %, red > 90 % (settings `budget_amber_pct` / `budget_red_pct`).
+
 ## Security
 
 | Control | Default (Settings) |
@@ -171,4 +189,5 @@ and press *Confirm* (the source is recorded in the audit log).
 `npm run test:api` runs API-level checks against a seeded local server, including negative tests:
 self-approval blocked, double approval blocked, admins / auditors cannot approve, roles cannot be changed
 without confirmation, lockout and 2FA, password policy, settings guards, chart-of-accounts rules,
-overlapping tax rates, approval limits and delegations.
+overlapping tax rates, approval limits and delegations, budget hard stop and override rules, commitments and
+actuals reconciling to the ledger, virement and reduction rules, and department scoping of budget figures.

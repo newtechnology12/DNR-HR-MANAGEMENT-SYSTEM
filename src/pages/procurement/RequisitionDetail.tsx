@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/utils";
 import { Badge, EmptyState, KeyValues, PageHeader, Panel, StatusBadge } from "@/components/enterprise/ui";
 import { DOC_STATUS, PO_STATUS, PRIORITY, REQUEST_TYPES, RFQ_STATUS, money, procurementApi } from "@/lib/procurement";
+import { BudgetPanel } from "@/components/budget/BudgetKit";
 
 export default function RequisitionDetail() {
   const { requisitionId } = useParams();
@@ -257,6 +258,13 @@ export default function RequisitionDetail() {
             </Panel>
           </div>
           <div className="space-y-4">
+            {r.status !== "cancelled" && (
+              <BudgetPanel
+                documentType="purchase_requisition" documentId={r.id} number={r.number} lineId={r.budget_line} department={r.department}
+                amount={["draft", "returned", "pending_approval"].includes(r.status) ? Math.round(r.total || 0) : 0} overrideId={r.budget_override}
+                allowOverride={["draft", "returned"].includes(r.status)} onDone={refresh} stacked
+              />
+            )}
             <Panel title="Details">
               <KeyValues
                 columns={1}

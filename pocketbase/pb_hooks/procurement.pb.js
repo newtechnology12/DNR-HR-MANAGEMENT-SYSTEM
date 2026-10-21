@@ -62,10 +62,9 @@ routerAdd(
         throw new BadRequestError(`${doc.getString("number")} is already ${doc.getString("status").replace(/_/g, " ")}.`);
       }
       reqs.assertReadyToSubmit(doc);
-      const finance = require(`${__hooks}/lib/finance.js`);
-      const budget = finance.checkBudget(tx, { department: doc.getString("department"), category: doc.getString("category"), amount: doc.getFloat("total"), date: new Date().toISOString(), label: doc.getString("number") });
+      // Budget control: hard stop when the line's available balance is insufficient (unless overridden).
+      require(`${__hooks}/lib/budget.js`).checkRequisition(tx, doc, auth, meta);
       const approval = approvals.start(tx, "purchase_requisition", doc, auth, meta);
-      finance.warnOverBudget(tx, auth, budget, "purchase_requisitions", doc.id, doc.getString("number"), meta);
       result = { id: doc.id, number: doc.getString("number"), status: doc.getString("status"), approval: approval.id };
     });
     return c.json(200, result);

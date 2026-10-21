@@ -70,12 +70,15 @@ routerAdd("POST", "/api/dnr/purchase-orders/:id/:action", (c) => {
       if (["draft", "returned"].indexOf(po.getString("status")) === -1) throw new BadRequestError(`${po.getString("number")} is already ${po.getString("status").replace(/_/g, " ")}.`);
       if (!(po.getFloat("grand_total") > 0)) throw new BadRequestError(`${po.getString("number")} has no value.`);
       if (!po.getString("expected_delivery_date")) throw new BadRequestError("Set an expected delivery date before submitting.");
-      const finance = require(`${__hooks}/lib/finance.js`);
-      const budget = finance.checkBudget(tx, { department: po.getString("department"), category: po.getString("category"), amount: po.getFloat("grand_total"), date: po.getString("order_date"), label: po.getString("number"), excludePoId: po.id });
+      // Budget control before routing: the commitment itself is recorded when the PO is finally approved.
+      if (!po.getString("budget_line")) throw new BadRequestError(`${po.getString("number")} has no budget line. Choose the line the order is charged to.`);
+      require(`${__hooks}/lib/budget.js`).assertAvailable(tx, {
+        line: tx.findRecordById("budget_lines", po.getString("budget_line")), amount: Math.round(po.getFloat("grand_total")) - po.getInt("committed_amount"),
+        documentType: "purchase_order", documentId: po.id, documentNumber: po.getString("number"), actor: auth, meta,
+      });
       require(`${__hooks}/lib/contracts.js`).checkPo(tx, po);
       const approval = approvals.start(tx, "purchase_order", po, auth, meta);
       if (po.getString("contract")) require(`${__hooks}/lib/contracts.js`).sync(tx, po.getString("contract"));
-      finance.warnOverBudget(tx, auth, budget, "purchase_orders", po.id, po.getString("number"), meta);
       out = { id: po.id, status: po.getString("status"), approval: approval.id };
     } else if (action === "receive") {
       const r = purchasing.receive(tx, c.pathParam("id"), auth, info.data || {}, meta);

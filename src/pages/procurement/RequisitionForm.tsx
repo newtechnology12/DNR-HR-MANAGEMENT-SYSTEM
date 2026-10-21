@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/utils";
 import { PageHeader, Panel } from "@/components/enterprise/ui";
+import { BudgetLinePicker } from "@/components/budget/BudgetKit";
 import {
   PRIORITY,
   REQUEST_TYPES,
@@ -72,6 +73,7 @@ export default function RequisitionForm() {
     project: "",
     action_plan: "",
     plan_line: "",
+    budget_line: "",
     preferred_supplier: "",
     justification: "",
     notes: "",
@@ -101,6 +103,7 @@ export default function RequisitionForm() {
       project: r.project || "",
       action_plan: r.action_plan || "",
       plan_line: r.plan_line || "",
+      budget_line: r.budget_line || "",
       preferred_supplier: r.preferred_supplier || "",
       justification: r.justification || "",
       notes: r.notes || "",
@@ -136,6 +139,7 @@ export default function RequisitionForm() {
       ...(l && !f.category && l.category ? { category: l.category } : {}),
       ...(l && !f.cost_center && l.cost_center ? { cost_center: l.cost_center } : {}),
       ...(l && !f.project && l.project ? { project: l.project } : {}),
+      ...(l && !f.budget_line && l.budget_line ? { budget_line: l.budget_line } : {}),
     }));
   }
   const pickedLine: any = planLines.data?.find((x: any) => x.id === form.plan_line);
@@ -318,6 +322,11 @@ export default function RequisitionForm() {
                   ))}
                 </select>
               </Field>
+              <div className="sm:col-span-2">
+                <span className="mb-1 block text-[12.5px] font-medium text-slate-700">Budget line <span className="text-red-600">*</span></span>
+                <BudgetLinePicker value={form.budget_line} onChange={(id) => setForm((f) => ({ ...f, budget_line: id }))} department={me?.department} amount={debouncedTotal || undefined} />
+                <p className="mt-1 text-[12px] text-slate-500">The money comes from this line. Submission is checked against what is still available on it.</p>
+              </div>
               <Field label="Preferred supplier" hint="Optional. Procurement makes the final supplier choice.">
                 <input className={inputCls} value={form.preferred_supplier} onChange={set("preferred_supplier")} />
               </Field>

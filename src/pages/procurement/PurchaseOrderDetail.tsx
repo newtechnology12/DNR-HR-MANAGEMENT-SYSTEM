@@ -18,6 +18,7 @@ import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTit
 import { INVOICE_STATUS, LINE_TYPES, OPEN_PO_STATUSES, PAYMENT_METHODS, PO_STATUS, errorMessage, money, procurementApi, purchasingApi } from "@/lib/procurement";
 import RecordInvoiceDialog from "@/pages/finance/RecordInvoiceDialog";
 import { ReturnFormDialog } from "./Returns";
+import { BudgetPanel } from "@/components/budget/BudgetKit";
 import { Field, FormBlock, FormDialog, textareaCls } from "@/components/portal/kit";
 
 const TABS = ["lines", "receipts", "bills", "other", "revisions", "approval"] as const;
@@ -170,6 +171,15 @@ export default function PurchaseOrderDetail() {
       )}
 
       <DocumentFlow po={po} receipts={receipts} invoices={invoices} payments={payments} returns={q.data!.returns} onTab={setTab} />
+
+      {po.status !== "cancelled" && (
+        <BudgetPanel
+          documentType="purchase_order" documentId={po.id} number={po.number} lineId={po.budget_line} department={po.department}
+          amount={Math.round(po.grand_total || 0)} committed={po.committed_amount || 0} overrideId={po.budget_override}
+          editable={editable && canManage && !po.committed_amount} allowOverride={editable}
+          onChangeLine={(id) => pocketbase.collection("purchase_orders").update(po.id, { budget_line: id })} onDone={refresh}
+        />
+      )}
 
       <SmartButtons
         items={[

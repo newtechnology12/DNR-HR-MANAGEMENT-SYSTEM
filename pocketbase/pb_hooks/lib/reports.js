@@ -173,13 +173,9 @@ const REPORTS = {
   budget: {
     title: "Budget vs actual",
     run: (dao, f, n) => {
-      const fin = require("./finance.js");
-      const year = parseInt((f.from || new Date().toISOString()).slice(0, 4), 10);
-      const rows = (dao.findRecordsByFilter("budgets", "fiscal_year = {:y}", "", 1000, 0, { y: year }) || []).filter((b) => !f.department || b.getString("department") === f.department).map((b) => {
-        const u = fin.usage(dao, b);
-        return { budget: b.getString("name"), department: n.dept[b.getString("department")], ...u, used_pct: u.amount ? Math.round(((u.committed + u.invoiced) / u.amount) * 1000) / 10 : 0 };
-      });
-      return { columns: [["department", "Department"], ["budget", "Budget line"], ["amount", "Budget", "money"], ["committed", "Committed", "money"], ["invoiced", "Actual (billed)", "money"], ["paid", "Paid", "money"], ["remaining", "Available", "money"], ["used_pct", "Used", "pct"]], rows, totals: { amount: sum(rows, "amount"), committed: sum(rows, "committed"), invoiced: sum(rows, "invoiced"), paid: sum(rows, "paid"), remaining: sum(rows, "remaining") }, note: `Fiscal year ${year} (from the “From” date).` };
+      const u = require("./budget.js").usage(dao, null, { department: f.department || "" });
+      const rows = u.items.filter((i) => i.kind !== "revenue").map((i) => ({ department: i.department_name, budget: `${i.code} — ${i.name}`, funding: i.funding_code, amount: i.budget, committed: i.committed, invoiced: i.actual, remaining: i.available, used_pct: i.used_pct }));
+      return { columns: [["department", "Department"], ["budget", "Budget line"], ["funding", "Funding"], ["amount", "Budget", "money"], ["committed", "Committed", "money"], ["invoiced", "Actual", "money"], ["remaining", "Available", "money"], ["used_pct", "Used", "pct"]], rows, totals: { amount: sum(rows, "amount"), committed: sum(rows, "committed"), invoiced: sum(rows, "invoiced"), remaining: sum(rows, "remaining") }, note: `${u.fiscal_year.name} — current approved budget lines.` };
     },
   },
   supplier_spend: { title: "Spend by supplier", run: (dao, f, n) => grouped(dao, f, n, "supplier", n.sup, "Supplier") },

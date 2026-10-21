@@ -78,11 +78,12 @@ async function setupPeople(roleIds) {
 
 
 // ------------------------------------------------------------------ reference data
+// [name, code, is_asset, default GL account] — the account picks the budget line and, later, the posting.
 const CATEGORIES = [
-  ["IT Equipment", "ITE", true], ["Office Furniture", "FUR", true], ["Vehicles & Transport", "VEH", true],
-  ["Office Supplies", "SUP", false], ["Printing & Stationery", "PRN", false], ["Software & Subscriptions", "SWS", false],
-  ["Professional Services", "PRO", false], ["Maintenance & Repairs", "MNT", false], ["Construction & Renovation", "CON", false],
-  ["Training & Events", "TRN", false],
+  ["IT Equipment", "ITE", true, "1240"], ["Office Furniture", "FUR", true, "1230"], ["Vehicles & Transport", "VEH", true, "1220"],
+  ["Office Supplies", "SUP", false, "5201"], ["Printing & Stationery", "PRN", false, "5215"], ["Software & Subscriptions", "SWS", false, "5214"],
+  ["Professional Services", "PRO", false, "5210"], ["Maintenance & Repairs", "MNT", false, "5205"], ["Construction & Renovation", "CON", false, "1210"],
+  ["Training & Events", "TRN", false, "5209"],
 ];
 const UNITS = [
   ["Each", "EA"], ["Box", "BOX"], ["Pack", "PK"], ["Ream", "RM"], ["Litre", "L"], ["Kilogram", "KG"],
@@ -101,8 +102,9 @@ async function upsert(collection, filter, data) {
 
 async function setupReference(roleIds) {
   const cats = {};
-  for (const [name, code, is_asset] of CATEGORIES) {
-    cats[name] = await upsert("procurement_categories", `code="${code}"`, { name, code, is_asset, active: true, description: `${name} purchases` });
+  const glId = Object.fromEntries((await admin.collection("gl_accounts").getFullList({ fields: "id,code" })).map((a) => [a.code, a.id]));
+  for (const [name, code, is_asset, account] of CATEGORIES) {
+    cats[name] = await upsert("procurement_categories", `code="${code}"`, { name, code, is_asset, active: true, description: `${name} purchases`, expense_account: glId[account] || "" });
   }
   for (const [name, code] of UNITS) await upsert("units_of_measure", `code="${code}"`, { name, code, active: true });
   for (const [key, name, prefix, include_year] of [...SEQUENCES, ["asset", "Asset", "AST", true], ["inventory_item", "Inventory item", "ITM", false]]) {
@@ -172,6 +174,25 @@ const OUTCOMES = [
   "rejected", "returned", "draft", "draft", "cancelled", "approved", "pending0", "approved", "pending1", "approved",
 ];
 
+const isShortfall = (e) => /insufficient budget/i.test(e?.response?.message || e?.message || "");
+
+/** Budget control is a hard stop: when a document exceeds its line, the DAF records an override and it is resubmitted. */
+async function submitWithBudget(client, path, docType, docId, reason) {
+  try {
+    return await client.send(path, { method: "POST" });
+  } catch (e) {
+    if (!isShortfall(e)) throw e;
+    const daf = await as("finance@dnr-hr.rw");
+    await daf.send("/api/ims/budget/overrides", { method: "POST", body: { document_type: docType, document_id: docId, reason } });
+    return client.send(path, { method: "POST" });
+  }
+}
+
+/** Budget line for a requester's department and the category's GL account (member contributions). */
+function lineFor(lines, departmentCode, account) {
+  return lines.find((l) => l.code === `${departmentCode}-${account}-MC`) || lines.find((l) => l.code === `${departmentCode}-5201-MC`) || null;
+}
+
 async function act(approvalId, email, action, comment) {
   const c = await as(email);
   return c.send(`/api/dnr/approvals/${approvalId}/act`, { method: "POST", body: { action, comment } });
@@ -193,10 +214,15 @@ async function seedRequisitions(users, cats, units) {
   const byId = Object.fromEntries(users.map((u) => [u.id, u]));
   const tally = {};
 
+  const fy = await admin.collection("fiscal_years").getFirstListItem("is_current = true");
+  const budgetLines = await admin.collection("budget_lines").getFullList({ filter: `fiscal_year = "${fy.id}" && status = "active"`, fields: "id,code" });
+  const accountOf = Object.fromEntries(CATEGORIES.map((c) => [c[0], c[3]]));
   for (const [i, [title, request_type, category, lines]] of SCENARIOS.entries()) {
     const requester = i === 0 ? users.find((u) => u.email === "employee@dnr-hr.rw") : pick(requesters);
     const client = await as(requester.email);
+    const budgetLine = lineFor(budgetLines, requester.expand?.department?.code, accountOf[category]);
     const doc = await client.collection("purchase_requisitions").create({
+      budget_line: budgetLine?.id || "",
       title, request_type, category: cats[category].id, priority: pick(["low", "medium", "medium", "high", "urgent"]),
       required_date: inDays(int(7, 60)), delivery_location: pick(["Kigali HQ, KG 7 Ave", "Musanze branch", "Huye branch"]),
       cost_center: requester.expand?.department?.code || requester.expand?.department?.name || "",
@@ -207,7 +233,7 @@ async function seedRequisitions(users, cats, units) {
     tally[outcome] = (tally[outcome] || 0) + 1;
     if (outcome === "draft") continue;
 
-    const submitted = await client.send(`/api/dnr/requisitions/${doc.id}/submit`, { method: "POST" });
+    const submitted = await submitWithBudget(client, `/api/dnr/requisitions/${doc.id}/submit`, "purchase_requisition", doc.id, "Priority need confirmed by the Secretary General; to be covered by a virement at mid-year review.");
     if (outcome === "cancelled") {
       await client.send(`/api/dnr/requisitions/${doc.id}/cancel`, { method: "POST", body: { reason: "Budget reallocated to a higher priority project." } });
       continue;
@@ -342,7 +368,10 @@ async function seedSourcing(cats) {
 
 // ------------------------------------------------------------------ purchase orders, receiving, inventory
 async function wipeFinance() {
-  for (const col of ["payments", "supplier_invoices", "budgets"]) {
+  // Budget effects of the purchasing documents that are about to be regenerated.
+  for (const r of await admin.collection("budget_ledger").getFullList({ fields: "id", filter: 'source_type = "purchase_order" || source_type = "supplier_invoice"' })) await admin.collection("budget_ledger").delete(r.id);
+  for (const r of await admin.collection("budget_overrides").getFullList({ fields: "id", filter: 'document_type = "purchase_requisition" || document_type = "purchase_order"' })) await admin.collection("budget_overrides").delete(r.id);
+  for (const col of ["payments", "supplier_invoices"]) {
     const rows = await admin.collection(col).getFullList({ fields: "id" });
     for (const r of rows) await admin.collection(col).delete(r.id);
   }
@@ -350,25 +379,14 @@ async function wipeFinance() {
     const seq = await admin.collection("number_sequences").getFirstListItem(`key="${key}"`).catch(() => null);
     if (seq) await admin.collection("number_sequences").update(seq.id, { next_value: 1 });
   }
-  const audit = await admin.collection("audit_logs").getFullList({ fields: "id", filter: `collection_name="supplier_invoices" || collection_name="budgets"` });
+  const audit = await admin.collection("audit_logs").getFullList({ fields: "id", filter: `collection_name="supplier_invoices"` });
   for (const r of audit) await admin.collection("audit_logs").delete(r.id);
 }
 
-// Budgets per department for the current fiscal year, invoices matched against POs, and payments.
+// Supplier invoices matched against POs (three-way match), their approval and payments.
 async function seedFinance() {
-  const fin = await as("budget@dnr-hr.rw"); // the Budget Officer prepares budgets (permission matrix)
   const acc = await as("accountant@dnr-hr.rw");
   const cashier = await as("cashier@dnr-hr.rw"); // only the Cashier executes payments
-  const year = new Date().getFullYear();
-  const departments = await admin.collection("departments").getFullList({ sort: "name" });
-  const sizes = { procure: 60e6, ict: 85e6, capacity: 120e6, advocacy: 45e6, recruit: 25e6, finance: 40e6, communic: 35e6 };
-  for (const d of departments) {
-    const key = Object.keys(sizes).find((k) => d.name.toLowerCase().includes(k));
-    await fin.collection("budgets").create({
-      name: `${d.name} — operating budget ${year}`, fiscal_year: year, department: d.id, amount: key ? sizes[key] : 20e6, currency: "RWF", status: "active",
-      cost_center: d.code || "", notes: "Approved by the Executive Committee (demo figure)",
-    });
-  }
   const roleId = async (n) => (await admin.collection("roles").getFirstListItem(`name="${n}"`)).id;
   for (const w of await admin.collection("approval_workflows").getFullList({ filter: `document_type="supplier_invoice"` })) {
     if (w.name !== "Supplier invoice approval") await admin.collection("approval_workflows").delete(w.id).catch(() => null);
@@ -406,7 +424,7 @@ async function seedFinance() {
       paid++;
     }
   }
-  console.log(`  ✓ finance: ${departments.length} budgets, ${invoices} invoices (${exceptions} match exception), ${paid} paid, invoice approval workflows`);
+  console.log(`  ✓ finance: ${invoices} invoices (${exceptions} match exception), ${paid} paid, invoice approval workflows`);
 }
 
 async function wipePurchasing() {
@@ -449,7 +467,7 @@ async function seedPurchasing() {
   }
   // Scenario per PO: 0 → fully received, 1 → partial with a rejection, 2 → sent & acknowledged, 3 → pending approval
   for (const [i, po] of pos.entries()) {
-    const sub = await pm.send(`/api/dnr/purchase-orders/${po.id}/submit`, { method: "POST" });
+    const sub = await submitWithBudget(pm, `/api/dnr/purchase-orders/${po.id}/submit`, "purchase_order", po.id, "Order above the line after quotations; shortfall to be covered by the supplementary budget.");
     if (i === 3) continue;
     await approveAll(sub.approval);
     await pm.send(`/api/dnr/purchase-orders/${po.id}/send`, { method: "POST" });

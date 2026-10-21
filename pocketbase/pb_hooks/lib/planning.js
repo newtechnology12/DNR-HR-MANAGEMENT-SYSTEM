@@ -142,9 +142,8 @@ function progress(dao, planId) {
   }
   let budget = null;
   try {
-    const f = require("./finance.js");
-    const b = f.findBudget(dao, plan.getString("department"), "", plan.getInt("fiscal_year"));
-    if (b) budget = { id: b.id, name: b.getString("name"), amount: b.getFloat("amount"), ...f.usage(dao, b) };
+    const s = require("./budget.js").departmentSummary(dao, plan.getString("department"));
+    if (s) budget = { id: "", name: `${s.fiscal_year} budget — ${s.lines} line(s)`, ...s };
   } catch (_) {}
   return { lines: out, budget };
 }

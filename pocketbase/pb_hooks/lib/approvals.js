@@ -155,6 +155,30 @@ const DOCS = {
       requester: doc.getString("created_by"), number: doc.getString("number"), title: doc.getString("name"),
     }),
   },
+  budget: {
+    collection: "budgets",
+    approvePermission: "approve_budgets",
+    label: "budget",
+    link: (id) => `/dashboard/budget/budgets/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    // The Budget Officer who prepared the budget cannot approve it.
+    context: (doc) => ({
+      amount: doc.getInt("total"), currency: "RWF", department: doc.getString("department"), category: "", branch: "",
+      requester: doc.getString("prepared_by"), number: doc.getString("number"), title: doc.getString("name"),
+    }),
+  },
+  budget_revision: {
+    collection: "budget_revisions",
+    approvePermission: "approve_budgets",
+    label: "budget revision",
+    link: (id) => `/dashboard/budget/revisions/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    // Amount for limits and conditions: the money moved (increase or decrease, whichever is larger).
+    context: (doc) => ({
+      amount: Math.max(doc.getInt("total_increase"), doc.getInt("total_decrease")), currency: "RWF", department: doc.getString("department"), category: "", branch: "",
+      requester: doc.getString("prepared_by"), number: doc.getString("number"), title: doc.getString("title"),
+    }),
+  },
   payroll: {
     collection: "payrolls",
     approvePermission: "approve_payroll",
@@ -679,6 +703,8 @@ function act(dao, approvalId, actor, input, meta) {
   doc.set("approver_history", approval.getString("approver_history"));
   if (docStatusChange) doc.set("status", docStatusChange);
   dao.saveRecord(doc);
+  // Module effects of a final approval (budget activation, commitments, actuals…) run in this transaction.
+  if (docStatusChange && docStatusChange === def.status.approved) require("./effects.js").approved(dao, type, doc, actor, meta);
 
   core.audit(dao, {
     actor, action: `approval_${action}`, collection: def.collection, recordId: doc.id, label: number, meta,

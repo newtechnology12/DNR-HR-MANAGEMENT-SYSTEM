@@ -27,6 +27,9 @@
 
   "nav.dashboard": "Ahabanza",
   "nav.budgets": "Ingengo y'imari",
+  "nav.budgetOverview": "Incamake y’ingengo y’imari",
+  "nav.budgetRevisions": "Ivugurura ry’ingengo y’imari",
+  "nav.budgetReports": "Raporo z’ingengo y’imari",
   "nav.suppliers": "Abatanga serivisi",
   "nav.employees": "Abakozi",
   "nav.departments": "Amashami",

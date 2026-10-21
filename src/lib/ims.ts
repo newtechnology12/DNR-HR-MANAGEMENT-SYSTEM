@@ -77,6 +77,8 @@ export const DOCUMENT_LINKS: Record<string, (id: string) => string> = {
   contract: (id) => `/dashboard/procurement/contracts/${id}`,
   procurement_plan: (id) => `/dashboard/procurement/plans/${id}`,
   payroll: (id) => `/dashboard/hr/payroll/${id}`,
+  budget: (id) => `/dashboard/budget/budgets/${id}`,
+  budget_revision: (id) => `/dashboard/budget/revisions/${id}`,
 };
 
 const qs = (params: Record<string, unknown>) =>
@@ -178,4 +180,10 @@ export const showDay = (v?: string) => {
 };
 
 /** Whole RWF, grouped: 1,250,000. */
-export const rwf = (n: number | undefined | null) => `RWF ${Math.round(Number(n) || 0).toLocaleString("en-US")}`;
+// Non-breaking space: an amount never wraps between the currency and the number.
+export const rwf = (n: number | undefined | null) => `RWF ${Math.round(Number(n) || 0).toLocaleString("en-US")}`;
+/** Change amounts: "RWF +1,000,000" / "RWF −1,000,000". */
+export const rwfSigned = (n: number | undefined | null) => {
+  const v = Math.round(Number(n) || 0);
+  return `RWF ${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toLocaleString("en-US")}`;
+};

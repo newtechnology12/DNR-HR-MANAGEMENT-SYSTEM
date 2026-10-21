@@ -1,6 +1,6 @@
 /// <reference path="../../pb_data/types.d.ts" />
 /**
- * Finance integration: budgets, three-way matching (PO ↔ goods receipts ↔ supplier invoice),
+ * Finance integration (budget control lives in budget.js): three-way matching (PO ↔ goods receipts ↔ supplier invoice),
  * invoice exceptions, invoice approval and payments.
  *
  * Nothing mismatched is ever approved automatically: an invoice with a match exception must be
@@ -10,7 +10,7 @@
 const core = require("./core.js");
 
 const ACTIVE_INVOICE = ["received", "exception", "matched", "pending_approval", "approved", "returned", "partially_paid", "paid"];
-const COMMITTING_PO = ["approved", "sent", "acknowledged", "partially_received", "fully_received", "partially_invoiced", "fully_invoiced"];
+
 
 function toDate(v) {
   const d = new Date(String(v || "").trim().replace(" ", "T"));
@@ -39,89 +39,6 @@ function settings(dao) {
   };
 }
 
-// ------------------------------------------------------------------ budgets
-function findBudget(dao, department, category, year) {
-  if (!department) return null;
-  const list = dao.findRecordsByFilter("budgets", 'status = "active" && fiscal_year = {:y} && department = {:d}', "", 50, 0, { y: year, d: department }) || [];
-  return list.find((b) => category && b.getString("category") === category) || list.find((b) => !b.getString("category")) || null;
-}
-
-/** Live budget figures. Commitments = approved orders not yet invoiced; actuals = invoices (paid or not). */
-function usage(dao, budget, excludePoId) {
-  const dept = budget.getString("department");
-  const cat = budget.getString("category");
-  const year = budget.getInt("fiscal_year");
-  const from = `${year}-01-01 00:00:00.000Z`;
-  const to = `${year + 1}-01-01 00:00:00.000Z`;
-  const pos = dao.findRecordsByFilter("purchase_orders", "department = {:d} && order_date >= {:f} && order_date < {:t}", "", 2000, 0, { d: dept, f: from, t: to }) || [];
-  let committed = 0;
-  for (const po of pos) {
-    if (po.id === excludePoId || COMMITTING_PO.indexOf(po.getString("status")) === -1) continue;
-    if (cat && po.getString("category") !== cat) continue;
-    committed += Math.max(po.getFloat("grand_total") - po.getFloat("invoiced_value"), 0);
-  }
-  const invoices = dao.findRecordsByFilter("supplier_invoices", "department = {:d} && invoice_date >= {:f} && invoice_date < {:t}", "", 5000, 0, { d: dept, f: from, t: to }) || [];
-  let invoiced = 0, paid = 0;
-  for (const inv of invoices) {
-    if (ACTIVE_INVOICE.indexOf(inv.getString("status")) === -1) continue;
-    if (cat) {
-      try {
-        if (dao.findRecordById("purchase_orders", inv.getString("purchase_order")).getString("category") !== cat) continue;
-      } catch (_) {
-        continue;
-      }
-    }
-    invoiced += inv.getFloat("total");
-    paid += inv.getFloat("paid_amount");
-  }
-  const amount = budget.getFloat("amount");
-  return {
-    amount: core.money(amount),
-    committed: core.money(committed),
-    invoiced: core.money(invoiced),
-    paid: core.money(paid),
-    remaining: core.money(amount - committed - invoiced),
-  };
-}
-
-/**
- * Budget check for a new commitment. Returns { ok, message } — with budget_control "block" an
- * over-budget commitment throws; with "warn" it is allowed and flagged.
- */
-function checkBudget(dao, opts) {
-  const s = settings(dao);
-  if (s.budgetControl === "none") return { checked: false };
-  const year = (toDate(opts.date) || new Date()).getFullYear();
-  const budget = findBudget(dao, opts.department, opts.category, year);
-  const deptName = (() => {
-    try {
-      return dao.findRecordById("departments", opts.department).getString("name");
-    } catch (_) {
-      return "this department";
-    }
-  })();
-  if (!budget) {
-    const message = `No ${year} budget is set up for ${deptName}.`;
-    if (s.budgetControl === "block") throw new BadRequestError(`${message} Ask Finance to create one under Finance → Budgets before committing spend.`);
-    return { checked: true, over: true, message };
-  }
-  const u = usage(dao, budget, opts.excludePoId);
-  if (opts.amount > u.remaining) {
-    const message = `${opts.label} (${core.formatMoney(opts.amount)}) exceeds the remaining ${year} budget of ${deptName}: ${core.formatMoney(u.remaining)} left of ${core.formatMoney(u.amount)}.`;
-    if (s.budgetControl === "block") throw new BadRequestError(`${message} Budget control is set to block over-budget purchases.`);
-    return { checked: true, over: true, message, budget: budget.id };
-  }
-  return { checked: true, over: false, remainingAfter: core.money(u.remaining - opts.amount), budget: budget.id };
-}
-
-function warnOverBudget(dao, actor, check, collection, recordId, label, meta) {
-  if (!check || !check.over) return;
-  core.audit(dao, { actor, action: "over_budget_warning", collection, recordId, label, comment: check.message, meta });
-  const finance = (dao.findRecordsByFilter("users", 'status = "Active"', "", 1000, 0) || []).filter((u) => core.can(dao, u, "manage_budgets"));
-  core.notify(dao, finance.map((u) => u.id), { title: `Over budget: ${label}`, body: check.message, link: "/dashboard/finance/budgets", type: "warning" });
-}
-
-// ------------------------------------------------------------------ invoices & three-way match
 function otherInvoices(dao, poId, excludeId) {
   return (dao.findRecordsByFilter("supplier_invoices", "purchase_order = {:p}", "", 500, 0, { p: poId }) || []).filter(
     (i) => i.id !== excludeId && ACTIVE_INVOICE.indexOf(i.getString("status")) !== -1
@@ -228,6 +145,10 @@ function invoiceBeforeCreate(e) {
   for (const f of ["number", "status", "match_status", "match_result", "exception_overridden", "exception_resolution", "resolved_by", "resolved_at", "approval", "pending_approvers", "approver_history", "submitted_at", "approved_at", "paid_amount"]) inv.set(f, "");
   inv.set("supplier", po.getString("supplier"));
   inv.set("department", po.getString("department"));
+  inv.set("budget_line", po.getString("budget_line"));
+  inv.set("funding_source", po.getString("funding_source"));
+  inv.set("actual_amount", 0);
+  inv.set("commitment_released", 0);
   inv.set("currency", po.getString("currency") || "RWF");
   inv.set("paid_amount", 0);
   if (!inv.getString("invoice_date")) inv.set("invoice_date", new Date().toISOString());
@@ -317,6 +238,8 @@ function invoiceAction(dao, id, actor, action, input, meta) {
     if (["partially_paid", "paid", "cancelled"].indexOf(status) !== -1) throw new BadRequestError(`${number} is ${status.replace(/_/g, " ")} and cannot be cancelled.`);
     const reason = String(input.reason || "").trim();
     if (!reason) throw new BadRequestError("Give a reason for cancelling the invoice.");
+    // An approved invoice was already an actual on the budget: reverse it and restore the PO commitment.
+    if (inv.getInt("actual_amount") > 0) require("./budget.js").invoiceReversed(dao, inv, actor);
     require("./approvals.js").cancel(dao, "supplier_invoice", inv, actor, reason, meta);
     syncPo(dao, inv.getString("purchase_order"));
     return inv;
@@ -368,16 +291,4 @@ function pay(dao, id, actor, input, meta) {
   return p;
 }
 
-function budgetGuard(e) {
-  const auth = e.httpContext.get("authRecord");
-  if (!auth) return;
-  core.requirePermission($app.dao(), auth, "manage_budgets", "manage budgets");
-  if (e.record.isNew && e.record.isNew()) e.record.set("created_by", auth.id);
-  if (!e.record.getString("status")) e.record.set("status", "active");
-  if (!(e.record.getFloat("amount") > 0)) throw new BadRequestError("The budget amount must be greater than zero.");
-  if (!e.record.getString("department")) throw new BadRequestError("Choose the department this budget belongs to.");
-  const y = e.record.getInt("fiscal_year");
-  if (!(y >= 2000 && y <= 2100)) throw new BadRequestError("Enter a valid fiscal year, e.g. 2026.");
-}
-
-module.exports = { settings, findBudget, usage, checkBudget, warnOverBudget, invoiceBeforeCreate, invoiceAfterCreate, invoiceBeforeUpdate, invoiceAfterUpdate, invoiceAction, pay, budgetGuard, syncPo };
+module.exports = { settings, invoiceBeforeCreate, invoiceAfterCreate, invoiceBeforeUpdate, invoiceAfterUpdate, invoiceAction, pay, syncPo };

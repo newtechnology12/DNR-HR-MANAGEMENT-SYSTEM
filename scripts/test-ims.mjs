@@ -242,7 +242,9 @@ let pr;
 await check("a person never decides the same document at two levels", async () => {
   // A Finance requisition: the department head is the DAF, so the DAF step must go to someone else.
   const cat = await admin.collection("procurement_categories").getFirstListItem("active = true");
+  const line = await admin.collection("budget_lines").getFirstListItem('code = "FIN-5201-MC" && status = "active"');
   pr = await accountant.collection("purchase_requisitions").create({
+    budget_line: line.id,
     title: "SoD test: printer cartridges", request_type: "goods", category: cat.id, priority: "medium", required_date: new Date(Date.now() + 20 * 864e5).toISOString().replace("T", " "),
     delivery_location: "Kigali HQ", justification: "Segregation-of-duties API test.", items: [{ description: "Toner cartridge", quantity: 2, unit: "Each", unit_cost: 90000, tax_rate: 18 }],
   });

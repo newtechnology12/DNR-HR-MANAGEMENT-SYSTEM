@@ -42,7 +42,12 @@ export const NAVIGATION: NavGroup[] = [
   {
     key: "budget",
     label: "Budget",
-    items: [{ key: "budgets", label: "Budgets", link: "/dashboard/finance/budgets", icon: PieChart, perms: ["view_budgets", "manage_budgets"] }],
+    items: [
+      { key: "budgetOverview", label: "Budget overview", link: "/dashboard/budget", icon: PieChart, perms: ["view_budgets", "manage_budgets"] },
+      { key: "budgets", label: "Budgets", link: "/dashboard/budget/budgets", icon: ListTree, perms: ["view_budgets", "manage_budgets", "approve_budgets"] },
+      { key: "budgetRevisions", label: "Budget revisions", link: "/dashboard/budget/revisions", icon: GitPullRequest, perms: ["view_budgets", "manage_budgets", "approve_budgets"] },
+      { key: "budgetReports", label: "Budget reports", link: "/dashboard/budget/reports", icon: BarChart3, perms: ["view_budgets", "manage_budgets"] },
+    ],
   },
   {
     key: "procurement",

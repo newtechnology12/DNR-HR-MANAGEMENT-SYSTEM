@@ -79,6 +79,9 @@ function newPo(dao, req, actor) {
   po.set("category", req.getString("category"));
   po.set("cost_center", req.getString("cost_center"));
   po.set("project", req.getString("project"));
+  po.set("budget_line", req.getString("budget_line"));
+  po.set("funding_source", req.getString("funding_source"));
+  po.set("committed_amount", 0);
   po.set("delivery_location", req.getString("delivery_location"));
   po.set("currency", req.getString("currency") || "RWF");
   po.set("order_date", new Date().toISOString());
@@ -169,7 +172,7 @@ function beforeUpdate(e) {
   if (["draft", "returned"].indexOf(before.getString("status")) === -1) {
     throw new BadRequestError(`${before.getString("number")} is ${before.getString("status").replace(/_/g, " ")} and can no longer be edited.`);
   }
-  const editable = ["expected_delivery_date", "delivery_location", "payment_terms", "delivery_terms", "notes", "terms_conditions", "items", "attachments", "delivery_cost", "other_charges", "contract"];
+  const editable = ["expected_delivery_date", "delivery_location", "payment_terms", "delivery_terms", "notes", "terms_conditions", "items", "attachments", "delivery_cost", "other_charges", "contract", "budget_line"];
   const amended = before.getInt("revision") > 0;
   const fields = po.collection().schema.fields().map((f) => f.name);
   for (const f of fields) if (editable.indexOf(f) === -1) po.set(f, before.get(f));
@@ -197,7 +200,10 @@ function beforeUpdate(e) {
     return { ...base, unit_price: n.unit_price !== undefined ? n.unit_price : o.unit_price, tax_rate: n.tax_rate !== undefined ? n.tax_rate : o.tax_rate };
   }));
   computeTotals(po);
-  const changes = core.diff(before, po, ["expected_delivery_date", "delivery_location", "payment_terms", "delivery_terms", "notes", "grand_total", "delivery_cost", "other_charges"]);
+  // Only lines of the order's department; a committed order keeps its line (amend changes amounts only).
+  if (before.getInt("committed_amount") > 0) po.set("budget_line", before.getString("budget_line"));
+  require("./budget.js").attachLine($app.dao(), po, { department: po.getString("department") });
+  const changes = core.diff(before, po, ["expected_delivery_date", "delivery_location", "payment_terms", "delivery_terms", "notes", "grand_total", "delivery_cost", "other_charges", "budget_line"]);
   if (JSON.stringify(oldItems.map((i) => [i.line_type, i.unit_price])) !== JSON.stringify(core.parseJson(po, "items", []).map((i) => [i.line_type, i.unit_price]))) {
     changes.items = { old: "…", new: "line types / prices changed" };
   }
@@ -252,6 +258,7 @@ function transition(dao, id, actor, action, input, meta) {
     const reason = String(input.reason || "").trim();
     if (!reason) throw new BadRequestError("Give a reason for cancelling the purchase order.");
     require("./approvals.js").cancel(dao, "purchase_order", po, actor, reason, meta);
+    require("./budget.js").releasePo(dao, po, actor, `Cancelled: ${reason}`);
     try {
       const req = dao.findRecordById("purchase_requisitions", po.getString("requisition"));
       if (req.getString("status") === "converted_to_po") {
@@ -264,6 +271,7 @@ function transition(dao, id, actor, action, input, meta) {
     throw new NotFoundError(`Unknown purchase order action "${action}".`);
   }
   dao.saveRecord(po);
+  if (action === "close") require("./budget.js").releasePo(dao, po, actor, `Closed short: ${String(input.reason || "").trim()}`);
   core.notify(dao, [po.getString("requester")], {
     title: `${number}: ${action === "send" ? "sent to supplier" : action === "acknowledge" ? "acknowledged by supplier" : "closed"}`,
     body: po.getString("title"), link: `/dashboard/procurement/purchase-orders/${po.id}`, type: "info",

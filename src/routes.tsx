@@ -100,7 +100,14 @@ const PERFORMANCE_USERS = ["view_employee_perfomances", "evaluate_staff", "manag
 const Invoices = lazy(() => import("./pages/finance/Invoices"));
 const Payments = lazy(() => import("./pages/finance/Invoices").then((m) => ({ default: m.Payments })));
 const InvoiceDetail = lazy(() => import("./pages/finance/InvoiceDetail"));
-const Budgets = lazy(() => import("./pages/finance/Budgets"));
+// RALGA IMS — budgeting (Step 2).
+const BudgetOverview = lazy(() => import("./pages/budget/BudgetOverview"));
+const BudgetList = lazy(() => import("./pages/budget/Budgets"));
+const BudgetDetail = lazy(() => import("./pages/budget/BudgetDetail"));
+const BudgetRevisions = lazy(() => import("./pages/budget/BudgetRevisions"));
+const RevisionDetail = lazy(() => import("./pages/budget/RevisionDetail"));
+const BudgetReports = lazy(() => import("./pages/budget/BudgetReports"));
+const BUDGET_USERS = ["view_budgets", "manage_budgets", "approve_budgets"];
 const INVOICE_USERS = ["view_invoices", "manage_invoices", "resolve_invoice_exceptions", "approve_invoices", "record_payments"];
 const PO_USERS = ["view_purchase_orders", "manage_purchase_orders", "approve_purchase_orders", "receive_goods"];
 const INVENTORY_USERS = ["view_inventory", "manage_inventory"];
@@ -749,11 +756,7 @@ const router = createBrowserRouter([
                   },
                   {
                     path: "budgets",
-                    element: (
-                      <ProtectedRoute entity={["view_budgets", "manage_budgets"]}>
-                        <Budgets />
-                      </ProtectedRoute>
-                    ),
+                    element: <Navigate to="/dashboard/budget" replace />,
                   },
                 ],
               },
@@ -764,6 +767,17 @@ const router = createBrowserRouter([
                     <AuditLog />
                   </ProtectedRoute>
                 ),
+              },
+              {
+                path: "budget",
+                children: [
+                  { path: "", element: <ProtectedRoute entity={["view_budgets", "manage_budgets"]}><BudgetOverview /></ProtectedRoute> },
+                  { path: "budgets", element: <ProtectedRoute entity={BUDGET_USERS}><BudgetList /></ProtectedRoute> },
+                  { path: "budgets/:budgetId", element: <ProtectedRoute entity={BUDGET_USERS}><BudgetDetail /></ProtectedRoute> },
+                  { path: "revisions", element: <ProtectedRoute entity={BUDGET_USERS}><BudgetRevisions /></ProtectedRoute> },
+                  { path: "revisions/:revisionId", element: <ProtectedRoute entity={BUDGET_USERS}><RevisionDetail /></ProtectedRoute> },
+                  { path: "reports", element: <ProtectedRoute entity={["view_budgets", "manage_budgets"]}><BudgetReports /></ProtectedRoute> },
+                ],
               },
               {
                 path: "approvals",
