@@ -167,10 +167,10 @@ function PlansTab({ uid }: { uid: string }) {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1080px] text-[14px]">
+              <table className="w-full min-w-[1040px] text-[14px]">
                 <thead>
                   <tr className="border-y border-[#EDF0F5] bg-[#F8FAFC] text-left text-[13px] text-[#5B6577]">
-                    <th scope="col" className="w-[30%] px-5 py-3 font-bold">Plan</th>
+                    <th scope="col" className="w-[26%] px-5 py-3 font-bold">Plan</th>
                     <th scope="col" className="px-3 py-3 font-bold">Level</th>
                     <th scope="col" className="px-3 py-3 font-bold">Period</th>
                     <th scope="col" className="px-3 py-3 font-bold">Supervisor</th>
@@ -189,7 +189,7 @@ function PlansTab({ uid }: { uid: string }) {
                     const issues = openIssues(p);
                     return (
                       <tr key={p.id} onClick={() => navigate(`/dashboard/my/plans/${p.id}`)} className="cursor-pointer border-b border-[#EDF0F5] align-middle last:border-b-0 hover:bg-[#F8FAFD]">
-                        <td className="min-w-[280px] max-w-[360px] px-5 py-3.5">
+                        <td className="min-w-[230px] max-w-[330px] px-5 py-3.5">
                           <Link to={`/dashboard/my/plans/${p.id}`} onClick={(e) => e.stopPropagation()} className="block font-bold leading-snug text-[#14213D] hover:text-[#0B3A6F]">{planTitle(p)}</Link>
                           <span className="mt-0.5 block text-[12.5px] leading-snug">
                             <span className="font-mono text-[11.5px] text-[#5B6577]">{p.number}</span>
@@ -198,9 +198,9 @@ function PlansTab({ uid }: { uid: string }) {
                           </span>
                         </td>
                         <td className="px-3 py-3.5">{TYPE_INFO[p.plan_type as PlanKind]?.short}</td>
-                        <td className="px-3 py-3.5 text-[13.5px] text-[#36435A]">{p.period_label}</td>
-                        <td className="px-3 py-3.5 text-[13.5px] text-[#36435A]">{p.expand?.supervisor?.name || <span className="text-[#8A94A6]">—</span>}</td>
-                        <td className="px-3 py-3.5"><span className="flex items-center gap-2.5"><Bar value={p.progress} health={h} className="w-[120px]" /><b className="w-10 text-right tabular-nums">{p.progress}%</b></span></td>
+                        <td className="min-w-[140px] px-3 py-3.5 text-[13.5px] text-[#36435A]">{p.period_label}</td>
+                        <td className="min-w-[110px] px-3 py-3.5 text-[13.5px] text-[#36435A]">{p.expand?.supervisor?.name || <span className="text-[#8A94A6]">—</span>}</td>
+                        <td className="px-3 py-3.5"><span className="flex items-center gap-2.5"><Bar value={p.progress} health={h} className="w-[72px]" /><b className="w-10 text-right tabular-nums">{p.progress}%</b></span></td>
                         <td className="px-3 py-3.5"><Pill tone={HEALTH[h].tone}>{HEALTH[h].label}</Pill></td>
                         <td className="px-3 py-3.5 text-center">{issues ? <b className="text-[15px] text-[#B42318]">{issues}</b> : <span className="text-[#8A94A6]">—</span>}</td>
                         <td className="px-3 py-3.5"><Pill tone={st.tone}>{st.label}</Pill></td>
