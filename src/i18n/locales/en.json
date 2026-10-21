@@ -106,6 +106,15 @@
   "login.demoHelp": "Demo accounts — one per role. Click a card to sign in instantly.",
   "login.demoPassword": "Password for all demo accounts",
 
+  "forgot.title": "Reset your password",
+  "forgot.subtitle": "Enter your work e-mail and we will send you a link to choose a new password.",
+  "forgot.send": "Send reset link",
+  "forgot.sending": "Sending…",
+  "forgot.sentTitle": "Check your inbox",
+  "forgot.sentText": "If an account exists, a reset link is on its way to",
+  "forgot.back": "Back to sign in",
+  "forgot.note": "The link works once and expires. Ask your system administrator if you no longer have access to your e-mail.",
+
   "session.expiringTitle": "Your session is about to end",
   "session.expiringText": "For security you will be signed out after a period of inactivity.",
   "session.stay": "Stay signed in",

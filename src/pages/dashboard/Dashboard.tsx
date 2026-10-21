@@ -533,7 +533,7 @@ function PeriodSwitch({ value, onChange }: { value: number; onChange: (d: number
           onClick={() => onChange(p.days)}
           className={cn(
             "rounded px-3 py-1.5 text-[12.5px] font-medium transition-colors",
-            value === p.days ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+            value === p.days ? "bg-ralga-navy text-white" : "text-slate-600 hover:bg-slate-100"
           )}
         >
           {p.label}

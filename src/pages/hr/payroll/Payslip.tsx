@@ -69,7 +69,7 @@ export function PayslipView({ slip, payroll }: { slip: any; payroll: any }) {
           <div className={cn(row, "mt-1 border-t border-slate-300 font-bold")}><span>Total deductions</span><span className="tabular-nums">{rwf(slip.total_deductions)}</span></div>
         </div>
       </section>
-      <section className="flex items-center justify-between rounded-md bg-slate-900 px-4 py-3 text-white">
+      <section className="flex items-center justify-between rounded-md bg-ralga-ink px-4 py-3 text-white">
         <span className="text-[13px] font-semibold uppercase tracking-wide">Net pay</span>
         <span className="text-[20px] font-bold tabular-nums">RWF {rwf(slip.net)}</span>
       </section>

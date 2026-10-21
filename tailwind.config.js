@@ -25,11 +25,25 @@ module.exports = {
         sans: ["InterVariable", "Inter", "sans-serif"],
       },
       colors: {
+        // RALGA brand (www.ralga.rw): navy buttons and links, deep navy footer, sky-blue accents,
+        // the logo blue, and the Rwanda flag's yellow and green.
+        ralga: {
+          navy: "#003F82",
+          "navy-dark": "#003268",
+          ink: "#001B3D",
+          sky: "#00A1DE",
+          "sky-dark": "#0079A8",
+          brand: "#189FF9",
+          yellow: "#E5BE01",
+          "yellow-dark": "#7A6300",
+          green: "#20603D",
+          mist: "#F4F4F4",
+        },
         primary: {
-          DEFAULT: "#16A34A",
+          DEFAULT: "#003F82",
           foreground: "#FFFFFF",
         },
-        primaryDark: "#15803D",
+        primaryDark: "#003268",
         info: {
           DEFAULT: "#2563EB",
           foreground: "#FFFFFF",

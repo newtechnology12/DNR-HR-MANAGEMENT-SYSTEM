@@ -194,7 +194,7 @@ export default function ProcurementDashboard() {
                   role="radio"
                   aria-checked={period === p.key}
                   onClick={() => setPeriod(p.key)}
-                  className={cn("rounded px-3 py-1.5 text-[12.5px] font-medium", period === p.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100")}
+                  className={cn("rounded px-3 py-1.5 text-[12.5px] font-medium", period === p.key ? "bg-ralga-navy text-white" : "text-slate-600 hover:bg-slate-100")}
                 >
                   {p.label}
                 </button>

@@ -383,7 +383,7 @@ function WorkflowEditor({ value, reference, onClose, onSaved }: { value: ReturnT
             {w.steps.map((s, i) => (
               <li key={i} className="rounded-md border border-slate-200 p-3">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr_1fr_1fr_auto] sm:items-end">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[12px] font-semibold text-white">{i + 1}</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ralga-navy text-[12px] font-semibold text-white">{i + 1}</span>
                   <label className="block text-[12px] text-slate-600">
                     Step name
                     <input className={cn(inputCls, "mt-0.5")} value={s.name} onChange={(e) => setStep(i, { name: e.target.value })} />

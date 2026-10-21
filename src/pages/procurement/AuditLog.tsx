@@ -136,7 +136,7 @@ export default function AuditLog() {
       />
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1">
         {PRESETS.map((p) => (
-          <button key={p.label} type="button" onClick={() => { setAction(action === p.action ? "" : p.action); setCollection(p.collection || ""); }} aria-pressed={action === p.action} className={cn("h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-medium", action === p.action ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+          <button key={p.label} type="button" onClick={() => { setAction(action === p.action ? "" : p.action); setCollection(p.collection || ""); }} aria-pressed={action === p.action} className={cn("h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-medium", action === p.action ? "border-ralga-navy bg-ralga-navy text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
             {p.label}
           </button>
         ))}

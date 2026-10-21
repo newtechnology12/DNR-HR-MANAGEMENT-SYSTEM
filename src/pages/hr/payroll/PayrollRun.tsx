@@ -236,8 +236,8 @@ export default function PayrollRun() {
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-slate-900 text-[12px] font-semibold text-white">
-                      <td className="sticky left-0 bg-slate-900 px-2.5 py-2">Total ({slips.length})</td>
+                    <tr className="bg-ralga-ink text-[12px] font-semibold text-white">
+                      <td className="sticky left-0 bg-ralga-ink px-2.5 py-2">Total ({slips.length})</td>
                       {[T.basic, T.allowances, T.gross, T.paye, T.pension_ee, T.maternity_ee, T.cbhi, T.medical_ee, (T.other_deductions || 0) + (T.advances || 0), T.gross - T.net, T.net, T.pension_er, T.maternity_er, T.occ_hazard_er, T.employer_cost].map((v, i) => (
                         <td key={i} className={td}>{rwf(v)}</td>
                       ))}

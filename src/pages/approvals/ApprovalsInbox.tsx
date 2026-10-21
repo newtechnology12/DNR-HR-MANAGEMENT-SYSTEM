@@ -67,7 +67,7 @@ export default function ApprovalsInbox() {
       {types.length > 1 && (
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1">
           {["all", ...types].map((t: any) => (
-            <button key={t} type="button" onClick={() => setType(t)} aria-pressed={type === t} className={cn("h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-medium", type === t ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600")}>
+            <button key={t} type="button" onClick={() => setType(t)} aria-pressed={type === t} className={cn("h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-medium", type === t ? "border-ralga-navy bg-ralga-navy text-white" : "border-slate-200 bg-white text-slate-600")}>
               {t === "all" ? "All types" : DOCUMENT_TYPE_LABELS[t] || t}
             </button>
           ))}

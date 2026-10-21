@@ -426,7 +426,7 @@ export default function EmployeeImport() {
 
           <div className="flex gap-1 px-4 pt-3" role="tablist">
             {([["all", `All (${rows.length})`], ["errors", `Errors (${withErrors.length})`], ["warnings", `Warnings (${withWarnings.length})`]] as const).map(([k, label]) => (
-              <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)} className={cn("rounded-md px-3 py-1.5 text-[12.5px] font-medium", filter === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100")}>{label}</button>
+              <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)} className={cn("rounded-md px-3 py-1.5 text-[12.5px] font-medium", filter === k ? "bg-ralga-navy text-white" : "text-slate-600 hover:bg-slate-100")}>{label}</button>
             ))}
           </div>
           <div className="max-h-[520px] overflow-auto px-4 py-3">

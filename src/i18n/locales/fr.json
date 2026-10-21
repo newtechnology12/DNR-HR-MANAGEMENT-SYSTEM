@@ -107,6 +107,15 @@
   "login.demoHelp": "Comptes de démonstration — un par rôle. Cliquez sur une carte pour vous connecter.",
   "login.demoPassword": "Mot de passe de tous les comptes de démonstration",
 
+  "forgot.title": "Réinitialiser le mot de passe",
+  "forgot.subtitle": "Saisissez votre e-mail professionnel : nous vous enverrons un lien pour choisir un nouveau mot de passe.",
+  "forgot.send": "Envoyer le lien",
+  "forgot.sending": "Envoi…",
+  "forgot.sentTitle": "Consultez votre boîte de réception",
+  "forgot.sentText": "Si un compte existe, un lien de réinitialisation a été envoyé à",
+  "forgot.back": "Retour à la connexion",
+  "forgot.note": "Le lien ne sert qu'une fois et expire. Adressez-vous à l'administrateur système si vous n'avez plus accès à votre e-mail.",
+
   "session.expiringTitle": "Votre session va expirer",
   "session.expiringText": "Par sécurité, vous serez déconnecté après une période d'inactivité.",
   "session.stay": "Rester connecté",

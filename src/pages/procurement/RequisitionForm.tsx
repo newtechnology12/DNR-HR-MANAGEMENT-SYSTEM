@@ -43,7 +43,7 @@ function Section({ n, title, children, subtitle }: { n: number; title: string; s
     <Panel
       title={
         <span className="flex items-center gap-2">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[11px] text-white">{n}</span>
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ralga-navy text-[11px] text-white">{n}</span>
           {title}
         </span>
       }

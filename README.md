@@ -141,7 +141,7 @@ and press *Confirm* (the source is recorded in the audit log).
 |---|---|---|
 | `VITE_DEMO_LOGINS` | frontend build | `true` shows the one-click role cards on the login page (never in production) |
 | `VITE_PRODUCT_NAME`, `VITE_PRODUCT_LONG_NAME`, `VITE_ORG_NAME`, `VITE_ORG_SHORT_NAME`, `VITE_ORG_ADDRESS`, `VITE_VENDOR_NAME` | frontend build | Branding on screens and exported reports |
-| `VITE_LOGO_URL` | frontend build | Official logo (e.g. `/logo.svg`) instead of the neutral emblem |
+| `VITE_LOGO_URL` | frontend build | Another logo file (e.g. `/logo.svg`) instead of the built-in RALGA wordmark |
 | `PB_URL` | seed / test scripts | PocketBase URL (default `http://127.0.0.1:8090`; seeds refuse non-local URLs) |
 | `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD` | seed / test scripts | PocketBase superuser |
 | `ALLOW_REMOTE_SEED` | seed scripts | `true` to allow seeding a non-local server (never on production) |

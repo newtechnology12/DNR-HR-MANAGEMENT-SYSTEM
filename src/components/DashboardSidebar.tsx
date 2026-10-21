@@ -14,6 +14,7 @@ import LogoutModal from "./modals/LogoutModal";
 import useModalState from "@/hooks/useModalState";
 import NotificationBell from "./enterprise/NotificationBell";
 import BrandMark from "./enterprise/BrandMark";
+import { FlagStripe } from "./enterprise/RalgaLogo";
 import { NAVIGATION } from "@/lib/navigation";
 import { useT } from "@/i18n";
 
@@ -96,9 +97,10 @@ export default function DashboardSidebar({
               open ? "translate-x-0" : "-translate-x-full"
             )}
           >
-            <div className="flex items-center justify-between px-4 pb-2 pt-3">
-              <Link to="/dashboard" className="min-w-0" aria-label="Dashboard">
-                <BrandMark />
+            <FlagStripe />
+            <div className="flex items-center justify-between px-4 pb-2.5 pt-3.5">
+              <Link to="/dashboard" className="flex min-w-0" aria-label="Dashboard">
+                <BrandMark size="nav" />
               </Link>
               <NotificationBell className="hidden lg:flex" />
             </div>
@@ -145,11 +147,11 @@ export default function DashboardSidebar({
                               aria-current={isActive ? "page" : undefined}
                               className={cn(
                                 "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
-                                isActive ? "bg-primary/10 font-semibold text-primaryDark" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                isActive ? "bg-ralga-navy/[0.07] font-semibold text-ralga-navy" : "text-slate-600 hover:bg-slate-100 hover:text-ralga-navy"
                               )}
                             >
-                              {isActive && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />}
-                              <link.icon size={17} className={cn("shrink-0", isActive ? "text-primaryDark" : "text-slate-400 group-hover:text-slate-600")} />
+                              {isActive && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-ralga-sky" />}
+                              <link.icon size={17} className={cn("shrink-0", isActive ? "text-ralga-navy" : "text-slate-400 group-hover:text-ralga-navy")} />
                               <span className="truncate">{link.label}</span>
                             </Link>
                           );
