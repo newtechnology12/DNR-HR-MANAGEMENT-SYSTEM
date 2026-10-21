@@ -9,6 +9,13 @@
  *   POST /api/ims/plans/:id/report   { report_summary, challenges, next_steps, support_needed, self_rating, items }
  *   POST /api/ims/plans/:id/assess   { decision: assess | return, rating, feedback }  supervisor
  *   POST /api/ims/plans/:id/copy     { all }              next period's plan as a draft
+ *   POST /api/ims/plans/:id/cascade  { date, focus }      the next level down from an approved plan (draft)
+ *   POST /api/ims/plans/:id/issues   { action: add | resolve | reopen, … }       owner or supervisor
+ *   POST /api/ims/plans/assign       { staff, plan_type, start, end | date, title, focus, items, source, instructions }
+ *   GET  /api/ims/plans/team                             the people the caller can assign work to
+ *   GET  /api/ims/plans/context                          supervisor, department, head or not, can assign or not
+ *   GET  /api/ims/plans/periods?type=                    the periods offered when planning
+ *   GET  /api/ims/plans/department?date=&department=     a department plan with achievement per activity
  *   GET  /api/ims/plans/period?type=&date=               the period containing a day
  *
  *   attendance_corrections         staff create their own; HR (update_attendance) decides
@@ -40,6 +47,39 @@ routerAdd("GET", "/api/ims/plans/period", (c) => {
   return c.json(200, { type, start: p.start, end: p.end, label: p.label, fiscal_year: p.fy });
 }, $apis.requireAdminOrRecordAuth());
 
+routerAdd("GET", "/api/ims/plans/context", (c) => {
+  const ws = require(`${__hooks}/lib/workspace.js`);
+  return c.json(200, ws.context($app.dao(), $apis.requestInfo(c).authRecord));
+}, $apis.requireRecordAuth("users"));
+
+routerAdd("GET", "/api/ims/plans/periods", (c) => {
+  const ws = require(`${__hooks}/lib/workspace.js`);
+  return c.json(200, { items: ws.periods($app.dao(), c.queryParam("type") || "monthly") });
+}, $apis.requireRecordAuth("users"));
+
+routerAdd("GET", "/api/ims/plans/department", (c) => {
+  const ws = require(`${__hooks}/lib/workspace.js`);
+  return c.json(200, ws.departmentActivities($app.dao(), $apis.requestInfo(c).authRecord, { date: c.queryParam("date"), department: c.queryParam("department") }));
+}, $apis.requireRecordAuth("users"));
+
+routerAdd("GET", "/api/ims/plans/team", (c) => {
+  const ws = require(`${__hooks}/lib/workspace.js`);
+  const info = $apis.requestInfo(c);
+  return c.json(200, { items: ws.team($app.dao(), info.authRecord) });
+}, $apis.requireRecordAuth("users"));
+
+routerAdd("POST", "/api/ims/plans/assign", (c) => {
+  const core = require(`${__hooks}/lib/core.js`);
+  const ws = require(`${__hooks}/lib/workspace.js`);
+  const info = $apis.requestInfo(c);
+  let out;
+  $app.dao().runInTransaction((tx) => {
+    const r = ws.assign(tx, info.authRecord, info.data || {}, core.requestMeta(c));
+    out = { id: r.id, number: r.getString("number"), status: r.getString("status"), progress: r.getInt("progress") };
+  });
+  return c.json(200, out);
+}, $apis.requireRecordAuth("users"));
+
 routerAdd("POST", "/api/ims/plans/:id/:action", (c) => {
   const core = require(`${__hooks}/lib/core.js`);
   const ws = require(`${__hooks}/lib/workspace.js`);
@@ -57,6 +97,8 @@ routerAdd("POST", "/api/ims/plans/:id/:action", (c) => {
     else if (action === "report") r = ws.report(tx, id, info.authRecord, data, meta);
     else if (action === "assess") r = ws.assess(tx, id, info.authRecord, data, meta);
     else if (action === "copy") r = ws.copyForward(tx, id, info.authRecord, data, meta);
+    else if (action === "cascade") r = ws.cascade(tx, id, info.authRecord, data, meta);
+    else if (action === "issues") r = ws.issues(tx, id, info.authRecord, data, meta);
     else throw new NotFoundError(`Unknown action "${action}".`);
     out = { id: r.id, number: r.getString("number"), status: r.getString("status"), progress: r.getInt("progress") };
   });

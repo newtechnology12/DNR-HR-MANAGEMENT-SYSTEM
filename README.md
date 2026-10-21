@@ -60,7 +60,7 @@ npm run seed:ralga
 # 3. Frontend (http://localhost:5173, proxies /api to the backend)
 npm run dev:frontend
 
-# 4. API tests on a freshly seeded server (must stay green: 298 checks in 12 suites)
+# 4. API tests on a freshly seeded server (must stay green: 304 checks in 12 suites)
 npm run test:api
 ```
 
@@ -112,25 +112,42 @@ hours) or rejects with a reason; nobody decides their own request.
 ## Work planning and reporting
 
 My plans & reports follows the public-service planning cycle — an Imihigo-style performance contract
-cascaded down to the week:
+cascaded down to the week — with the department's monthly plan alongside:
 
-| Plan | Period | Content |
+| Plan | Period | What it needs before it is sent |
 |---|---|---|
-| Annual performance contract | Fiscal year (July–June) | 3–6 objectives: output, indicator, baseline, target, weight (together 100 %), quarters, means of verification, strategic objective |
-| Quarterly plan | Quarter of the fiscal year | Outputs with indicator, baseline, target, means of verification and cost |
-| Monthly plan | Calendar month | Activities with expected output, due date, cost and the department-plan activity they serve |
+| Annual performance contract | Fiscal year (July–June) | Objectives with indicator, unit, baseline, target, weight (together 100 %), quarters, evidence, strategic objective |
+| Quarterly plan | Quarter of the fiscal year | Outputs with indicator, target, weight (100 %) and strategic objective |
+| Department plan | Calendar month | Prepared by the head of department: shared activities (DA-01, DA-02…) with a target in a unit, due date, weight, strategic objective |
+| Monthly plan | Calendar month | Activities with expected output, indicator, unit, target, weight (100 %), due date, strategic objective; optionally the department activity they contribute to |
 | Weekly plan | Monday–Friday | Activities by day |
+| Assigned task | Its own dates (up to three months) | Deliverables with due dates — assigned by a supervisor |
 
-- A plan says which higher plan it implements and can take its items; *Next week / month / …* starts the next
-  period from the items still open. One plan per person, kind and period.
+- **The form** (New plan) works in three steps — what is planned; the period and the plan it carries out; the
+  activities — with the department's activities to contribute to, a live *Plan check* (period, alignment,
+  indicators, weights, fields to fix, department links), a summary with the approval route, and the entries
+  kept on the device while it is filled. Drafts may be incomplete; what the level needs is checked when the
+  plan is sent (also by the server).
+- **Department achievement adds up**: a monthly activity (or task) linked to a department activity carries
+  its share of the target; the quantities achieved in approved staff plans add up on the department plan
+  (achieved, % progress, what remains, how many people contribute). Nobody types the department's progress.
+- **Health** compares achievement with the time passed in the period: on track ≥ expected − 10 points, at risk ≥
+  expected − 25, off track below; completed when reported or at 100 %.
+- **Assigned work**: the head of department (or the Secretary General) assigns a task with its own dates, or sets
+  a plan at any level (e.g. the annual contract from the strategic plan, with its source). Assigned work starts
+  approved; the assigner is its supervisor and assesses the report. *Plan a quarter / month / week* prepares the
+  next level down from an approved plan (shown as cascaded).
+- **Issues and risks**: the owner or the supervisor raises an issue on a plan (severity, activity concerned);
+  the other side is notified; it is resolved with a note and can be reopened. Open issues show in the lists.
 - Draft → sent to the supervisor (the head of department; heads, and units without a head, report to the
   Secretary General, whose own plan is approved when sent) → approved, or returned with comments → progress
-  updates → report at the end of the period (achievements, challenges, next steps, support needed,
-  self-rating) → the supervisor's assessment (1–5 with feedback), or returned for more detail.
-- Supervisors work from the *My team* tab: plans to approve, reports to assess. Evidence documents can be
-  attached; every step is in the plan's history and the audit log; any plan exports to Excel or PDF.
-- **Strategic objectives** (Setup → Strategic objectives) are the list plans link to. The five seeded objectives
-  are **illustrative** — replace them with RALGA's approved Strategic Plan before go-live.
+  (status, %, quantity achieved) → report at the end of the period (achievements, challenges, next steps,
+  support needed, self-rating) → the supervisor's assessment (1–5 with feedback), or returned for more detail.
+- Supervisors work from the *My team* tab: plans to approve, reports to assess, *Assign work*. Evidence documents
+  can be attached; every step is in the plan's history and the audit log; any plan exports to Excel or PDF.
+- **Strategic objectives** (Setup → Strategic objectives) are the list plans link to. The five seeded objectives,
+  and the "RALGA Strategic Plan 2024–2029" source on the demo contract, are **illustrative** — replace them
+  with RALGA's approved Strategic Plan before go-live.
 
 ## Roles, permissions and segregation of duties
 
@@ -329,6 +346,8 @@ bank and cash (accounts set up by the DAF only, receipts and transfers verified 
 pre-opening dates, no overdraft, restricted donor accounts, statements that do not add up or overlap refused,
 automatic and manual matching, preparer ≠ approver of reconciliations, locked periods after approval, reversal),
 work plans (private to the person, the supervisor and HR; only the supervisor approves and assesses; activity
-dates inside the period; annual weights add up to 100 %; approved plans locked except progress) and attendance
+dates inside the period; what each level needs checked when sent; approved plans locked except progress;
+assigning only to people one supervises; cascading; issues; department plans prepared by the head, one a month,
+with staff results adding up) and attendance
 corrections (HR only, never one's own; approved days added to the log). Run them on a freshly seeded server
 (`npm run seed:ralga` first): some checks use the seeded documents.

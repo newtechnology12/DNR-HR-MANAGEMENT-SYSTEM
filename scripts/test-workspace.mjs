@@ -3,8 +3,9 @@
  * Staff workspace API checks: work plans (periods, one plan per period, annual weights, activity dates,
  * visibility, supervisor = head of department and SG above heads, nobody approves or assesses their own
  * plan, locked after approval, progress, report with reasons for open activities, assessment, copy to the
- * next period) and attendance corrections (own only, past working days without a clock-in, HR approval adds
- * the days to the attendance log).
+ * next period), what each level needs before it is sent, work assigned by supervisors, cascading, issues,
+ * department plans with staff contributions, and attendance corrections (own only, past working days without
+ * a clock-in, HR approval adds the days to the attendance log).
  *
  * Uses periods in the future and removes everything it created. Runs against `npm run seed:ralga`.
  */
@@ -61,6 +62,11 @@ const sg = await login("director@dnr-hr.rw");
 const other = await login("accountant@dnr-hr.rw");
 const sgUser = await su.collection("users").getFirstListItem('email = "director@dnr-hr.rw"');
 const send = (pb, id, action, body = {}) => pb.send(`/api/ims/plans/${id}/${action}`, { method: "POST", body });
+const period = (pb, type, date) => pb.send(`/api/ims/plans/period?type=${type}&date=${date}`, {});
+const soId = (await su.collection("strategic_objectives").getFirstListItem('code = "SO2"')).id;
+const accountantUser = await su.collection("users").getFirstListItem('email = "accountant@dnr-hr.rw"');
+/** A complete monthly activity (what a monthly plan needs before it is sent). */
+const monthlyItem = (title, due, extra = {}) => ({ title, output: "Output delivered", indicator: "Units delivered", unit: "Number", target: "10", weight: 100, due, objective: soId, ...extra });
 
 const created = { plans: [], corrections: [] };
 const futureWeek = day(70);
@@ -93,20 +99,27 @@ try {
   await check("activity dates must fall inside the period", async () => {
     await expectStatus(staff.collection("work_plans").create({ staff: staffUser.id, plan_type: "monthly", period_start: noon(day(130)), items: [{ title: "Out of period", due: day(200) }] }), 400, "outside the period");
   });
-  await check("an annual performance contract needs indicators, targets and weights adding up to 100%", async () => {
+  await check("drafts may be incomplete; an annual contract is sent only with indicators, targets, objectives and weights of 100%", async () => {
     const fyNext = new Date(Date.now() + 400 * 864e5);
-    const base = { staff: staffUser.id, plan_type: "annual", period_start: noon(iso(fyNext)) };
-    await expectStatus(staff.collection("work_plans").create({ ...base, items: [{ title: "Train councillors", indicator: "Councillors trained", target: "300", weight: 60 }, { title: "Publish guides", indicator: "Guides published", target: "4", weight: 30 }] }), 400, "100%");
-    await expectStatus(staff.collection("work_plans").create({ ...base, items: [{ title: "Train councillors", weight: 100 }] }), 400, "indicator");
     annual = await staff.collection("work_plans").create({
-      ...base,
-      items: [
-        { title: "Train councillors of 10 districts", indicator: "Councillors trained", baseline: "0", target: "300", weight: 60, verification: "Attendance lists, training reports", quarters: [1, 2, 3] },
-        { title: "Publish practical guides for councillors", indicator: "Guides published", baseline: "1", target: "4", weight: 40, verification: "Published guides", quarters: [2, 4] },
-      ],
+      staff: staffUser.id, plan_type: "annual", period_start: noon(iso(fyNext)),
+      items: [{ title: "Train councillors", indicator: "Councillors trained", target: "300", weight: 60, objective: soId }, { title: "Publish guides", indicator: "Guides published", target: "4", weight: 30, objective: soId }],
     });
     created.plans.push(annual.id);
-    assert(/^FY \d{4}\/\d{2}$/.test(annual.period_label), annual.period_label);
+    assert(annual.status === "draft" && /^FY \d{4}\/\d{2} · /.test(annual.period_label), `${annual.status} ${annual.period_label}`);
+    await expectStatus(send(staff, annual.id, "submit"), 400, "100%");
+    await staff.collection("work_plans").update(annual.id, { items: [{ title: "Train councillors of 10 districts", weight: 60, objective: soId }, { title: "Publish practical guides", indicator: "Guides published", target: "4", weight: 40, objective: soId }] });
+    await expectStatus(send(staff, annual.id, "submit"), 400, "indicator");
+    await staff.collection("work_plans").update(annual.id, { items: [{ title: "Train councillors of 10 districts", indicator: "Councillors trained", unit: "People", baseline: "0", target: "300", weight: 60 }, { title: "Publish practical guides", indicator: "Guides published", target: "4", weight: 40, objective: soId }] });
+    await expectStatus(send(staff, annual.id, "submit"), 400, "strategic objective");
+  });
+  await check("a monthly plan is sent only with due dates, outputs, indicators, targets and weights", async () => {
+    const p = await period(staff, "monthly", day(190));
+    const m = await staff.collection("work_plans").create({ staff: staffUser.id, plan_type: "monthly", period_start: noon(p.start), items: [{ title: "Visit two districts" }] });
+    created.plans.push(m.id);
+    await expectStatus(send(staff, m.id, "submit"), 400, "due date");
+    await staff.collection("work_plans").update(m.id, { items: [monthlyItem("Visit two districts", p.end, { weight: 80 })] });
+    await expectStatus(send(staff, m.id, "submit"), 400, "100%");
   });
   await check("plans are private: the owner, the head of department and HR see them; other staff do not", async () => {
     await expectStatus(other.collection("work_plans").getOne(week.id), 404);
@@ -158,12 +171,98 @@ try {
     await expectStatus(send(staff, week.id, "copy"), 400, "already exists");
   });
   await check("a head of department's plan goes to the Secretary General", async () => {
-    const p = await hod.collection("work_plans").create({ staff: hodUser.id, plan_type: "monthly", period_start: noon(day(160)), items: [{ title: "Review the department's quarterly results", due: "" }] });
+    const per = await period(hod, "monthly", day(160));
+    const p = await hod.collection("work_plans").create({ staff: hodUser.id, plan_type: "monthly", period_start: noon(per.start), items: [monthlyItem("Review the department's quarterly results", per.end)] });
     created.plans.push(p.id);
     await send(hod, p.id, "submit");
     const fresh = await su.collection("work_plans").getOne(p.id);
     assert(fresh.supervisor === sgUser.id, "not sent to the Secretary General");
     await send(sg, p.id, "review", { decision: "approve" });
+  });
+
+  console.log("Assigned work, cascading and issues");
+  let task;
+  await check("supervisors assign tasks (they start approved, the assigner supervises); staff cannot assign", async () => {
+    const body = { staff: staffUser.id, plan_type: "task", start: day(84), end: day(95), title: "Support the Musanze budget hearings", items: [{ title: "Agree the agenda with the district", due: day(86) }, { title: "Hearing report", due: day(95) }] };
+    const r = await sg.send("/api/ims/plans/assign", { method: "POST", body });
+    created.plans.push(r.id);
+    task = await su.collection("work_plans").getOne(r.id);
+    assert(task.status === "approved" && task.origin === "assigned" && task.assigned_by === sgUser.id && task.supervisor === sgUser.id && task.plan_type === "task", `${task.status} ${task.origin}`);
+    const again = await sg.send("/api/ims/plans/assign", { method: "POST", body: { ...body, title: "A second task the same day" } });
+    created.plans.push(again.id);
+    await expectStatus(staff.send("/api/ims/plans/assign", { method: "POST", body: { ...body, staff: accountantUser.id } }), 403, "supervise");
+    await expectStatus(hod.send("/api/ims/plans/assign", { method: "POST", body: { ...body, staff: accountantUser.id } }), 403);
+    await expectStatus(staff.collection("work_plans").create({ staff: staffUser.id, plan_type: "task", period_start: noon(day(84)), title: "My own task", items: [{ title: "x x x" }] }), 400, "assigned");
+    const n = await su.collection("notifications").getList(1, 1, { filter: `user = "${staffUser.id}" && link ~ "${task.id}"` });
+    assert(n.totalItems > 0, "the staff member was not told");
+  });
+  await check("issues: the owner raises one, the supervisor is told and resolves it with a note; others cannot", async () => {
+    await expectStatus(send(staff, task.id, "issues", { action: "add", title: "abc" }), 400, "5 characters");
+    const r = await send(staff, task.id, "issues", { action: "add", title: "District planner on leave until the 10th", severity: "high" });
+    let p = await su.collection("work_plans").getOne(r.id);
+    assert(p.open_issues === 1 && p.issues[0].status === "open", `open ${p.open_issues}`);
+    const n = await su.collection("notifications").getList(1, 1, { filter: `user = "${sgUser.id}" && title ~ "Issue"`, sort: "-created" });
+    assert(n.totalItems > 0, "the supervisor was not told");
+    await expectStatus(send(other, task.id, "issues", { action: "add", title: "Not my plan at all" }), [403, 404]);
+    await expectStatus(send(sg, task.id, "issues", { action: "resolve", id: p.issues[0].id }), 400, "resolved");
+    await send(sg, task.id, "issues", { action: "resolve", id: p.issues[0].id, resolution: "The deputy planner will attend instead." });
+    p = await su.collection("work_plans").getOne(task.id);
+    assert(p.open_issues === 0 && p.issues[0].status === "resolved" && p.issues[0].resolved_by_name, "not resolved");
+  });
+  await check("a quarter is cascaded from an approved annual contract, with the objectives planned for it", async () => {
+    const fy = await period(hod, "annual", day(765));
+    const r = await hod.send("/api/ims/plans/assign", { method: "POST", body: {
+      staff: staffUser.id, plan_type: "annual", date: fy.start, source: "RALGA Strategic Plan",
+      items: [
+        { title: "Train councillors of 10 districts", indicator: "Councillors trained", unit: "People", target: "300", weight: 60, quarters: [1], objective: soId },
+        { title: "Publish practical guides", indicator: "Guides published", unit: "Documents", target: "4", weight: 40, quarters: [2, 3], objective: soId },
+      ],
+    } });
+    created.plans.push(r.id);
+    const q = await send(staff, r.id, "cascade", { date: fy.start });
+    created.plans.push(q.id);
+    const p = await su.collection("work_plans").getOne(q.id);
+    assert(p.plan_type === "quarterly" && p.status === "draft" && p.origin === "cascaded" && p.parent === r.id && p.items.length === 1 && p.items[0].indicator === "Councillors trained", `${p.plan_type} ${p.origin} ${p.items.length} items`);
+    await expectStatus(send(staff, r.id, "cascade", { date: fy.start }), 400, "already exists");
+    await expectStatus(send(other, r.id, "cascade", { date: fy.start }), [403, 404]);
+  });
+
+  console.log("Department plans");
+  await check("only the head prepares the department plan, one per month; the Secretary General approves it", async () => {
+    const per = await period(hod, "monthly", day(250));
+    await expectStatus(staff.collection("work_plans").create({ staff: staffUser.id, plan_type: "department", period_start: noon(per.start), items: [{ title: "Shared activity" }] }), 400, "head of department");
+    const dp = await hod.collection("work_plans").create({ staff: hodUser.id, plan_type: "department", period_start: noon(per.start), items: [monthlyItem("District PFM training", per.end, { unit: "People", target: "10", weight: 100 })] });
+    created.plans.push(dp.id);
+    assert(dp.items[0].code === "DA-01", `code ${dp.items[0].code}`);
+    const mid = new Date(Date.parse(`${per.start}T12:00:00Z`) + 9 * 864e5).toISOString().slice(0, 10);
+    await expectStatus(hod.collection("work_plans").create({ staff: hodUser.id, plan_type: "department", period_start: noon(mid), items: [{ title: "Another plan" }] }), 400, "already");
+    await expectStatus(hod.collection("work_plans").create({ staff: hodUser.id, plan_type: "department", period_start: noon(per.start), items: [{ title: "Another plan" }] }), 400);
+    await send(hod, dp.id, "submit");
+    const r = await send(sg, dp.id, "review", { decision: "approve" });
+    assert(r.status === "approved", r.status);
+    globalThis.deptPlan = { ...dp, period: per };
+  });
+  await check("staff link monthly activities to department activities; the department adds up the approved results", async () => {
+    const { period: per, ...dp } = globalThis.deptPlan;
+    const visible = await staff.collection("work_plans").getOne(dp.id);
+    assert(visible.id === dp.id, "the department plan is not visible to the department");
+    await expectStatus(other.collection("work_plans").getOne(dp.id), 404);
+    const daId = dp.items[0].id;
+    const w = await period(staff, "weekly", per.start);
+    await expectStatus(staff.collection("work_plans").create({ staff: staffUser.id, plan_type: "weekly", period_start: noon(w.start), items: [{ title: "Linked from a week", department_plan: dp.id, department_activity: daId }] }), 400, "monthly plans and tasks");
+    const m = await staff.collection("work_plans").create({ staff: staffUser.id, plan_type: "monthly", period_start: noon(per.start), items: [monthlyItem("Train Rulindo finance staff", per.end, { unit: "", target: "6", department_plan: dp.id, department_activity: daId })] });
+    created.plans.unshift(m.id);
+    assert(m.items[0].unit === "People", `unit taken from the department activity: ${m.items[0].unit}`);
+    await send(staff, m.id, "submit");
+    let view = await staff.send(`/api/ims/plans/department?date=${per.start}`, {});
+    assert(view.activities[0].team === 0 && view.activities[0].mine === true && view.activities[0].achieved === 0, "submitted plans count in the team but not in the results");
+    await send(hod, m.id, "review", { decision: "approve" });
+    await send(staff, m.id, "progress", { items: [{ id: m.items[0].id, actual: 4 }] });
+    view = await hod.send(`/api/ims/plans/department?date=${per.start}`, {});
+    assert(view.activities[0].achieved === 4 && view.activities[0].progress === 40 && view.activities[0].team === 1 && view.overall === 40, JSON.stringify(view.activities[0]));
+    const stored = await su.collection("work_plans").getOne(dp.id);
+    assert(stored.progress === 40 && stored.items[0].actual === 4 && stored.items[0].team === 1, `stored ${stored.progress}`);
+    await expectStatus(send(hod, dp.id, "progress", { items: [{ id: daId, progress: 90 }] }), 400, "measured");
   });
 
   console.log("Attendance corrections");

@@ -386,10 +386,11 @@ export function LeaveBalance({ b }: { b: any }) {
 }
 
 /** Page title in the workspace style. */
-export function MyHeader({ title, subtitle, actions }: { title: string; subtitle?: React.ReactNode; actions?: React.ReactNode }) {
+export function MyHeader({ title, subtitle, actions, eyebrow }: { title: string; subtitle?: React.ReactNode; actions?: React.ReactNode; eyebrow?: React.ReactNode }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
+        {eyebrow && <div className="text-[13px] text-[#5B6577]">{eyebrow}</div>}
         <h1 className="text-[26px] font-extrabold tracking-[-0.01em] text-[#14213D]">{title}</h1>
         {subtitle && <p className="mt-0.5 max-w-3xl text-[13.5px] text-[#5B6577]">{subtitle}</p>}
       </div>
