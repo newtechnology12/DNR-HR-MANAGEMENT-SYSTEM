@@ -27,6 +27,8 @@ const DOCS = {
   bank_statements: { field: "attachments", perms: ["prepare_bank_reconciliation", "approve_bank_reconciliation"], owners: ["imported_by"], open: ["imported"] },
   bank_reconciliations: { field: "attachments", perms: ["prepare_bank_reconciliation", "approve_bank_reconciliation"], owners: ["prepared_by"], open: ["draft", "returned"] },
   work_plans: { field: "attachments", perms: [], owners: ["staff"], open: ["draft", "returned", "approved"] },
+  asset_disposals: { field: "attachments", perms: ["manage_fixed_assets", "approve_asset_disposals"], owners: ["prepared_by"], open: ["draft", "returned"] },
+  asset_verifications: { field: "attachments", perms: ["manage_fixed_assets"], owners: ["started_by"], open: ["open"] },
 };
 
 function load(dao, collection, id) {

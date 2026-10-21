@@ -17,6 +17,8 @@ const WRITE_PERMISSION = {
   approval_limits: ["manage_approval_workflows", "change approval limits"],
   strategic_objectives: ["manage_projects", "change the strategic objectives"],
   posting_accounts: ["manage_chart_of_accounts", "change the posting accounts"],
+  assets_categories: ["approve_fixed_assets", "change asset categories and depreciation rates"],
+  assets_types: ["manage_fixed_assets", "change asset types"],
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -139,6 +141,7 @@ function validate(e) {
     if (name === "projects" && r.getInt("budget_amount") < 0) throw new BadRequestError("The project budget cannot be negative.");
   }
   if (name === "tax_rates") validateTaxRate(dao, r);
+  if (name === "assets_categories") require("./assets.js").validateCategory(dao, r);
   if (name === "approval_limits") {
     if (!r.getString("role")) throw new BadRequestError("Choose the role this limit applies to.");
     if (r.getInt("max_amount") < 0 || r.getInt("min_amount") < 0) throw new BadRequestError("Limits cannot be negative.");

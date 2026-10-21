@@ -30,7 +30,7 @@
   "nav.group.treasury": "Banque et caisse",
   "nav.group.ledger": "Grand livre",
   "nav.group.hr": "RH et paie",
-  "nav.group.assets": "Biens",
+  "nav.group.assets": "Immobilisations",
   "nav.group.expenses": "Petite caisse et dépenses",
   "nav.group.reports": "Rapports",
   "nav.group.setup": "Paramétrage",
@@ -82,9 +82,7 @@
   "nav.attendanceReport": "Rapport de présence",
   "nav.timesheet": "Feuille de temps",
   "nav.timesheetReport": "Rapport des feuilles de temps",
-  "nav.assetCategories": "Catégories d'équipement",
-  "nav.assetTypes": "Types d'équipement",
-  "nav.assetInventory": "Inventaire des équipements",
+  "nav.assetCategories": "Catégories et amortissement",
   "nav.assetRequests": "Demandes d'équipement",
   "nav.expenseRequests": "Demandes de dépense",
   "nav.pettyCashAccounts": "Comptes de petite caisse",
@@ -196,5 +194,12 @@
   "nav.myEquipment": "Demandes d’équipement",
   "nav.help": "Aide et politiques RH",
   "nav.attendanceCorrections": "Corrections de présence",
-  "nav.strategicObjectives": "Objectifs stratégiques"
+  "nav.strategicObjectives": "Objectifs stratégiques",
+  "nav.assetOverview": "Vue d'ensemble",
+  "nav.assetRegister": "Registre des immobilisations",
+  "nav.assetTransfers": "Transferts",
+  "nav.depreciation": "Amortissements",
+  "nav.assetDisposals": "Cessions et sorties",
+  "nav.assetCounts": "Inventaires physiques",
+  "nav.assetReports": "Rapports des immobilisations"
 }

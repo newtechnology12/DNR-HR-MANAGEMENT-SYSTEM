@@ -73,6 +73,7 @@ const COA = [
   ["2111", "Other payables", "liability", true, "current_liabilities", "operating"],
   ["2112", "Occupational hazards contributions payable (RSSB)", "liability", true, "current_liabilities", "operating"],
   ["2113", "Medical insurance contributions payable (RSSB)", "liability", true, "current_liabilities", "operating"],
+  ["2114", "Assets received, not yet invoiced", "liability", true, "current_liabilities", "operating"],
   ["22", "Non-current liabilities", "liability", false, "non_current_liabilities", "financing"],
   ["2201", "Deferred capital grants", "liability", true, "non_current_liabilities", "financing"],
   ["3", "Net assets", "net_assets", false, "net_assets", "none"],
@@ -271,11 +272,14 @@ async function main() {
     ["payroll.maternity_payable", "2106", "Maternity contributions payable (RSSB)"], ["payroll.cbhi_payable", "2107", "CBHI contributions payable (RSSB)"],
     ["payroll.occ_hazard_payable", "2112", "Occupational hazards contributions payable (RSSB)"], ["payroll.medical_payable", "2113", "Medical insurance contributions payable (RSSB)"],
     ["payroll.advances", "1120", "Salary advances recovered"], ["payroll.loans", "1121", "Staff loan instalments recovered"], ["payroll.other_deductions", "2111", "Other deductions payable"],
+    ["assets.grni", "2114", "Assets received, not yet invoiced"], ["assets.donated", "2201", "Donated assets (deferred capital grants)"],
+    ["assets.opening_equity", "3101", "Fixed assets at go-live (accumulated surplus)"], ["assets.disposal_proceeds", "1111", "Disposal proceeds receivable"],
+    ["assets.disposal_gain", "4205", "Gain on disposal of assets"], ["assets.disposal_loss", "5501", "Loss on disposal of assets"],
   ];
   for (const [i, [key, code, label]] of POSTING.entries()) {
     await upsert(daf, "posting_accounts", `key = "${key}"`, { key, label, module: key.split(".")[0], account: byCode[code].id, sort: i + 1, description: "" });
   }
-  console.log(`  ✓ posting accounts: ${POSTING.length} automatic payroll postings mapped to the chart of accounts`);
+  console.log(`  ✓ posting accounts: ${POSTING.length} automatic postings (payroll, fixed assets) mapped to the chart of accounts`);
 
   for (const f of FUNDING) await upsert(daf, "funding_sources", `code = "${f.code}"`, { ...f, currency: "RWF", active: true, start_date: `${currentStart}-07-01 00:00:00.000Z`, end_date: f.type === "donor" ? `${currentStart + 2}-06-30 23:59:59.999Z` : "" });
   const funding = Object.fromEntries((await admin.collection("funding_sources").getFullList()).map((f) => [f.code, f]));

@@ -20,7 +20,7 @@
   "nav.group.budget": "Ingengo y'imari",
   "nav.group.procurement": "Amasoko",
   "nav.group.hr": "Abakozi n'imishahara",
-  "nav.group.assets": "Umutungo",
+  "nav.group.assets": "Umutungo uhoraho",
   "nav.group.reports": "Raporo",
   "nav.group.setup": "Igenamiterere",
   "nav.dashboard": "Ahabanza",
@@ -112,5 +112,14 @@
   "nav.attendanceCorrections": "Gukosora kwitaba",
   "nav.strategicObjectives": "Intego z’ingenzi",
   "nav.staffLoans": "Inguzanyo z'abakozi",
-  "nav.postingAccounts": "Konti zandikwaho"
+  "nav.postingAccounts": "Konti zandikwaho",
+  "nav.assetOverview": "Incamake y'umutungo",
+  "nav.assetRegister": "Igitabo cy'umutungo",
+  "nav.assetTransfers": "Kwimura umutungo",
+  "nav.depreciation": "Igabanuka ry'agaciro",
+  "nav.assetDisposals": "Gusohora umutungo",
+  "nav.assetCounts": "Kubarura umutungo",
+  "nav.assetRequests": "Gusaba ibikoresho",
+  "nav.assetReports": "Raporo z'umutungo",
+  "nav.assetCategories": "Ibyiciro n'igabanuka"
 }

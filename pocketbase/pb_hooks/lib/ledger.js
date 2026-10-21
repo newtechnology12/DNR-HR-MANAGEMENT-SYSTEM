@@ -31,6 +31,12 @@ const POSTING = {
   "payroll.advances": ["1120", "Salary advances recovered", "payroll"],
   "payroll.loans": ["1121", "Staff loan instalments recovered", "payroll"],
   "payroll.other_deductions": ["2111", "Other deductions payable", "payroll"],
+  "assets.grni": ["2114", "Assets received, not yet invoiced", "assets"],
+  "assets.donated": ["2201", "Donated assets (deferred capital grants)", "assets"],
+  "assets.opening_equity": ["3101", "Fixed assets at go-live (accumulated surplus)", "assets"],
+  "assets.disposal_proceeds": ["1111", "Disposal proceeds receivable", "assets"],
+  "assets.disposal_gain": ["4205", "Gain on disposal of assets", "assets"],
+  "assets.disposal_loss": ["5501", "Loss on disposal of assets", "assets"],
 };
 
 const r0 = (n) => Math.round(Number(n) || 0);

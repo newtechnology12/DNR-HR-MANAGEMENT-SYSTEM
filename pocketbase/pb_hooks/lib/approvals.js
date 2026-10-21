@@ -269,6 +269,58 @@ const DOCS = {
       title: `Payroll ${doc.getString("period_label")} — ${doc.getInt("headcount")} employees`,
     }),
   },
+  // Fixed assets (M7). The Store & Asset Officer or the department head asks; the DAF (and the SG) decide.
+  asset_transfer: {
+    collection: "asset_movements",
+    approvePermission: "approve_asset_disposals",
+    label: "asset transfer",
+    link: (id) => `/dashboard/assets/transfers?open=${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    context: (doc) => {
+      const dao = $app.dao();
+      let asset = null;
+      try {
+        asset = dao.findRecordById("assets", doc.getString("asset"));
+      } catch (_) {}
+      return {
+        amount: asset ? Math.round(asset.getFloat("cost")) : 0, currency: "RWF", department: doc.getString("to_department"), category: "", branch: "",
+        requester: doc.getString("requested_by"), number: doc.getString("number"),
+        title: `${asset ? `${asset.getString("code")} ${asset.getString("name")}` : "Asset"}: ${nameOf(dao, "departments", doc.getString("from_department")) || "—"} → ${nameOf(dao, "departments", doc.getString("to_department"))}`.slice(0, 200),
+      };
+    },
+  },
+  asset_disposal: {
+    collection: "asset_disposals",
+    approvePermission: "approve_asset_disposals",
+    label: "asset disposal",
+    link: (id) => `/dashboard/assets/disposals/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    context: (doc) => {
+      const dao = $app.dao();
+      let asset = null;
+      try {
+        asset = dao.findRecordById("assets", doc.getString("asset"));
+      } catch (_) {}
+      return {
+        amount: doc.getInt("net_book_value"), currency: "RWF", department: asset ? asset.getString("department") : "", category: "", branch: "",
+        requester: doc.getString("prepared_by"), number: doc.getString("number"),
+        title: `Disposal of ${asset ? `${asset.getString("code")} ${asset.getString("name")}` : "an asset"} (${doc.getString("method").replace(/_/g, " ")})`.slice(0, 200),
+      };
+    },
+  },
+  depreciation_run: {
+    collection: "depreciation_runs",
+    approvePermission: "approve_depreciation",
+    label: "depreciation run",
+    link: (id) => `/dashboard/assets/depreciation/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    // Whoever calculated the depreciation cannot approve it.
+    context: (doc) => ({
+      amount: doc.getInt("total"), currency: "RWF", department: "", category: "", branch: "",
+      requester: doc.getString("prepared_by"), number: doc.getString("number"),
+      title: `Depreciation ${doc.getString("period_label")} — ${doc.getInt("asset_count")} assets`,
+    }),
+  },
 };
 
 function docDef(type) {

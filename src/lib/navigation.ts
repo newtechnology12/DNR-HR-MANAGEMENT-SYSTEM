@@ -4,10 +4,10 @@
  */
 import {
   AlignEndHorizontal, ArrowRightLeft, Banknote, FileSpreadsheet, PiggyBank, BarChart3, FileCheck2, Blocks, Boxes, Building2, CalendarClock, CalendarRange, CandlestickChart, CarFront, CircleDollarSign,
-  ClipboardList, Clock, Container, FileSearch, FileSignature, FolderKanban, GitBranch, GitPullRequest, Inbox, Landmark, Layout, ListChecks,
+  ClipboardList, Clock, FileSearch, FileSignature, FolderKanban, GitBranch, GitPullRequest, Inbox, Landmark, Layout, ListChecks,
   ListTree, LucideIcon, Network, Percent, PieChart, Receipt, Scale, ScrollText, ServerCog, Settings, ShieldCheck, ShoppingCart, SlidersHorizontal,
   Split, Table, Tags, Truck, Undo2, UserCog, Users, Wallet, WalletCards, Activity, Coins, LayoutGrid, UserCheck,
-  ClipboardCheck, FileText, FolderOpen, HelpCircle, Laptop, MessageSquareText, Target, BookOpen, Link2,
+  ClipboardCheck, FileText, FolderOpen, HelpCircle, Laptop, MessageSquareText, Target, BookOpen, Link2, TrendingDown, Trash2,
 } from "lucide-react";
 
 export interface NavItem {
@@ -30,6 +30,8 @@ export const APPROVER_PERMISSIONS = [
   "approve_procurement_plans", "approve_payroll", "approve_purchase_returns", "approve_budgets", "approve_payment_vouchers",
   "approve_journals", "approve_asset_disposals", "approve_bank_reconciliation", "approve_depreciation", "approve_treasury",
 ];
+
+const ASSET_PERMISSIONS = ["view_fixed_assets", "manage_fixed_assets", "approve_fixed_assets", "approve_asset_disposals", "run_depreciation", "approve_depreciation", "view_asset_reports", "export_assets", "view_assets"];
 
 const TREASURY_PERMISSIONS = ["view_treasury", "manage_treasury", "manage_bank_accounts", "approve_treasury", "record_payments", "prepare_bank_reconciliation", "approve_bank_reconciliation", "export_treasury"];
 
@@ -142,12 +144,17 @@ export const NAVIGATION: NavGroup[] = [
   },
   {
     key: "assets",
-    label: "Assets",
+    label: "Fixed assets",
     items: [
-      { key: "assetInventory", label: "Equipment inventory", link: "/dashboard/assets", icon: Blocks, perms: ["view_assets"] },
-      { key: "assetCategories", label: "Equipment categories", link: "/dashboard/assets/categories", icon: Tags, perms: ["view_assets_categories"] },
-      { key: "assetTypes", label: "Equipment types", link: "/dashboard/assets/types", icon: Container, perms: ["view_assets_types"] },
-      { key: "assetRequests", label: "Equipment requests", link: "/dashboard/assets/requests", icon: GitPullRequest, perms: ["view_all_assets_requests", "reject_or_approve_assets_requests", "view_assets"] },
+      { key: "assetOverview", label: "Assets overview", link: "/dashboard/assets", icon: PieChart, perms: ASSET_PERMISSIONS },
+      { key: "assetRegister", label: "Asset register", link: "/dashboard/assets/register", icon: Blocks, perms: [...ASSET_PERMISSIONS, "request_asset_transfer"] },
+      { key: "assetTransfers", label: "Transfers", link: "/dashboard/assets/transfers", icon: ArrowRightLeft, perms: [...ASSET_PERMISSIONS, "request_asset_transfer"] },
+      { key: "depreciation", label: "Depreciation", link: "/dashboard/assets/depreciation", icon: TrendingDown, perms: ["run_depreciation", "approve_depreciation", "view_fixed_assets", "view_asset_reports"] },
+      { key: "assetDisposals", label: "Disposals", link: "/dashboard/assets/disposals", icon: Trash2, perms: ["manage_fixed_assets", "approve_asset_disposals", "view_fixed_assets"] },
+      { key: "assetCounts", label: "Asset counts", link: "/dashboard/assets/counts", icon: ClipboardCheck, perms: ["manage_fixed_assets", "view_fixed_assets"] },
+      { key: "assetRequests", label: "Equipment requests", link: "/dashboard/assets/requests", icon: GitPullRequest, perms: ["manage_fixed_assets", "reject_or_approve_assets_requests", "view_all_assets_requests"] },
+      { key: "assetReports", label: "Asset reports", link: "/dashboard/assets/reports", icon: BarChart3, perms: ["view_asset_reports", "view_fixed_assets", "export_assets"] },
+      { key: "assetCategories", label: "Categories & depreciation", link: "/dashboard/assets/categories", icon: Tags, perms: ASSET_PERMISSIONS },
     ],
   },
   {

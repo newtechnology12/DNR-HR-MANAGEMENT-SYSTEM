@@ -30,9 +30,6 @@ import PrePayments from "./pages/dashboard/PrePayments";
 import Performance from "./pages/dashboard/Performance";
 import PerfomanceForm from "./pages/dashboard/PerfomanceForm";
 import Designations from "./pages/dashboard/Designations";
-import Assets from "./pages/dashboard/Assets";
-import AssetsTypes from "./pages/dashboard/AssetsTypes";
-import AssetsCategories from "./pages/dashboard/AssetsCategories";
 // import FileManager from "./pages/dashboard/FileManager";
 import WeeklyPlans from "./pages/dashboard/WeeklyPlane";
 import RequestCash from "./pages/dashboard/RequestCash";
@@ -42,7 +39,6 @@ import Accounts from "./pages/dashboard/Accounts";
 import AccountTransactions from "./components/AccountTransactions";
 import PettyCashRequests from "./pages/dashboard/PettyCashRequests";
 import ExpensesReport from "./pages/dashboard/ExpensesReport";
-import AssetsRequests from "./pages/dashboard/AssetsRequests";
 import EmployeeTimesheet from "./pages/dashboard/EmployeeTimesheet";
 import TimesheetReport from "./pages/dashboard/TimesheetReport";
 // import CarManagement from "./pages/dashboard/CarManagement";
@@ -98,6 +94,19 @@ const Journals = lazy(() => import("./pages/ledger/Journals"));
 const JournalDetail = lazy(() => import("./pages/ledger/JournalDetail"));
 const PostingAccounts = lazy(() => import("./pages/setup/PostingAccounts"));
 const SalaryPayments = lazy(() => import("./pages/treasury/SalaryPayments"));
+const AssetsOverview = lazy(() => import("./pages/assets/AssetsOverview"));
+const AssetRegister = lazy(() => import("./pages/assets/AssetRegister"));
+const AssetDetail = lazy(() => import("./pages/assets/AssetDetail"));
+const AssetTransfers = lazy(() => import("./pages/assets/AssetTransfers"));
+const AssetDisposals = lazy(() => import("./pages/assets/AssetDisposals"));
+const DisposalDetail = lazy(() => import("./pages/assets/DisposalDetail"));
+const DepreciationRuns = lazy(() => import("./pages/assets/DepreciationRuns"));
+const DepreciationRunDetail = lazy(() => import("./pages/assets/DepreciationRunDetail"));
+const AssetCounts = lazy(() => import("./pages/assets/AssetCounts"));
+const AssetCountDetail = lazy(() => import("./pages/assets/AssetCountDetail"));
+const AssetCategories = lazy(() => import("./pages/assets/AssetCategories"));
+const AssetReports = lazy(() => import("./pages/assets/AssetReports"));
+const EquipmentRequests = lazy(() => import("./pages/assets/EquipmentRequests"));
 const PayrollTaxSettings = lazy(() => import("./pages/hr/payroll/PayrollTaxSettings"));
 const PerformanceOverview = lazy(() => import("./pages/hr/performance/PerformanceOverview"));
 const AppraisalPage = lazy(() => import("./pages/hr/performance/AppraisalPage"));
@@ -120,6 +129,8 @@ const VoucherForm = lazy(() => import("./pages/finance/VoucherForm"));
 const VoucherDetail = lazy(() => import("./pages/finance/VoucherDetail"));
 const PayablesReports = lazy(() => import("./pages/finance/PayablesReports"));
 const LEDGER_USERS = ["view_journals", "export_ledger", "approve_journals"];
+const ASSET_USERS = ["view_fixed_assets", "manage_fixed_assets", "approve_fixed_assets", "approve_asset_disposals", "run_depreciation", "approve_depreciation", "view_asset_reports", "export_assets", "view_assets"];
+const ASSET_DEPT_USERS = [...ASSET_USERS, "request_asset_transfer"];
 const VOUCHER_USERS = ["view_payment_vouchers", "manage_payment_vouchers", "approve_payment_vouchers", "record_payments"];
 // RALGA IMS — bank and cash (Step 5).
 const TreasuryOverview = lazy(() => import("./pages/treasury/TreasuryOverview"));
@@ -1035,38 +1046,20 @@ const router = createBrowserRouter([
               {
                 path: "assets",
                 children: [
-                  {
-                    index: true,
-                    element: (
-                      <ProtectedRoute entity="view_assets">
-                        <Assets />
-                      </ProtectedRoute>
-                    ),
-                  },
-                  {
-                    path: "types",
-                    element: (
-                      <ProtectedRoute entity="view_assets_types">
-                        <AssetsTypes />
-                      </ProtectedRoute>
-                    ),
-                  },
-                  {
-                    path: "categories",
-                    element: (
-                      <ProtectedRoute entity="view_assets_categories">
-                        <AssetsCategories />
-                      </ProtectedRoute>
-                    ),
-                  },
-                  {
-                    path: "requests",
-                    element: (
-                      <ProtectedRoute entity="view_assets_requests">
-                        <AssetsRequests />
-                      </ProtectedRoute>
-                    ),
-                  },
+                  { index: true, element: <ProtectedRoute entity={ASSET_USERS}><AssetsOverview /></ProtectedRoute> },
+                  { path: "register", element: <ProtectedRoute entity={ASSET_DEPT_USERS}><AssetRegister /></ProtectedRoute> },
+                  { path: "register/:assetId", element: <ProtectedRoute entity={ASSET_DEPT_USERS}><AssetDetail /></ProtectedRoute> },
+                  { path: "transfers", element: <ProtectedRoute entity={ASSET_DEPT_USERS}><AssetTransfers /></ProtectedRoute> },
+                  { path: "disposals", element: <ProtectedRoute entity={ASSET_USERS}><AssetDisposals /></ProtectedRoute> },
+                  { path: "disposals/:disposalId", element: <ProtectedRoute entity={ASSET_USERS}><DisposalDetail /></ProtectedRoute> },
+                  { path: "depreciation", element: <ProtectedRoute entity={ASSET_USERS}><DepreciationRuns /></ProtectedRoute> },
+                  { path: "depreciation/:runId", element: <ProtectedRoute entity={ASSET_USERS}><DepreciationRunDetail /></ProtectedRoute> },
+                  { path: "counts", element: <ProtectedRoute entity={ASSET_USERS}><AssetCounts /></ProtectedRoute> },
+                  { path: "counts/:countId", element: <ProtectedRoute entity={ASSET_USERS}><AssetCountDetail /></ProtectedRoute> },
+                  { path: "categories", element: <ProtectedRoute entity={ASSET_USERS}><AssetCategories /></ProtectedRoute> },
+                  { path: "types", element: <Navigate to="/dashboard/assets/categories" replace /> },
+                  { path: "reports", element: <ProtectedRoute entity={ASSET_USERS}><AssetReports /></ProtectedRoute> },
+                  { path: "requests", element: <ProtectedRoute entity={["manage_fixed_assets", "reject_or_approve_assets_requests", "view_all_assets_requests"]}><EquipmentRequests /></ProtectedRoute> },
                 ],
               },
               {

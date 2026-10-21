@@ -33,6 +33,8 @@ export const JOURNAL_SOURCES: Record<string, string> = {
   bank_charge: "Bank charge",
   depreciation_run: "Depreciation",
   asset_disposal: "Asset disposal",
+  asset: "Asset capitalisation",
+  asset_opening: "Opening asset register",
   manual: "Manual journal",
 };
 

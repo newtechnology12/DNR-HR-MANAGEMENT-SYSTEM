@@ -16,6 +16,9 @@ function approved(dao, type, doc, actor, meta) {
   if (type === "bank_transfer") return require("./treasury.js").onTransferApproved(dao, doc, actor, meta);
   if (type === "bank_reconciliation") return require("./treasury.js").onRecApproved(dao, doc, actor, meta);
   if (type === "payroll") return require("./payroll.js").onApproved(dao, doc, actor, meta);
+  if (type === "asset_transfer") return require("./assets.js").onTransferApproved(dao, doc, actor, meta);
+  if (type === "asset_disposal") return require("./assets.js").onDisposalApproved(dao, doc, actor, meta);
+  if (type === "depreciation_run") return require("./assets.js").onRunApproved(dao, doc, actor, meta);
 }
 
 /** Rejected or returned by an approver. */

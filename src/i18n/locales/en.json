@@ -29,7 +29,7 @@
   "nav.group.treasury": "Bank & cash",
   "nav.group.ledger": "General ledger",
   "nav.group.hr": "HR & payroll",
-  "nav.group.assets": "Assets",
+  "nav.group.assets": "Fixed assets",
   "nav.group.expenses": "Petty cash & expenses",
   "nav.group.reports": "Reports",
   "nav.group.setup": "Setup",
@@ -81,9 +81,7 @@
   "nav.attendanceReport": "Attendance report",
   "nav.timesheet": "Employee timesheet",
   "nav.timesheetReport": "Timesheet report",
-  "nav.assetCategories": "Equipment categories",
-  "nav.assetTypes": "Equipment types",
-  "nav.assetInventory": "Equipment inventory",
+  "nav.assetCategories": "Categories & depreciation",
   "nav.assetRequests": "Equipment requests",
   "nav.expenseRequests": "Expense requests",
   "nav.pettyCashAccounts": "Petty cash accounts",
@@ -195,5 +193,12 @@
   "nav.myEquipment": "Equipment requests",
   "nav.help": "Help & HR policies",
   "nav.attendanceCorrections": "Attendance corrections",
-  "nav.strategicObjectives": "Strategic objectives"
+  "nav.strategicObjectives": "Strategic objectives",
+  "nav.assetOverview": "Assets overview",
+  "nav.assetRegister": "Asset register",
+  "nav.assetTransfers": "Transfers",
+  "nav.depreciation": "Depreciation",
+  "nav.assetDisposals": "Disposals",
+  "nav.assetCounts": "Asset counts",
+  "nav.assetReports": "Asset reports"
 }

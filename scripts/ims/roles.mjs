@@ -127,7 +127,8 @@ export const MATRIX = {
   export_payroll: ["HR_PAYROLL", "INTERNAL_AUDITOR"],
 
   // ---------------------------------------------------------------- fixed assets (M7)
-  view_fixed_assets: ["SG", "DAF", "ACCOUNTANT", "HOD", "STORE_ASSET", "INTERNAL_AUDITOR", "MGMT_VIEWER"],
+  // Heads of department read their own department's assets (rule on `assets`), not the whole register.
+  view_fixed_assets: ["SG", "DAF", "ACCOUNTANT", "STORE_ASSET", "INTERNAL_AUDITOR", "MGMT_VIEWER"],
   manage_fixed_assets: ["STORE_ASSET"],
   approve_fixed_assets: ["DAF"],
   request_asset_transfer: ["HOD"],

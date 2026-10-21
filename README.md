@@ -17,7 +17,7 @@ Developed by Infinity Core Solutions Ltd.
 | 4 | Supplier invoices & payment vouchers (M4): duplicate invoice control, payment vouchers for invoices or direct expenses with withholding tax from the dated table, approval Accountant → DAF → SG above limit, execution by the Cashier, supplier ageing, outstanding liabilities, payment register, WHT schedule | **Done** |
 | 5 | Bank & cash, reconciliation (M5): bank accounts and cash books with opening balances, receipts and inter-account transfers approved by the DAF, voucher payments from a chosen account (no overdraft, restricted donor accounts), cash book, bank statement import from Excel / CSV with column mapping and automatic matching, matching by hand, bank charges recorded from the statement, reconciliation (Accountant prepares, DAF approves, then locked), cash counts, cash position and reports | **Done** |
 | 6 | Payroll (M6): Rwanda PAYE and RSSB from dated rates, grades and funding split of donor-funded staff, staff loans repaid through the payroll, comparison with the previous month, approval posts a balanced GL journal and budget actuals by department / funding source / project, payment from a chosen bank account (cash book + payment journal), payroll register, PAYE (RRA), RSSB and bank-file exports; general ledger core (journals, posting accounts) | **Done** |
-| 7 | Fixed assets & depreciation (M7) | Planned |
+| 7 | Fixed assets & depreciation (M7): register with tags, custodians and locations; capitalisation of capital items received on a GRN (or bought outside a PO, or donated) posted to the GL; opening register at go-live; transfers approved by the DAF; maintenance log; monthly depreciation (straight line / reducing balance by category, Accountant → DAF, posted by department and funding source); disposals Store → DAF → SG with the gain or loss in the GL; physical counts and the reconciliation of the register with the GL; staff equipment requests; asset schedule and reports | **Done** |
 | 8 | General ledger, period close (M8) | Planned |
 | 9 | Reports, financial statements, role dashboards (M9) | Planned |
 | 10 | Data migration, tests, documentation | Planned |
@@ -60,7 +60,7 @@ npm run seed:ralga
 # 3. Frontend (http://localhost:5173, proxies /api to the backend)
 npm run dev:frontend
 
-# 4. API tests on a freshly seeded server (must stay green: 310 checks in 12 suites)
+# 4. API tests on a freshly seeded server (must stay green: 321 checks in 13 suites)
 npm run test:api
 ```
 
@@ -251,6 +251,42 @@ Bank & cash in the menu (Cashier, Accountant, DAF, SG, Internal Auditor).
 - A posted receipt or transfer that is not yet on a bank statement can be **reversed** by the DAF (reason
   required): an opposite entry dated today, never an edit.
 
+## Fixed assets
+
+Fixed assets in the menu (Store & Asset Officer, Accountant, DAF, SG, Internal Auditor; a head of department sees
+the assets of their department; staff see what is in their care under My workspace → Equipment).
+
+- **Categories** (DAF): depreciation method (straight line or reducing balance), useful life, residual value,
+  capitalisation threshold, and the cost, accumulated depreciation and depreciation expense accounts. Seeded:
+  ICT equipment 4 years, office equipment 5, furniture 8, motor vehicles 5 (10% residual), buildings and
+  improvements 20 — illustrative, to be confirmed by Finance.
+- **Register:** tag, description, category and type, department, location, custodian, funding source and project,
+  supplier, PO, GRN and invoice, cost, depreciation start, accumulated depreciation and net book value. Written by
+  the server only. Assets received on a GRN wait under *To capitalise*: the Store & Asset Officer completes the card
+  and capitalises it — Dr the category's cost account / Cr *assets received, not yet invoiced* (2114), or deferred
+  capital grants (2201) for a donation. Items below the threshold are expenses, not assets.
+- **Opening register** (DAF, at go-live): the assets already owned, with their accumulated depreciation at that
+  date, in one opening journal (Dr cost / Cr accumulated depreciation / Cr accumulated surplus). One bad row loads
+  nothing.
+- **Custodians and transfers:** the Store & Asset Officer changes the custodian or the location within the
+  department; a move to another department is a transfer requested by the Store & Asset Officer or the department
+  head and approved by the DAF. Status changes (in store, in use, under maintenance, damaged, lost) and every move
+  are kept in the asset's history; maintenance is logged with its cost and next due date.
+- **Depreciation** (monthly): the Accountant calculates the month — one run a month, in order, months missed since
+  an asset was capitalised are caught up — and the DAF approves (never the person who calculated it). The journal
+  debits depreciation expense and credits accumulated depreciation by department, funding source and project.
+- **Disposals** (sale, auction, donation, scrapping, write-off, theft or loss): prepared by the Store & Asset
+  Officer with the committee's minutes, reviewed by the DAF, approved by the SG. The GL removes the cost and the
+  accumulated depreciation, records the proceeds as receivable and the gain or loss.
+- **Asset counts:** the count sheet lists every asset in scope with where it should be; each is marked found, found
+  elsewhere, damaged or missing. Completing the count updates the register (missing → lost) and reconciles the
+  register with the GL per category.
+- **Equipment requests:** staff ask for a type of equipment; the Store & Asset Officer gives a specific asset from
+  the store of their department, which is then in their care, or declines with a reason.
+- **Reports:** register, fixed asset schedule (cost and depreciation at start, additions, disposals, charge, at
+  end), depreciation by month and category and by department and funding source, movements, disposals,
+  maintenance, and the register against the GL. Each asset has a printable tag (barcode).
+
 ## Working with data
 
 - **Excel import** (button *Import* on lists): download the template (Data sheet with the right headers, an
@@ -384,5 +420,9 @@ corrections (HR only, never one's own; approved days added to the log) and payro
 approved by someone else, instalment limits, the slip deduction, a balanced journal equal to the employer cost,
 donor-funded salaries charged to the donor programme, budget actuals equal to the posting, staff cannot read
 journals, preparer cannot pay, payment from a bank account clears net salaries payable, comparison with the
-previous month). Run them on a freshly seeded server
+previous month) and fixed assets (who sees the register, no direct writes, depreciation policy by the DAF only,
+capitalisation journal, threshold, custodians in the asset's department, transfers approved by the DAF, monthly
+depreciation in order with the journal equal to the charge, disposals Store → DAF → SG with the gain in the GL,
+counts marking missing assets lost with the register equal to the GL, staff equipment requests, the opening
+register refusing a bad row). Run them on a freshly seeded server
 (`npm run seed:ralga` first): some checks use the seeded documents.

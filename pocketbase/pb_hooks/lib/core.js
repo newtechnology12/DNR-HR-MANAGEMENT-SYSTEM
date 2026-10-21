@@ -212,6 +212,7 @@ const DEFAULT_SEQUENCES = {
   asset_transfer: { name: "Asset transfer", prefix: "ATR" },
   asset_disposal: { name: "Asset disposal", prefix: "DSP" },
   depreciation_run: { name: "Depreciation run", prefix: "DEP" },
+  asset_verification: { name: "Asset count", prefix: "AVF" },
   role_change: { name: "Permission change", prefix: "PCR" },
   supplier_bank_change: { name: "Supplier bank details change", prefix: "BCH" },
 };

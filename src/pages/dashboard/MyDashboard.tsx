@@ -21,7 +21,6 @@ import { ITEM_STATUS, PLAN_STATUS, TYPE_INFO, plansApi } from "@/lib/plans";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LeaveFormModal } from "@/components/modals/LeaveFormModal";
 import { PettryCashRequestModal } from "@/components/modals/PettryCashRequestModal";
-import { AssetRequestModal } from "@/components/modals/AssetRequestModal";
 import { PayslipDialog, payrollOf } from "@/pages/hr/payroll/Payslip";
 import {
   AttendanceCalendar, AttendanceNotice, ClockCard, LeaveBalance, Pill, RequestTable, RequestTabs, ReqTab, WCard, WHead, WLink, btnNavyOutline, btnOutline, btnPrimary,
@@ -118,7 +117,7 @@ export default function MyDashboard() {
               ["Leave", () => setDialog("leave"), canPerform("access_employee_portal")],
               ["Expense", () => navigate("/dashboard/my/expenses?new=expense"), canPerform("create_expense")],
               ["Petty cash", () => setDialog("petty"), canPerform("access_employee_portal")],
-              ["Equipment", () => setDialog("equipment"), canPerform("view_assets_requests")],
+              ["Equipment", () => navigate("/dashboard/my/equipment?new=1"), canPerform("view_assets_requests")],
               ["Purchase requisition", () => navigate("/dashboard/procurement/requisitions/new"), canPerform("create_purchase_requisition")],
             ].filter((x) => x[2]).map(([l, fn]) => (
               <button key={l as string} type="button" onClick={fn as () => void} className="h-[34px] rounded-lg border border-[#DDE3EC] bg-white px-3 text-[13px] font-semibold text-[#14213D] hover:bg-[#F1F4F9]">+ {l as string}</button>
@@ -181,7 +180,6 @@ export default function MyDashboard() {
       <CorrectionDialog open={dialog === "correction"} onClose={() => setDialog("")} days={cal.absent} uid={uid} />
       <LeaveFormModal open={dialog === "leave"} setOpen={(o: boolean) => !o && setDialog("")} record={null} employeeId={uid} onComplete={() => { setDialog(""); refresh(); }} />
       <PettryCashRequestModal open={dialog === "petty"} setOpen={(o: boolean) => !o && setDialog("")} record={null} employeeId={uid} onComplete={() => { setDialog(""); refresh(); }} />
-      <AssetRequestModal open={dialog === "equipment"} setOpen={(o: boolean) => !o && setDialog("")} record={null} employeeId={uid} onComplete={() => { setDialog(""); refresh(); }} />
       {slip && <PayslipDialog slip={slip} payroll={payrollOf(slip)} onClose={() => setSlip(null)} />}
     </main>
   );

@@ -65,6 +65,8 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   payment_voucher: "Payment voucher",
   journal_entry: "Journal entry",
   asset_disposal: "Asset disposal",
+  asset_transfer: "Asset transfer",
+  depreciation_run: "Monthly depreciation",
   bank_reconciliation: "Bank reconciliation",
   cash_receipt: "Receipt",
   bank_transfer: "Inter-account transfer",
@@ -87,6 +89,10 @@ export const DOCUMENT_LINKS: Record<string, (id: string) => string> = {
   cash_receipt: (id) => `/dashboard/treasury/receipts/${id}`,
   bank_transfer: (id) => `/dashboard/treasury/transfers/${id}`,
   bank_reconciliation: (id) => `/dashboard/treasury/reconciliations/${id}`,
+  asset_transfer: (id) => `/dashboard/assets/transfers?open=${id}`,
+  asset_disposal: (id) => `/dashboard/assets/disposals/${id}`,
+  depreciation_run: (id) => `/dashboard/assets/depreciation/${id}`,
+  asset: (id) => `/dashboard/assets/register/${id}`,
 };
 
 const qs = (params: Record<string, unknown>) =>

@@ -13,16 +13,18 @@ import { useAuth } from "@/context/auth.context";
 import { useRoles } from "@/context/roles.context";
 import useSettings from "@/hooks/useSettings";
 import { LOAN_TYPES, MONTHS, leaveApi } from "@/lib/hr";
+import { ASSET_STATUS, CONDITIONS } from "@/lib/assets";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/procurement";
 import { cn } from "@/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LeaveFormModal } from "@/components/modals/LeaveFormModal";
 import { PettryCashRequestModal } from "@/components/modals/PettryCashRequestModal";
-import { AssetRequestModal } from "@/components/modals/AssetRequestModal";
 import EmployeeAttendances from "@/pages/dashboard/EmployeeAttendances";
 import EmployeeLeaves from "@/pages/dashboard/EmployeeLeaves";
 import EmployeePrePayments from "@/pages/dashboard/EmployeePrePayments";
 import EmployeeDocuments from "@/pages/dashboard/EmployeeDocuments";
-import EmployeeAssets from "@/pages/dashboard/EmployeeAssets";
 import EmployeePerfomance from "@/pages/dashboard/EmployeePerfomance";
 import MyAppraisals from "@/pages/portal/MyAppraisals";
 import MyPayslipList from "@/pages/portal/MyPayslips";
@@ -344,14 +346,43 @@ export function MyExpenses() {
 export function MyEquipment() {
   const { uid } = useUid();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "assigned" ? "assigned" : "requests";
+  const tab = params.get("tab") === "requests" ? "requests" : "assigned";
   const [open, setOpen] = React.useState(params.get("new") === "1");
-  const reqs = useQuery(["my-equipment", uid], () => pocketbase.collection("assets_requests").getFullList({ filter: `requested_by = "${uid}"`, sort: "-created", expand: "asset" }), { enabled: Boolean(uid) });
+  const held = useQuery(["my-assets", uid], () => pocketbase.collection("assets").getFullList({ filter: `assigned_to = "${uid}" && status != "disposed"`, sort: "code", expand: "category,type" }), { enabled: Boolean(uid) });
+  const reqs = useQuery(["my-equipment", uid], () => pocketbase.collection("assets_requests").getFullList({ filter: `requested_by = "${uid}"`, sort: "-created", expand: "asset,asset_type" }), { enabled: Boolean(uid) });
+  const pending = ((reqs.data || []) as any[]).filter((r) => r.status === "pending").length;
   return (
     <main className={myPage}>
-      <MyHeader title="Equipment" subtitle="Equipment assigned to you and your requests for laptops, phones, furniture or other items." actions={<button type="button" onClick={() => setOpen(true)} className={btnPrimary}><Plus size={15} /> Request equipment</button>} />
-      <Tabs tabs={[["requests", "My requests"], ["assigned", "Assigned to me"]]} active={tab} onChange={(k) => setParams(k === "assigned" ? { tab: "assigned" } : {})} />
-      {tab === "assigned" ? <WCard><EmployeeAssets employeeId={uid} /></WCard> : (
+      <MyHeader
+        title="Equipment"
+        subtitle="The RALGA equipment in your care, and your requests for more. You answer for what is in your care at the asset counts."
+        actions={<button type="button" onClick={() => setOpen(true)} className={btnPrimary}><Plus size={15} /> Request equipment</button>}
+      />
+      <Tabs tabs={[["assigned", `In my care${held.data ? ` (${held.data.length})` : ""}`], ["requests", `My requests${pending ? ` (${pending} waiting)` : ""}`]]} active={tab} onChange={(k) => setParams(k === "requests" ? { tab: "requests" } : {})} />
+      {tab === "assigned" ? (
+        <WCard flush className="overflow-hidden">
+          {held.isLoading ? <div className="p-5"><Skeleton className="h-24 w-full" /></div> : !(held.data || []).length ? (
+            <div className="flex flex-col items-center gap-2 px-5 py-10 text-center"><Laptop size={26} className="text-[#5B6577]" /><p className="text-[14px] font-bold">Nothing in your care</p><p className="text-[13px] text-[#5B6577]">Equipment given to you by the Store & Asset Officer appears here.</p></div>
+          ) : (
+            <ul className="divide-y divide-[#EDF0F5]">
+              {(held.data as any[]).map((a) => (
+                <li key={a.id} className="grid gap-2 px-5 py-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-bold text-[#14213D]">{a.name}</p>
+                    <p className="text-[12.5px] text-[#5B6577]"><span className="font-mono">{a.code}</span>{a.serial_number ? ` · S/N ${a.serial_number}` : ""} · {a.expand?.category?.name}{a.location_name ? ` · ${a.location_name}` : ""}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    {a.condition && <Pill tone={a.condition === "damaged" || a.condition === "poor" ? "rejected" : "neutral"}>{CONDITIONS[a.condition]}</Pill>}
+                    <Pill tone={a.status === "in_use" ? "approved" : a.status === "lost" || a.status === "damaged" ? "rejected" : "pending"}>{ASSET_STATUS[a.status]?.label || a.status}</Pill>
+                    {a.assigned_at && <span className="text-[12px] text-[#5B6577]">since {format(toDate(a.assigned_at) as Date, "d MMM yyyy")}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="border-t border-[#EDF0F5] px-5 py-3 text-[12.5px] text-[#5B6577]">Something broken, lost or no longer needed? Tell the Store & Asset Officer; they record it and arrange repair, return or transfer.</p>
+        </WCard>
+      ) : (
         <WCard flush className="overflow-hidden">
           {reqs.isLoading ? <div className="p-5"><Skeleton className="h-24 w-full" /></div> : !(reqs.data || []).length ? (
             <div className="flex flex-col items-center gap-2 px-5 py-10 text-center"><Laptop size={26} className="text-[#5B6577]" /><p className="text-[14px] font-bold">No equipment request yet</p></div>
@@ -359,16 +390,69 @@ export function MyEquipment() {
             <ul className="divide-y divide-[#EDF0F5]">
               {(reqs.data as any[]).map((r) => (
                 <li key={r.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-3">
-                  <div><p className="text-[14px] font-bold">{r.expand?.asset?.name || "Equipment"}</p><p className="text-[13px] text-[#5B6577]">{r.notes}</p></div>
-                  <div className="text-right"><Pill tone={statusTone(r.status)}>{(r.status || "pending").replace(/^./, (c: string) => c.toUpperCase())}</Pill><p className="mt-1 text-[12px] text-[#5B6577]">{ago(r.created)}</p></div>
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-bold">{r.expand?.asset_type?.name || r.expand?.asset?.name || "Equipment"}</p>
+                    <p className="text-[13px] text-[#5B6577]">{r.notes}</p>
+                    {r.status === "approved" && r.expand?.asset && <p className="mt-1 text-[12.5px] text-[#0F6B3A]">Given: <span className="font-mono">{r.expand.asset.code}</span> {r.expand.asset.name}</p>}
+                    {r.status === "rejected" && r.rejected_reason && <p className="mt-1 text-[12.5px] text-[#B42318]">{r.rejected_reason}</p>}
+                  </div>
+                  <div className="text-right"><Pill tone={statusTone(r.status)}>{r.status === "approved" ? "Given" : r.status === "rejected" ? "Declined" : "Waiting"}</Pill><p className="mt-1 text-[12px] text-[#5B6577]">{ago(r.created)}</p></div>
                 </li>
               ))}
             </ul>
           )}
         </WCard>
       )}
-      <AssetRequestModal open={open} setOpen={(o: boolean) => { setOpen(o); if (!o && params.get("new")) setParams({}); }} record={null} employeeId={uid} onComplete={() => { setOpen(false); reqs.refetch(); }} />
+      {open && <EquipmentRequestDialog uid={uid} onClose={() => { setOpen(false); if (params.get("new")) setParams({ tab: "requests" }); }} onDone={() => { setOpen(false); reqs.refetch(); setParams({ tab: "requests" }); }} />}
     </main>
+  );
+}
+
+/** Ask for a type of equipment; the Store & Asset Officer gives a specific asset. */
+function EquipmentRequestDialog({ uid, onClose, onDone }: { uid: string; onClose: () => void; onDone: () => void }) {
+  const types = useQuery(["equipment-types"], async () => {
+    const [cats, list] = await Promise.all([
+      pocketbase.collection("assets_categories").getFullList({ sort: "sort,name", fields: "id,name,active" }),
+      pocketbase.collection("assets_types").getFullList({ sort: "name", fields: "id,name,category" }),
+    ]);
+    return (cats as any[]).filter((c) => c.active !== false).map((c) => ({ ...c, types: (list as any[]).filter((t) => t.category === c.id) })).filter((c) => c.types.length);
+  }, { staleTime: 300_000 });
+  const [type, setType] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const send = async () => {
+    setBusy(true);
+    try {
+      await pocketbase.collection("assets_requests").create({ requested_by: uid, asset_type: type, notes: notes.trim(), status: "pending" });
+      toast.success("Request sent to the Store & Asset Officer");
+      onDone();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md bg-white">
+        <DialogHeader>
+          <DialogTitle>Request equipment</DialogTitle>
+          <DialogDescription>Say what you need and why; the Store & Asset Officer gives you an item from the store or tells you when one is available.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <label className="block text-[13px] font-medium text-slate-700">What do you need?
+            <select className="mt-1.5 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13.5px]" value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="">Choose…</option>
+              {(types.data || []).map((c: any) => <optgroup key={c.id} label={c.name}>{c.types.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+            </select>
+          </label>
+          <label className="block text-[13px] font-medium text-slate-700">Why
+            <textarea className="mt-1.5 block min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-[13.5px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. My laptop no longer charges; I need one for the district training next week." />
+          </label>
+        </div>
+        <DialogFooter className="gap-2"><button type="button" className={btnOutline} onClick={onClose}>Cancel</button><button type="button" className={btnPrimary} disabled={busy || !type || notes.trim().length < 5} onClick={send}>Send request</button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
