@@ -215,6 +215,16 @@ await check("staff cannot clock in for a colleague", async () => {
   await refused(staff.collection("attendance").create({ employee: other.id, clockin_time: new Date().toISOString(), type: "manual" }));
 });
 
+console.log("\nExpand");
+await check("expand paths that are not relations are ignored (as PocketBase does), and related staff stay scrubbed", async () => {
+  // Older pages ask for e.g. departments?expand=departments,created_by,head ("created_by" is text there).
+  const r = await hr.collection("departments").getList(1, 50, { expand: "departments,created_by,head" });
+  assert(r.items.length > 0 && r.items.some((d) => d.expand?.head), "head not expanded");
+  const s = await staff.collection("departments").getList(1, 50, { expand: "head,bogus" });
+  assert(s.items.some((d) => d.expand?.head), "head not expanded for staff");
+  assert(s.items.every((d) => !d.expand?.head?.salary && !d.expand?.head?.national_id), "personal fields of a head visible to staff");
+});
+
 for (const [col, rid] of created) await admin.collection(col).delete(rid).catch(() => null);
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -10,6 +10,8 @@ import { useState } from "react";
 import { useQuery } from "react-query";
 import BreadCrumb from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
@@ -350,10 +352,13 @@ export default function AssetsRequests() {
               ]}
             />
           </div>
-          <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Request Asset.</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools exportConfig={EXPORTS.assetRequests()} />
+            <Button onClick={() => newRecordModal.open()} size="sm">
+              <PlusCircle size={16} className="mr-2" />
+              <span>Request equipment</span>
+            </Button>
+          </div>
         </div>
         <div className=" bg-white scroller border-t border-l border-r rounded-t">
           <ScrollArea className="w-full  whitespace-nowrap">

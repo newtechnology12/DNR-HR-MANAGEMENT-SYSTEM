@@ -11,6 +11,8 @@ import { useState } from "react";
 import { useQuery } from "react-query";
 import BreadCrumb from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
@@ -455,10 +457,13 @@ export default function Leaves() {
               items={[{ title: "Leaves & Holidays", link: "/dashboard" }]}
             />
           </div>
-          <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} />
-            <span>Request Leave</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools exportConfig={EXPORTS.leaves()} />
+            <Button onClick={() => newRecordModal.open()} size="sm">
+              <PlusCircle size={16} />
+              <span>Request Leave</span>
+            </Button>
+          </div>
         </div>
         <div className="rounded-t-card border-l border-r border-t border-slate-200 bg-white">
           <ScrollArea className="w-full whitespace-nowrap">

@@ -11,6 +11,8 @@ import cleanObject from "@/utils/cleanObject";
 import { useQuery,useInfiniteQuery } from "react-query";
 import BreadCrumb from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
@@ -729,6 +731,7 @@ export default function Prepayments() {
                 ]}
               />
             </div>
+            <TableTools exportConfig={EXPORTS.expenses()} />
             <Button 
               className="bg-primary hover:bg-primary/90" 
               onClick={() => newRecordModal.open()}

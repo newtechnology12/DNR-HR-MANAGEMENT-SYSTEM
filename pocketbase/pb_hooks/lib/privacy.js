@@ -112,9 +112,57 @@ function guardQuery(e, who) {
  */
 function expandNow(e, enrich) {
   const params = e.httpContext.queryParams();
-  if (!params.get("expand")) return;
-  enrich();
+  const raw = params.get("expand");
+  if (!raw) return;
+  // PocketBase silently ignores expand paths that are not relations; enriching them here would
+  // fail the whole request instead, so keep only the paths that resolve to relations.
+  const valid = validExpand($app.dao(), e.collection, raw);
+  if (valid) {
+    params.set("expand", valid);
+    try {
+      enrich();
+    } catch (err) {
+      // Never fail the list because of an expand; never return unscrubbed related records either.
+      console.log(`privacy: expand "${valid}" on ${e.collection.name} skipped: ${err}`);
+    }
+  }
   params.del("expand");
+}
+
+/** The comma separated expand paths whose every segment is a relation (or a `x_via_y` back-relation). */
+function validExpand(dao, collection, expand) {
+  const keep = [];
+  for (const path of String(expand).split(",").map((p) => p.trim()).filter(Boolean)) {
+    let col = collection;
+    let ok = true;
+    for (const seg of path.split(".")) {
+      const field = col.schema.getFieldByName(seg);
+      if (field && field.type === "relation") {
+        try {
+          col = dao.findCollectionByNameOrId(field.options.collectionId);
+          continue;
+        } catch (_) {
+          ok = false;
+          break;
+        }
+      }
+      const via = seg.match(/^([A-Za-z0-9_]+)_via_([A-Za-z0-9_]+)$/);
+      if (via) {
+        try {
+          const other = dao.findCollectionByNameOrId(via[1]);
+          const back = other.schema.getFieldByName(via[2]);
+          if (back && back.type === "relation" && back.options.collectionId === col.id) {
+            col = other;
+            continue;
+          }
+        } catch (_) {}
+      }
+      ok = false;
+      break;
+    }
+    if (ok) keep.push(path);
+  }
+  return keep.join(",");
 }
 
 function onList(e) {

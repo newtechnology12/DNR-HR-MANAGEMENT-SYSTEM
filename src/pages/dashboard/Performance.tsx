@@ -9,6 +9,8 @@ import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
 import { useQuery } from "react-query";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
@@ -353,8 +355,9 @@ export default function Performance() {
             size="sm"
           >
             <PlusCircle size={16} className="mr-2" />
-            <span>Create new Perfomance.</span>
+            <span>New evaluation</span>
           </Button>
+          <TableTools exportConfig={EXPORTS.appraisals()} />
         </div>
         <DataTable
           isFetching={recordsQuery.isFetching}

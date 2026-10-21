@@ -12,6 +12,8 @@ import { addDays, differenceInSeconds } from "date-fns";
 import formatSeconds from "@/utils/formatSeconds";
 import BreadCrumb from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import { PlusCircle } from "react-feather";
 import { AttendanceFormModal } from "@/components/modals/AttendanceFormModal";
 import useModalState from "@/hooks/useModalState";
@@ -534,6 +536,7 @@ export default function AttendaceLogs() {
               <PlusCircle size={16} className="mr-2" />
               <span>Mark Attendance</span>
             </Button>
+            <TableTools exportConfig={EXPORTS.attendance()} />
           </div>
         </div>
         <DataTable

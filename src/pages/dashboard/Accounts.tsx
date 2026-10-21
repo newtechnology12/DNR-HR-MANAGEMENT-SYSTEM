@@ -10,6 +10,8 @@ import { useState } from "react";
 import { useQuery } from "react-query";
 import BreadCrumb from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
@@ -286,10 +288,13 @@ export default function Accounts() {
               items={[{ title: "All accounts", link: "/dashboard" }]}
             />
           </div>
-          <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create new account</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools exportConfig={EXPORTS.pettyAccounts()} />
+            <Button onClick={() => newRecordModal.open()} size="sm">
+              <PlusCircle size={16} className="mr-2" />
+              <span>Create new account</span>
+            </Button>
+          </div>
         </div>
         <DataTable
           isFetching={recordsQuery.isFetching}

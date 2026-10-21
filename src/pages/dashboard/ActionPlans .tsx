@@ -3,6 +3,8 @@ import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTable from "@/components/DataTable";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import { Checkbox } from "@/components/ui/checkbox";
 import pocketbase from "@/lib/pocketbase";
 import { useQuery } from "react-query";
@@ -502,9 +504,12 @@ const changePageSize = (newSize: number) => {
         setColumnFilters={setColumnFilters}
         columnFilters={columnFilters}
         Action={() => (
-          <Button onClick={() => newRecordModal.open()} size="sm" className="mr-2">
-            Create New Plan
-          </Button>
+          <span className="mr-2 inline-flex items-center gap-2">
+            <TableTools exportConfig={EXPORTS.actionPlans()} />
+            <Button onClick={() => newRecordModal.open()} size="sm">
+              Create New Plan
+            </Button>
+          </span>
         )}
         facets={[
           {

@@ -9,6 +9,8 @@ import { useState } from "react";
 import { useQuery } from "react-query";
 import BreadCrumb from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
@@ -521,10 +523,13 @@ export default function CarManagement() {
           setColumnFilters={setColumnFilters}
           columnFilters={columnFilters}
           Action={() =>{
-            return <Button onClick={() => newRecordModal.open()} size="sm">
+            return <span className="mr-2 inline-flex items-center gap-2">
+            <TableTools exportConfig={EXPORTS.vehicleRequests()} />
+            <Button onClick={() => newRecordModal.open()} size="sm">
             <PlusCircle size={16} className="mr-2" />
-            <span>Create new CarRequests.</span>
+            <span>Request a vehicle</span>
           </Button>
+          </span>
           }}
           facets={[
             {

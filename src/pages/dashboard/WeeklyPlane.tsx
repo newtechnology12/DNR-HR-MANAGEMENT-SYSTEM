@@ -6,6 +6,8 @@ import { addDays, format } from "date-fns"
 import { z } from "zod"
 import { PlusCircle } from 'lucide-react'
 import DataTable from "@/components/DataTable"
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import { ColumnDef, PaginationState } from "@tanstack/react-table"
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader"
 import DataTableRowActions from "@/components/datatable/DataTableRowActions"
@@ -279,10 +281,13 @@ export default function WeeklyPlans({ ...otherProps }) {
           },
         ]}
         Action={() => (
-          <Button onClick={() => newWeeklyPlanModal.open()} size="sm" className="mr-3">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create New Weekly Plan</span>
-          </Button>
+          <span className="mr-3 inline-flex items-center gap-2">
+            <TableTools exportConfig={EXPORTS.weeklyPlans()} />
+            <Button onClick={() => newWeeklyPlanModal.open()} size="sm">
+              <PlusCircle size={16} className="mr-2" />
+              <span>Create New Weekly Plan</span>
+            </Button>
+          </span>
         )}
         {...otherProps}
       />

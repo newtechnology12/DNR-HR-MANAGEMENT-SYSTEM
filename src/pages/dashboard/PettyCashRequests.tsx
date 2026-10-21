@@ -1,6 +1,7 @@
 
 
-import * as XLSX from 'xlsx';
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import { useState } from 'react';
 import { useQuery } from 'react-query';
 import { ColumnDef, PaginationState } from '@tanstack/react-table';
@@ -41,12 +42,6 @@ import { PettryCashRequestModal } from '@/components/modals/PettryCashRequestMod
 import { DatePicker } from '@/components/ui/date-picker'; // Assuming you have a DatePicker component
 
 // Function to export data to Excel
-const exportToExcel = (data, fileName) => {
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  XLSX.writeFile(wb, `${fileName}.xlsx`);
-};
 
 
 
@@ -139,17 +134,6 @@ export default function PettyCashRequests() {
       });
   };
 
-  const handleExport = () => {
-    const filteredData = recordsQuery.data.items.filter((item) => {
-      const itemDate = new Date(item.original.created);
-      return (
-        (!exportStartDate || itemDate >= exportStartDate) &&
-        (!exportEndDate || itemDate <= exportEndDate)
-      );
-    });
-
-    exportToExcel(filteredData, 'PettyCashRequests');
-  };
 
   return (
     <>
@@ -179,9 +163,7 @@ export default function PettyCashRequests() {
     setValue={(date) => setExportEndDate(date)} // Use `setValue` instead of `onChange`
     placeholder="End Date" // Use `placeholder` instead of `placeholderText`
   />
-  <Button onClick={handleExport} size="sm">
-    Export to Excel
-  </Button>
+  <TableTools exportConfig={EXPORTS.pettyCash(exportStartDate, exportEndDate)} />
   <Button onClick={() => newRecordModal.open()} size="sm">
     <PlusCircle size={16} className="mr-2" />
     <span>Request Petty Cash</span>

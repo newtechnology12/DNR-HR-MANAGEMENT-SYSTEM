@@ -12,6 +12,8 @@ import { addDays, differenceInSeconds } from "date-fns";
 import BreadCrumb from "@/components/breadcrumb";
 import { PlusCircle } from "react-feather";
 import { Button } from "@/components/ui/button";
+import TableTools from "@/components/enterprise/TableTools";
+import { EXPORTS } from "@/lib/exportConfigs";
 import { AssetAllocationFormModal } from "@/components/modals/AssetAllocationFormModal";
 import ConfirmModal from "@/components/modals/ConfirmModal";
 import useEditRow from "@/hooks/use-edit-row";
@@ -415,15 +417,18 @@ export default function AssetsAllocation() {
               items={[{ title: "Assests allocation", link: "/dashboard" }]}
             />
           </div>
-          <Button
-            onClick={() => {
-              newRecordModal.open();
-            }}
-            size="sm"
-          >
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create new allocation.</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <TableTools exportConfig={EXPORTS.assetAllocations()} />
+            <Button
+              onClick={() => {
+                newRecordModal.open();
+              }}
+              size="sm"
+            >
+              <PlusCircle size={16} className="mr-2" />
+              <span>Create new allocation</span>
+            </Button>
+          </div>
         </div>
         <DataTable
           // className="!border-none !p-0"
