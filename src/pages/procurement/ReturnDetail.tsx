@@ -2,34 +2,50 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Ban, Check, CornerUpLeft, FileMinus, Receipt, ShoppingCart, Truck, XCircle } from "lucide-react";
+import { Ban, Check, Clock, CornerUpLeft, FileMinus, Receipt, Send, Truck, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState, Panel, StatusBadge } from "@/components/enterprise/ui";
-import { ActionDialog, ActionKind, ApprovalTracker } from "@/components/enterprise/Approval";
-import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, SmartButtons, Totals, toChatter } from "@/components/enterprise/DocumentLayout";
-import { RETURN_STATUS, errorMessage, money, phase5Api, procurementApi } from "@/lib/procurement";
-import { Field, FormBlock, FormDialog, inputCls, showDate } from "@/components/portal/kit";
+import { ActionDialog, ActionKind, Activity, ApprovalTracker } from "@/components/enterprise/Approval";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  Column,
+  DataTable,
+  DetailHeader,
+  Details,
+  EmptyState,
+  Field,
+  Input,
+  MenuItem,
+  Modal,
+  MoneyInput,
+  MoreMenu,
+  Num,
+  Page,
+  Tabs,
+  TwoLine,
+  fmtDate,
+  fmtDateTime,
+  fmtMoney,
+  fmtNumber,
+  sentence,
+} from "@/components/ims";
+import { RETURN_STATUS, errorMessage, phase5Api, procurementApi } from "@/lib/procurement";
 import DocumentUploads from "@/components/enterprise/Attachments";
 
-const STEPS = [
-  { key: "draft", label: "Draft" },
-  { key: "pending_approval", label: "Approval" },
-  { key: "approved", label: "Approved" },
-  { key: "dispatched", label: "Returned" },
-  { key: "credited", label: "Credited" },
-];
-const stepOf = (s: string) => (s === "returned_for_changes" || s === "rejected" || s === "cancelled" ? "draft" : s);
+const LIST = "/dashboard/procurement/returns";
 const ACTION_LABEL: Record<string, string> = { credit_note: "Credit note", replacement: "Replacement", refund: "Refund" };
+type TabKey = "details" | "items" | "approvals" | "documents" | "activity";
 
 export default function ReturnDetail() {
   const { returnId } = useParams();
   const queryClient = useQueryClient();
   const { canPerform } = useRoles();
   const me = pocketbase.authStore.model as any;
-  const [tab, setTab] = React.useState("lines");
+  const [tab, setTab] = React.useState<TabKey>("details");
   const [decision, setDecision] = React.useState<ActionKind | null>(null);
   const [crediting, setCrediting] = React.useState(false);
 
@@ -47,7 +63,7 @@ export default function ReturnDetail() {
   };
   const dispatch = useMutation(() => phase5Api.returnAction(returnId!, "dispatch"), {
     onSuccess: () => {
-      toast.success("Goods recorded as returned; stock reduced");
+      toast.success(`${q.data?.r?.number || "Return"} handed to the supplier; stock reduced`);
       refresh();
     },
     onError: (e) => {
@@ -55,87 +71,160 @@ export default function ReturnDetail() {
     },
   });
 
-  if (q.isLoading) return <div className="space-y-4 px-4 py-4 sm:px-6"><Skeleton className="h-12 w-80" /><Skeleton className="h-96 w-full" /></div>;
-  if (!q.data) return <div className="p-4"><Panel><EmptyState icon={FileMinus} title="Return not available" text="It may be outside what your role can see." /></Panel></div>;
+  if (q.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-64 w-full" />
+      </Page>
+    );
+  }
+  if (!q.data) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState icon={FileMinus} text="This return is not available. It may have been deleted, or your role cannot see it." action={<ButtonLink to={LIST}>Back to returns</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
   const { r, actions, audit } = q.data;
   const approval = r.expand?.approval;
   const isApprover = approval?.status === "pending" && (approval.pending_approvers || "").split(",").includes(me?.id);
   const canHandle = canPerform("receive_goods") || canPerform("manage_purchase_orders");
+  const stepName = approval?.status === "pending" ? approval.steps?.[approval.current_level]?.name : null;
+  const items: any[] = r.items || [];
+  const canSubmit = canHandle && ["draft", "returned_for_changes"].includes(r.status);
+  const canDispatch = canPerform("receive_goods") && r.status === "approved";
+  const canCredit = canPerform("manage_invoices") && r.status === "dispatched";
+  const submitReturn = () => phase5Api.returnAction(r.id, "submit").then(() => { toast.success(`${r.number} sent for approval`); refresh(); }).catch((e) => toast.error(errorMessage(e)));
+
+  // The next step is the primary button; at most two secondary buttons; the rest go under "More".
+  const primary = isApprover ? (
+    <Button variant="primary" icon={Check} onClick={() => setDecision("approve")}>Approve</Button>
+  ) : canSubmit ? (
+    <Button variant="primary" icon={Send} onClick={submitReturn}>Submit for approval</Button>
+  ) : canDispatch ? (
+    <Button variant="primary" icon={Truck} loading={dispatch.isLoading} onClick={() => dispatch.mutate()}>Goods handed to supplier</Button>
+  ) : canCredit ? (
+    <Button variant="primary" icon={Receipt} onClick={() => setCrediting(true)}>Record credit note</Button>
+  ) : null;
+  const secondary = isApprover ? (
+    <>
+      <Button icon={CornerUpLeft} onClick={() => setDecision("return")}>Return</Button>
+      <Button icon={XCircle} onClick={() => setDecision("reject")}>Reject</Button>
+    </>
+  ) : null;
+  const more: MenuItem[] = [
+    { label: "Cancel return", icon: Ban, danger: true, onSelect: () => setDecision("cancel"), hidden: !(canHandle && ["draft", "returned_for_changes", "pending_approval", "rejected"].includes(r.status)) },
+  ];
+
+  const itemColumns: Column<any>[] = [
+    { key: "line", header: "#", width: "48px", cell: (it, i) => <span className="text-ims-muted">{it.line || i + 1}</span> },
+    { key: "item", header: "Item", cell: (it) => <TwoLine main={it.description} sub={`${it.unit || ""}${it.batch ? ` · batch ${it.batch}` : ""}`} /> },
+    { key: "condition", header: "Condition", nowrap: true, cell: (it) => sentence(it.condition) || "—" },
+    { key: "received", header: "Accepted on receipt", numeric: true, cell: (it) => fmtNumber(it.received, true) },
+    { key: "quantity", header: "Returned", numeric: true, cell: (it) => <span className="font-semibold">{fmtNumber(it.quantity, true)}</span> },
+    { key: "unit_cost", header: "Unit cost (RWF)", numeric: true, cell: (it) => <Num value={it.unit_cost} /> },
+    { key: "value", header: "Value (RWF)", numeric: true, cell: (it) => <Num value={it.value} />, total: <Num value={r.total_value} /> },
+  ];
 
   return (
-    <DocumentPage chatter={<Chatter items={toChatter(actions, audit)} />}>
-      <ControlBar
-        breadcrumbs={[{ title: "Procurement", link: "/dashboard/procurement" }, { title: "Returns", link: "/dashboard/procurement/returns" }, { title: r.number }]}
-        steps={STEPS}
-        current={stepOf(r.status)}
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to returns", to: LIST }}
+        number={r.number}
+        type="Purchase return"
+        status={RETURN_STATUS[r.status]?.label || r.status}
+        statusNote={stepName ? `At “${stepName}”` : RETURN_STATUS[r.status]?.note}
+        title={r.expand?.supplier?.name ? `Return to ${r.expand.supplier.name}` : "Purchase return"}
+        facts={[
+          { label: "Requested by", value: r.expand?.requested_by?.name || "—" },
+          r.expand?.purchase_order?.number ? { label: "Order", value: <span className="whitespace-nowrap">{r.expand.purchase_order.number}</span> } : null,
+          fmtDate(r.created),
+          <strong key="total" className="font-bold text-ims-text">{fmtMoney(r.total_value)}</strong>,
+        ]}
         actions={
           <>
-            {isApprover && (
-              <>
-                <Button size="sm" onClick={() => setDecision("approve")}><Check size={14} /> Approve</Button>
-                <Button size="sm" variant="outline" onClick={() => setDecision("return")}><CornerUpLeft size={14} /> Send back</Button>
-                <Button size="sm" variant="outline" className="text-red-700" onClick={() => setDecision("reject")}><XCircle size={14} /> Reject</Button>
-              </>
-            )}
-            {canHandle && ["draft", "returned_for_changes"].includes(r.status) && <Button size="sm" onClick={() => phase5Api.returnAction(r.id, "submit").then(() => { toast.success("Sent for approval"); refresh(); }).catch((e) => toast.error(errorMessage(e)))}>Submit for approval</Button>}
-            {canPerform("receive_goods") && r.status === "approved" && <Button size="sm" disabled={dispatch.isLoading} onClick={() => dispatch.mutate()}><Truck size={14} /> Goods handed to supplier</Button>}
-            {canPerform("manage_invoices") && r.status === "dispatched" && <Button size="sm" onClick={() => setCrediting(true)}><Receipt size={14} /> Record credit note</Button>}
-            {canHandle && ["draft", "returned_for_changes", "pending_approval", "rejected"].includes(r.status) && <Button size="sm" variant="ghost" onClick={() => setDecision("cancel")}><Ban size={14} /> Cancel</Button>}
+            <MoreMenu items={more} />
+            {secondary}
+            {primary}
           </>
         }
       />
-      <SmartButtons
-        items={[
-          { icon: ShoppingCart, label: "Purchase order", value: r.expand?.purchase_order?.number || "—" },
-          { icon: Truck, label: "Goods receipt", value: r.expand?.goods_receipt?.number || "—" },
-          { icon: Receipt, label: "Credit note", value: r.credit_amount ? money(r.credit_amount) : "—" },
+
+      {isApprover && (
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+          <Clock size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Waiting for your decision{stepName ? ` at step “${stepName}”` : ""}. Approve it, return it for changes, or reject it.</span>
+        </p>
+      )}
+
+      <Tabs
+        label="Return sections"
+        active={tab}
+        onChange={(k) => setTab(k as TabKey)}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "items", label: "Items", count: items.length },
+          { key: "approvals", label: "Approvals" },
+          { key: "documents", label: "Documents", count: (r.attachments || []).length },
+          { key: "activity", label: "Activity" },
         ]}
       />
-      <Sheet ribbon={r.status === "credited" ? { label: "Credited", tone: "success" } : r.status === "cancelled" ? { label: "Cancelled", tone: "neutral" } : r.status === "rejected" ? { label: "Rejected", tone: "danger" } : undefined}>
-        <SheetTitle kicker="Purchase return" title={r.number} badges={<StatusBadge status={r.status} map={RETURN_STATUS} />} />
-        <FieldGrid
-          left={[
-            { label: "Supplier", value: <Link className="font-medium text-primaryDark hover:underline" to={`/dashboard/procurement/suppliers/${r.supplier}`}>{r.expand?.supplier?.name}</Link> },
-            { label: "Purchase order", value: <Link className="text-primaryDark hover:underline" to={`/dashboard/procurement/purchase-orders/${r.purchase_order}`}>{r.expand?.purchase_order?.number}</Link> },
-            { label: "Goods receipt", value: r.expand?.goods_receipt?.number, hint: showDate(r.expand?.goods_receipt?.receipt_date) },
-            { label: "Reason", value: r.reason },
-          ]}
-          right={[
-            { label: "Requested by", value: r.expand?.requested_by?.name, hint: showDate(r.created, "d MMM yyyy, HH:mm") },
-            { label: "Warehouse", value: r.expand?.warehouse?.name },
-            { label: "Supplier action", value: ACTION_LABEL[r.supplier_action] || r.supplier_action },
-            { label: "Handed to supplier", value: r.dispatched_at ? `${showDate(r.dispatched_at)} by ${r.expand?.dispatched_by?.name || "—"}` : "" },
-            { label: "Credit note", value: r.credit_note_number ? `${r.credit_note_number} · ${money(r.credit_amount)}` : "" },
-          ]}
-        />
-        <Notebook active={tab} onChange={setTab} tabs={[{ key: "lines", label: "Returned items", count: (r.items || []).length }, { key: "documents", label: "Documents", count: (r.attachments || []).length }, ...(approval ? [{ key: "approval", label: "Approval" }] : [])]} />
-        <div className="pt-4">
-          {tab === "lines" && (
-            <>
-              <div className="overflow-x-auto">
-                <table className="dnr-grid w-full min-w-[640px] text-[13px]">
-                  <thead><tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-3 py-2">Item</th><th className="px-3 py-2">Condition</th><th className="px-3 py-2 text-right">Accepted on receipt</th><th className="px-3 py-2 text-right">Returned</th><th className="px-3 py-2 text-right">Unit cost</th><th className="px-3 py-2 text-right">Value</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(r.items || []).map((it: any) => (
-                      <tr key={it.line}>
-                        <td className="px-3 py-2.5"><p className="font-medium">{it.description}</p><p className="text-[12px] text-slate-500">{it.unit}{it.batch ? ` · batch ${it.batch}` : ""}</p></td>
-                        <td className="px-3 py-2.5 capitalize text-slate-600">{String(it.condition).replace(/_/g, " ")}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">{it.received}</td>
-                        <td className="px-3 py-2.5 text-right font-medium tabular-nums">{it.quantity}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">{Math.round(it.unit_cost).toLocaleString()}</td>
-                        <td className="px-3 py-2.5 text-right font-medium tabular-nums">{Math.round(it.value).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Totals rows={r.credit_amount ? [["Credit note received", money(r.credit_amount)]] : []} total={["Value returned", money(r.total_value)]} />
-            </>
-          )}
-          {tab === "documents" && <DocumentUploads collection="purchase_returns" record={r} canAdd={canPerform("manage_purchase_orders") || canPerform("receive_goods") || canPerform("approve_purchase_returns")} canRemove={["draft", "returned"].includes(r.status) && canPerform("manage_purchase_orders")} onChange={refresh} hint="Photos of the defects, supplier's return note, credit note…" />}
-          {tab === "approval" && <ApprovalTracker approval={approval} actions={actions} />}
-        </div>
-      </Sheet>
+
+      {tab === "details" && (
+        <Card>
+          <CardHeader title="Return" />
+          <Details
+            items={[
+              { label: "Supplier", value: r.supplier ? <Link className="font-semibold text-ims-link hover:underline" to={`/dashboard/procurement/suppliers/${r.supplier}`}>{r.expand?.supplier?.name}</Link> : null },
+              { label: "Purchase order", value: r.purchase_order ? <Link className="whitespace-nowrap font-semibold text-ims-link hover:underline" to={`/dashboard/procurement/purchase-orders/${r.purchase_order}`}>{r.expand?.purchase_order?.number}</Link> : null },
+              { label: "Goods receipt", value: r.expand?.goods_receipt?.number ? <span className="whitespace-nowrap">{r.expand.goods_receipt.number}</span> : null, hint: r.expand?.goods_receipt?.receipt_date ? `Received ${fmtDate(r.expand.goods_receipt.receipt_date)}` : undefined },
+              { label: "Warehouse", value: r.expand?.warehouse?.name },
+              { label: "Requested by", value: r.expand?.requested_by?.name, hint: fmtDateTime(r.created) },
+              { label: "Supplier action", value: ACTION_LABEL[r.supplier_action] || r.supplier_action },
+              { label: "Handed to supplier", value: r.dispatched_at ? `${fmtDate(r.dispatched_at)} by ${r.expand?.dispatched_by?.name || "—"}` : null },
+              { label: "Credit note", value: r.credit_note_number ? `${r.credit_note_number} · ${fmtMoney(r.credit_amount)}` : null },
+              { label: "Reason", value: r.reason ? <span className="whitespace-pre-line">{r.reason}</span> : null, wide: true },
+              ...(r.notes ? [{ label: "Notes", value: <span className="whitespace-pre-line">{r.notes}</span>, wide: true }] : []),
+              ...(r.cancel_reason ? [{ label: "Cancellation reason", value: r.cancel_reason, wide: true }] : []),
+            ]}
+          />
+        </Card>
+      )}
+
+      {tab === "items" && (
+        <Card padded={false}>
+          <div className="px-5 pt-5">
+            <CardHeader
+              title="Returned items"
+              subtitle={r.credit_amount ? `Value returned ${fmtMoney(r.total_value)} · credit note received ${fmtMoney(r.credit_amount)}` : `Value returned ${fmtMoney(r.total_value)}`}
+            />
+          </div>
+          <DataTable columns={itemColumns} rows={items} rowKey={(it, i) => String(it.line ?? i)} minWidth={760} caption="Returned items" empty={<EmptyState compact text="No items on this return." />} />
+        </Card>
+      )}
+
+      {tab === "approvals" && <ApprovalTracker approval={approval} actions={actions} />}
+
+      {tab === "documents" && (
+        <Card>
+          <CardHeader title="Documents" subtitle="Photos of the defects, the supplier's return note, the credit note." />
+          <DocumentUploads
+            collection="purchase_returns"
+            record={r}
+            canAdd={canPerform("manage_purchase_orders") || canPerform("receive_goods") || canPerform("approve_purchase_returns")}
+            canRemove={["draft", "returned"].includes(r.status) && canPerform("manage_purchase_orders")}
+            onChange={refresh}
+            hint="Photos of the defects, supplier's return note, credit note…"
+          />
+        </Card>
+      )}
+
+      {tab === "activity" && <Activity actions={actions} audit={audit} loading={false} />}
+
       <ActionDialog
         kind={decision}
         number={r.number}
@@ -147,7 +236,7 @@ export default function ReturnDetail() {
         }}
       />
       {crediting && <CreditDialog ret={r} onClose={() => setCrediting(false)} onDone={() => { setCrediting(false); refresh(); }} />}
-    </DocumentPage>
+    </Page>
   );
 }
 
@@ -157,21 +246,38 @@ function CreditDialog({ ret, onClose, onDone }: { ret: any; onClose: () => void;
   const [tried, setTried] = React.useState(false);
   const save = useMutation(() => phase5Api.returnAction(ret.id, "credit", { credit_note_number: number, credit_amount: Number(amount) }), {
     onSuccess: () => {
-      toast.success("Credit note recorded");
+      toast.success(`Credit note ${number} recorded on ${ret.number}`);
       onDone();
     },
     onError: (e) => {
       toast.error(errorMessage(e));
     },
   });
+  const submit = () => {
+    setTried(true);
+    if (number.trim() && Number(amount) > 0) save.mutate();
+  };
   return (
-    <FormDialog open onClose={onClose} icon={Receipt} title={`Credit note for ${ret.number}`} description={`${ret.expand?.supplier?.name} · value returned ${money(ret.total_value)}`} submitLabel="Record credit note" busy={save.isLoading} onSubmit={() => { setTried(true); if (number.trim() && Number(amount) > 0) save.mutate(); }}>
-      <FormBlock icon={Receipt} title="Supplier credit note">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Credit note number" required error={tried && !number.trim() && "Enter the number printed on the credit note."}><input className={inputCls} value={number} onChange={(e) => setNumber(e.target.value)} placeholder="e.g. CN-2026-0117" /></Field>
-          <Field label="Amount (RWF)" required error={tried && !(Number(amount) > 0) && "Enter the amount."}><input type="number" min={0} className={`${inputCls} text-right tabular-nums`} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
-        </div>
-      </FormBlock>
-    </FormDialog>
+    <Modal
+      open
+      onClose={onClose}
+      title={`Record the credit note for ${ret.number}`}
+      description={`${ret.expand?.supplier?.name || "Supplier"} · value returned ${fmtMoney(ret.total_value)}`}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={save.isLoading} onClick={submit}>Record credit note</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Credit note number" required htmlFor="cn-number" error={tried && !number.trim() && "Enter the number printed on the credit note."}>
+          <Input id="cn-number" invalid={tried && !number.trim()} value={number} onChange={(e) => setNumber(e.target.value)} placeholder="e.g. CN-2026-0117" />
+        </Field>
+        <Field label="Amount" required htmlFor="cn-amount" error={tried && !(Number(amount) > 0) && "Enter the amount on the credit note, above 0."}>
+          <MoneyInput id="cn-amount" invalid={tried && !(Number(amount) > 0)} value={amount === "" ? "" : Number(amount)} onChange={(v) => setAmount(v === "" ? "" : String(v))} />
+        </Field>
+      </div>
+    </Modal>
   );
 }

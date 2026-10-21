@@ -6,17 +6,18 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "react-query";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { AlertTriangle, LogIn, LogOut, X } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { byPeriodDesc } from "@/pages/hr/payroll/Payslip";
 import { useClock } from "@/lib/useClock";
 import { cn } from "@/utils";
-import { Card, PageHeader, Pill as ImsPill, PillTone, buttonClass } from "@/components/ims";
+import { Card, Column, DataTable, EmptyState, Num, PageHeader, Pill as ImsPill, PillTone, StatusPill, StatusWord, buttonClass, fmtMoney, fmtWhen, statusWord } from "@/components/ims";
+import { color } from "@/design/tokens";
 
 // ------------------------------------------------------------------ design tokens
 export const W = {
-  ink: "#14213D", muted: "#5B6577", body: "#36435A", navy: "#0B3A6F", blue: "#1466C0", line: "#E3E8EF", soft: "#EDF0F5", field: "#DDE3EC", bg: "#F4F6F9",
+  ink: color.text, muted: color.muted, body: color.body, navy: color.primary, blue: color.link, line: color.border, soft: color.divider, field: color.field, bg: color.page,
 };
 
 export const pbDay = (d: Date) => format(d, "yyyy-MM-dd");
@@ -25,7 +26,7 @@ export const toDate = (v?: string | Date | null) => {
   const d = typeof v === "string" ? new Date(v.replace(" ", "T")) : v;
   return Number.isNaN(d.getTime()) ? null : d;
 };
-export const money = (n: number) => `RWF ${Math.round(Number(n) || 0).toLocaleString("en-US")}`;
+export const money = (n: number) => fmtMoney(Number(n) || 0);
 
 export function WCard({ className, children, flush }: { className?: string; children: React.ReactNode; flush?: boolean }) {
   return <Card padded={!flush} className={className}>{children}</Card>;
@@ -70,22 +71,22 @@ export function ClockCard() {
   const label = clock.state === "in" ? "Clocked in" : clock.state === "done" ? "Day completed" : clock.isWorkingDay ? "Not clocked in" : "Not a working day";
   const value = clock.state === "in" ? `Since ${hm(r?.clockin_time)}` : clock.state === "done" ? `${hm(r?.clockin_time)} – ${hm(r?.clockout_time)}` : `Today · ${format(now, "HH:mm")}`;
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-ims-border bg-white py-2 pl-4 pr-2">
+    <div className="flex items-center gap-3 rounded-card border border-ims-border bg-ims-card py-2 pl-4 pr-2">
       <div>
-        <div className="text-[12px] font-semibold text-ims-muted">{label}</div>
+        <div className="text-t-small font-semibold text-ims-muted">{label}</div>
         <div className={cn("text-[15px] font-extrabold tabular-nums", clock.state === "in" ? "text-ims-success" : "text-ims-text")}>{clock.loading ? "…" : value}</div>
       </div>
       {clock.state === "done" ? (
-        <span className="inline-flex h-[42px] items-center rounded-[9px] bg-ims-success-bg px-4 text-[13.5px] font-bold text-ims-success">Done for today</span>
+        <span className="inline-flex h-control items-center rounded-control bg-ims-success-bg px-4 text-[14px] font-bold text-ims-success">Done for today</span>
       ) : (
         <button
           type="button"
           disabled={clock.busy || clock.loading || (clock.state === "out" && !clock.isWorkingDay)}
           onClick={clock.state === "in" ? clock.clockOut : clock.clockIn}
-          className={cn("inline-flex h-[42px] items-center gap-2 rounded-[9px] px-[18px] text-[14px] font-bold text-white transition-colors disabled:opacity-60", clock.state === "in" ? "bg-ims-danger hover:bg-[#9b1e14]" : "bg-ims-primary hover:bg-ims-primary-hover")}
+          className={cn(buttonClass({ variant: clock.state === "in" ? "danger" : "primary" }), "h-control px-[18px]")}
         >
           {clock.state === "in" ? <LogOut size={17} aria-hidden /> : <LogIn size={17} aria-hidden />}
-          {clock.busy ? "Please wait…" : clock.state === "in" ? "Clock out" : "Clock in"}
+          {clock.busy ? "Saving…" : clock.state === "in" ? "Clock out" : "Clock in"}
         </button>
       )}
     </div>
@@ -97,13 +98,13 @@ const DOW = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "
 export type DayState = "onTime" | "late" | "leave" | "holiday" | "corrected" | "pending" | "absent" | "today" | "future";
 export const DAY_STYLE: Record<DayState, { label: string; cell: string; swatch: string }> = {
   onTime: { label: "On time", cell: "bg-ims-link text-white", swatch: "bg-ims-link" },
-  late: { label: "Late", cell: "bg-[#E8833A] text-white", swatch: "bg-[#E8833A]" },
-  corrected: { label: "Corrected by HR", cell: "bg-[#DCEAFB] text-ims-primary", swatch: "bg-[#DCEAFB]" },
-  leave: { label: "On leave", cell: "bg-ims-success-bg text-ims-success", swatch: "bg-ims-success-bg border border-[#BFE3CB]" },
-  holiday: { label: "Public holiday", cell: "bg-white text-ims-muted border border-dotted border-ims-priority-low", swatch: "bg-white border border-dotted border-ims-priority-low" },
-  pending: { label: "Correction asked", cell: "bg-[repeating-linear-gradient(45deg,#FEF3D6_0_4px,#FBE2A6_4px_8px)] text-ims-warning", swatch: "bg-[repeating-linear-gradient(45deg,#FEF3D6_0_3px,#FBE2A6_3px_6px)]" },
-  absent: { label: "No clock-in", cell: "border border-[#E1E6EE] bg-ims-neutral-bg text-ims-muted", swatch: "border border-[#D5DBE5] bg-ims-neutral-bg" },
-  today: { label: "Today", cell: "border-[1.5px] border-dashed border-ims-link bg-white text-ims-link", swatch: "border-[1.5px] border-dashed border-ims-link" },
+  late: { label: "Late", cell: "bg-ims-priority-high text-white", swatch: "bg-ims-priority-high" },
+  corrected: { label: "Corrected by HR", cell: "bg-ims-info-bg text-ims-primary ring-1 ring-inset ring-ims-link/30", swatch: "bg-ims-info-bg ring-1 ring-inset ring-ims-link/30" },
+  leave: { label: "On leave", cell: "bg-ims-success-bg text-ims-success ring-1 ring-inset ring-ims-success/25", swatch: "bg-ims-success-bg ring-1 ring-inset ring-ims-success/25" },
+  holiday: { label: "Public holiday", cell: "bg-ims-card text-ims-muted border border-dotted border-ims-priority-low", swatch: "bg-ims-card border border-dotted border-ims-priority-low" },
+  pending: { label: "Correction asked", cell: "bg-ims-warning-bg text-ims-warning ring-1 ring-inset ring-dashed ring-ims-warning/40 border border-dashed border-ims-warning/50", swatch: "bg-ims-warning-bg border border-dashed border-ims-warning/50" },
+  absent: { label: "No clock-in", cell: "border border-ims-border bg-ims-neutral-bg text-ims-muted", swatch: "border border-ims-field bg-ims-neutral-bg" },
+  today: { label: "Today", cell: "border-[1.5px] border-dashed border-ims-link bg-ims-card text-ims-link", swatch: "border-[1.5px] border-dashed border-ims-link" },
   future: { label: "", cell: "text-ims-priority-low", swatch: "" },
 };
 
@@ -173,7 +174,7 @@ export function AttendanceCalendar({ cal }: { cal: ReturnType<typeof buildCalend
   const shown: DayState[] = ["onTime", "late", "absent", "corrected", "pending", "leave", "holiday"];
   return (
     <div>
-      <div className="mt-3.5 grid grid-cols-[56px_repeat(5,minmax(0,1fr))] gap-1.5 text-[12px]" role="grid" aria-label="Attendance by working day">
+      <div className="mt-3.5 grid grid-cols-[56px_repeat(5,minmax(0,1fr))] gap-1.5 text-t-hint" role="grid" aria-label="Attendance by working day">
         <span />
         {["Mon", "Tue", "Wed", "Thu", "Fri"].map((w) => <span key={w} className="text-center font-bold text-ims-muted">{w}</span>)}
         {cal.weeks.map((wk) => (
@@ -181,7 +182,7 @@ export function AttendanceCalendar({ cal }: { cal: ReturnType<typeof buildCalend
             <span className="self-center font-semibold text-ims-muted">{wk.label}</span>
             {wk.days.map((d, i) =>
               d ? (
-                <span key={d.key} title={d.tip} aria-label={d.tip} className={cn("flex h-[34px] items-center justify-center rounded-[7px] font-bold tabular-nums", DAY_STYLE[d.state].cell)}>{format(d.date, "d")}</span>
+                <span key={d.key} title={d.tip} aria-label={d.tip} className={cn("flex h-[34px] items-center justify-center rounded-md font-bold tabular-nums", DAY_STYLE[d.state].cell)}>{format(d.date, "d")}</span>
               ) : (
                 <span key={`${wk.label}-${i}`} className="h-[34px]" />
               )
@@ -189,14 +190,14 @@ export function AttendanceCalendar({ cal }: { cal: ReturnType<typeof buildCalend
           </React.Fragment>
         ))}
       </div>
-      <div className="mt-3.5 flex flex-wrap gap-4 border-t border-ims-divider pt-3 text-[13px] text-ims-body">
+      <div className="mt-3.5 flex flex-wrap gap-4 border-t border-ims-divider pt-3 text-t-body text-ims-body">
         {shown.filter((s) => s === "onTime" || s === "late" || s === "absent" || (cal.counts[s] || 0) > 0).map((s) => (
           <span key={s} className="inline-flex items-center gap-1.5">
-            <span className={cn("h-3 w-3 rounded-[3px]", DAY_STYLE[s].swatch)} aria-hidden />
+            <span className={cn("h-3 w-3 rounded-sm", DAY_STYLE[s].swatch)} aria-hidden />
             {DAY_STYLE[s].label} <b>{cal.counts[s] || 0}</b>
           </span>
         ))}
-        <span className="inline-flex items-center gap-1.5"><span className={cn("h-3 w-3 rounded-[3px]", DAY_STYLE.today.swatch)} aria-hidden />Today</span>
+        <span className="inline-flex items-center gap-1.5"><span className={cn("h-3 w-3 rounded-sm", DAY_STYLE.today.swatch)} aria-hidden />Today</span>
         <span className="sr-only">{present} days present</span>
       </div>
     </div>
@@ -218,13 +219,13 @@ export function AttendanceNotice({ cal, onAsk, withinDays = 30 }: { cal: ReturnT
   if (hidden || !absent.length) return null;
   const since = absent[0].date;
   return (
-    <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-[#F5DFA3] bg-[#FFF8E6] px-4 py-3">
-      <AlertTriangle size={20} className="shrink-0 text-[#9A6300]" aria-hidden />
-      <div className="min-w-[240px] flex-1 text-[14px] text-ims-text">
+    <div role="status" className="flex flex-wrap items-center gap-3 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3">
+      <AlertTriangle size={20} className="shrink-0 text-ims-warning" aria-hidden />
+      <div className="min-w-[240px] flex-1 text-t-body text-ims-text">
         <b>No clock-in on {absent.length} working day{absent.length === 1 ? "" : "s"}</b>{" "}
-        <span className="text-[#5B4A1C]">since {format(since, "d MMMM")}. Missions or approved absences? Ask HR to correct your log.{cal.pendingDays ? ` ${cal.pendingDays} day${cal.pendingDays === 1 ? " is" : "s are"} already waiting for HR.` : ""}</span>
+        <span className="text-ims-body">since {format(since, "d MMM yyyy")}. Missions or approved absences? Ask HR to correct your log.{cal.pendingDays ? ` ${cal.pendingDays} day${cal.pendingDays === 1 ? " is" : "s are"} already waiting for HR.` : ""}</span>
       </div>
-      <button type="button" onClick={onAsk} className="h-9 rounded-lg border border-[#D9B45B] bg-white px-3.5 text-[13px] font-bold text-[#6B4A00] hover:bg-[#FFFBF0]">Ask HR to correct</button>
+      <button type="button" onClick={onAsk} className={buttonClass({ variant: "secondary", size: "sm" })}>Ask HR to correct</button>
       <button
         type="button"
         aria-label="Dismiss notice"
@@ -234,7 +235,7 @@ export function AttendanceNotice({ cal, onAsk, withinDays = 30 }: { cal: ReturnT
             localStorage.setItem(key, "1");
           } catch (_) {}
         }}
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6B4A00] hover:bg-[#FCEFC7]"
+        className="flex h-8 w-8 items-center justify-center rounded-control text-ims-warning hover:bg-ims-card/60"
       >
         <X size={16} />
       </button>
@@ -244,13 +245,16 @@ export function AttendanceNotice({ cal, onAsk, withinDays = 30 }: { cal: ReturnT
 
 // ------------------------------------------------------------------ requests
 export type ReqTab = "all" | "pending" | "approved" | "rejected";
-export interface MyRequest { id: string; kind: string; details: string; amount: number | null; tone: "approved" | "pending" | "rejected" | "neutral"; status: string; next: string; created: string; link: string }
+export interface MyRequest { id: string; kind: string; details: string; amount: number | null; tone: "approved" | "pending" | "rejected" | "neutral"; status: StatusWord | string; next: string; created: string; link: string }
 
 const statusTone = (s: string): MyRequest["tone"] =>
   ["approved", "paid", "disbursed", "converted", "ordered", "completed", "partially_ordered"].includes(s) ? "approved"
   : ["rejected", "cancelled"].includes(s) ? "rejected"
   : ["draft"].includes(s) ? "neutral" : "pending";
 const label = (s: string) => (s ? s.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "—");
+/** Stored request statuses → the status glossary (detail such as "Paid" goes on the second line). */
+const REQ_WORDS: Record<string, StatusWord> = { paid: "Completed", disbursed: "Completed", settled: "Completed", partially_ordered: "In progress", ordered: "Converted to PO", converted: "Converted to PO", converted_to_rfq: "In progress" };
+const word = (s: string) => statusWord(s, REQ_WORDS) || label(s);
 
 const leaveName = (type?: string) => {
   const l = label(type || "Leave");
@@ -270,25 +274,25 @@ export async function fetchMyRequests(uid: string, perKind = 20): Promise<MyRequ
   const rows: MyRequest[] = [
     ...leaves.items.map((r: any) => ({
       id: r.id, kind: "Leave", details: `${leaveName(r.type)} · ${r.days || r.Leaveduration || "?"} day${(r.days || r.Leaveduration) === 1 ? "" : "s"}`, amount: null,
-      tone: statusTone(r.status), status: label(r.status), created: r.created, link: "/dashboard/my/leave",
+      tone: statusTone(r.status), status: word(r.status), created: r.created, link: "/dashboard/my/leave",
       next: r.status === "pending" ? "Waiting for line manager" : r.status === "approved" ? `${toDate(r.start) ? format(toDate(r.start) as Date, "d MMM") : ""}${toDate(r.end) ? ` – ${format(toDate(r.end) as Date, "d MMM")}` : ""}` : r.rejected_reason || "",
     })),
     ...expenses.items.map((r: any) => ({
-      id: r.id, kind: "Expense", details: r.expand?.expenseCategory?.name || r.description || "Expense", amount: r.amount, tone: statusTone(r.status), status: label(r.status),
-      created: r.created, link: "/dashboard/my/expenses", next: r.status === "pending" ? "Waiting for approval" : r.status === "approved" ? "Approved · to be paid" : r.status === "paid" ? "Paid" : r.rejected_reason || "",
+      id: r.id, kind: "Expense", details: r.expand?.expenseCategory?.name || r.description || "Expense", amount: r.amount, tone: statusTone(r.status), status: word(r.status),
+      created: r.created, link: "/dashboard/my/expenses", next: r.status === "pending" ? "Waiting for approval" : r.status === "approved" ? "To be paid" : r.status === "paid" ? "Paid" : r.rejected_reason || "",
     })),
     ...petty.items.map((r: any) => ({
-      id: r.id, kind: "Petty cash", details: r.notes || "Cash request", amount: r.amount, tone: statusTone(r.status), status: label(r.status), created: r.created, link: "/dashboard/my/expenses?tab=petty",
+      id: r.id, kind: "Petty cash", details: r.notes || "Cash request", amount: r.amount, tone: statusTone(r.status), status: word(r.status), created: r.created, link: "/dashboard/my/expenses?tab=petty",
       next: r.status === "pending" ? "Waiting for finance" : r.status === "approved" ? "Cash to collect from finance" : r.rejected_reason || "",
     })),
     ...assets.items.map((r: any) => ({
-      id: r.id, kind: "Equipment", details: r.expand?.asset?.name || r.notes || "Equipment", amount: null, tone: statusTone(r.status), status: label(r.status), created: r.created, link: "/dashboard/my/equipment",
-      next: r.status === "pending" ? "Waiting for the asset officer" : r.status === "approved" ? "Approved · collect from stores" : r.rejected_reason || "",
+      id: r.id, kind: "Equipment", details: r.expand?.asset?.name || r.notes || "Equipment", amount: null, tone: statusTone(r.status), status: word(r.status), created: r.created, link: "/dashboard/my/equipment",
+      next: r.status === "pending" ? "Waiting for the asset officer" : r.status === "approved" ? "Collect it from stores" : r.rejected_reason || "",
     })),
     ...reqs.items.map((r: any) => ({
-      id: r.id, kind: "Purchase", details: r.title || r.number || "Purchase requisition", amount: r.total || r.estimated_total || null, tone: statusTone(r.status), status: r.status === "pending_approval" ? "In approval" : label(r.status),
+      id: r.id, kind: "Purchase", details: r.title || r.number || "Purchase requisition", amount: r.total || r.estimated_total || null, tone: statusTone(r.status), status: word(r.status),
       created: r.created, link: `/dashboard/procurement/requisitions/${r.id}`,
-      next: r.status === "draft" ? "Draft · not submitted" : r.status === "pending_approval" ? "Waiting for approval" : r.status === "approved" ? "Approved · procurement next" : r.status === "returned" ? "Returned for changes" : "",
+      next: r.status === "draft" ? "Not submitted yet" : r.status === "pending_approval" ? "Waiting for approval" : r.status === "approved" ? "Procurement buys it next" : r.status === "returned" ? "Change it and submit again" : "",
     })),
   ];
   return rows.sort((a, b) => b.created.localeCompare(a.created));
@@ -299,9 +303,9 @@ export const tabOf = (r: MyRequest): ReqTab => (r.tone === "approved" ? "approve
 export function RequestTabs({ rows, tab, onTab }: { rows: MyRequest[]; tab: ReqTab; onTab: (t: ReqTab) => void }) {
   const n = (t: ReqTab) => (t === "all" ? rows.length : rows.filter((r) => tabOf(r) === t).length);
   return (
-    <div role="group" aria-label="Filter requests" className="flex rounded-[9px] bg-ims-subtle p-[3px]">
+    <div role="group" aria-label="Filter requests" className="flex rounded-control bg-ims-subtle p-[3px]">
       {(["all", "pending", "approved", "rejected"] as ReqTab[]).map((t) => (
-        <button key={t} type="button" aria-pressed={tab === t} onClick={() => onTab(t)} className={cn("h-[30px] rounded-[7px] px-3 text-[12.5px] font-bold", tab === t ? "bg-white text-ims-primary shadow-[0_1px_2px_rgba(20,33,61,.12)]" : "text-ims-muted hover:text-ims-text")}>
+        <button key={t} type="button" aria-pressed={tab === t} onClick={() => onTab(t)} className={cn("h-[30px] rounded-md px-3 text-t-small font-bold", tab === t ? "bg-ims-card text-ims-primary ring-1 ring-ims-border" : "text-ims-muted hover:text-ims-text")}>
           {t[0].toUpperCase() + t.slice(1)} <span className="opacity-70">{n(t)}</span>
         </button>
       ))}
@@ -309,9 +313,16 @@ export function RequestTabs({ rows, tab, onTab }: { rows: MyRequest[]; tab: ReqT
   );
 }
 
-export function RequestTable({ rows, empty = "Nothing here" }: { rows: MyRequest[]; empty?: string }) {
+export function RequestTable({ rows, empty = "Nothing here yet." }: { rows: MyRequest[]; empty?: string }) {
   const navigate = useNavigate();
-  const ago = (r: MyRequest) => (toDate(r.created) ? formatDistanceToNow(toDate(r.created) as Date, { addSuffix: true }).replace("about ", "") : "");
+  const columns: Column<MyRequest>[] = [
+    { key: "kind", header: "Type", nowrap: true, className: "font-bold", cell: (r) => r.kind },
+    { key: "details", header: "Details", clamp: true, className: "max-w-[320px]", cell: (r) => r.details },
+    { key: "amount", header: "Amount (RWF)", numeric: true, cell: (r) => (r.amount ? <Num value={r.amount} /> : <span className="text-ims-faint">—</span>) },
+    // No total row: the list mixes leave, expenses and purchases, so a sum of their amounts means nothing.
+    { key: "status", header: "Status", cell: (r) => <StatusPill status={r.status} sub={r.next || undefined} /> },
+    { key: "created", header: "Submitted", nowrap: true, align: "right", cell: (r) => <span className="text-ims-muted">{fmtWhen(r.created)}</span> },
+  ];
   return (
     <>
       {/* phones: one card per request */}
@@ -319,39 +330,25 @@ export function RequestTable({ rows, empty = "Nothing here" }: { rows: MyRequest
         {rows.map((r) => (
           <li key={`${r.kind}-${r.id}`}>
             <button type="button" onClick={() => navigate(r.link)} className="flex w-full flex-col gap-1 px-4 py-3 text-left hover:bg-ims-hover">
-              <span className="flex items-center justify-between gap-2"><b className="text-[14px] text-ims-text">{r.kind}</b><Pill tone={r.tone}>{r.status}</Pill></span>
-              <span className="text-[13.5px] text-ims-text">{r.details}</span>
-              <span className="flex items-center justify-between gap-2 text-[12.5px] text-ims-muted"><span className="min-w-0">{r.next || ago(r)}</span>{r.amount ? <b className="whitespace-nowrap tabular-nums text-ims-text">{money(r.amount)}</b> : null}</span>
+              <span className="flex items-center justify-between gap-2"><b className="text-t-body text-ims-text">{r.kind}</b><StatusPill status={r.status} /></span>
+              <span className="text-t-body text-ims-text">{r.details}</span>
+              <span className="flex items-center justify-between gap-2 text-t-small text-ims-muted"><span className="min-w-0">{r.next || fmtWhen(r.created)}</span>{r.amount ? <b className="whitespace-nowrap tabular-nums text-ims-text">{money(r.amount)}</b> : null}</span>
             </button>
           </li>
         ))}
-        {!rows.length && <li className="p-7 text-center text-ims-muted">{empty}</li>}
+        {!rows.length && <li><EmptyState compact text={empty} /></li>}
       </ul>
-    <div className="hidden overflow-x-auto sm:block">
-      <table className="w-full min-w-[640px] border-collapse text-[14px] [&_td]:border-r [&_td]:border-ims-divider [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-ims-divider [&_th:last-child]:border-r-0">
-        <thead>
-          <tr className="bg-ims-thead text-left text-[12.5px] text-ims-muted">
-            <th scope="col" className="px-5 py-2.5 font-bold">Type</th>
-            <th scope="col" className="px-3.5 py-2.5 font-bold">Details</th>
-            <th scope="col" className="px-3.5 py-2.5 text-right font-bold">Amount</th>
-            <th scope="col" className="px-3.5 py-2.5 font-bold">Status</th>
-            <th scope="col" className="py-2.5 pl-3.5 pr-5 text-right font-bold">Submitted</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={`${r.kind}-${r.id}`} onClick={() => navigate(r.link)} className="cursor-pointer border-t border-ims-divider hover:[&>td]:bg-ims-hover">
-              <td className="px-5 py-3 font-bold text-ims-text">{r.kind}</td>
-              <td className="max-w-[300px] px-3.5 py-3 text-ims-text"><span className="line-clamp-2">{r.details}</span></td>
-              <td className="whitespace-nowrap px-3.5 py-3 text-right font-bold tabular-nums">{r.amount ? money(r.amount) : "—"}</td>
-              <td className="px-3.5 py-3"><Pill tone={r.tone}>{r.status}</Pill>{r.next && <div className="mt-[3px] text-[12px] text-ims-muted">{r.next}</div>}</td>
-              <td className="whitespace-nowrap py-3 pl-3.5 pr-5 text-right text-ims-muted">{ago(r)}</td>
-            </tr>
-          ))}
-          {!rows.length && <tr><td colSpan={5} className="p-7 text-center text-ims-muted">{empty}</td></tr>}
-        </tbody>
-      </table>
-    </div>
+      <div className="hidden border-t border-ims-divider sm:block">
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => `${r.kind}-${r.id}`}
+          onRowClick={(r) => navigate(r.link)}
+          minWidth={680}
+          caption="My requests"
+          empty={<EmptyState compact text={empty} />}
+        />
+      </div>
     </>
   );
 }
@@ -360,7 +357,7 @@ export function RequestTable({ rows, empty = "Nothing here" }: { rows: MyRequest
 const round1 = (n: number) => Math.round((Number(n) || 0) * 10) / 10;
 
 export function LeaveBalance({ b }: { b: any }) {
-  if (!b) return <p className="rounded-lg bg-ims-thead px-3 py-5 text-center text-[13px] text-ims-muted">No leave entitlement recorded for this year yet. HR sets it up.</p>;
+  if (!b) return <p className="rounded-control bg-ims-thead px-3 py-5 text-center text-t-body text-ims-muted">No leave entitlement is recorded for this year yet. HR sets it up.</p>;
   const ent = Math.max(Number(b.entitlement) || 0, 0);
   const taken = Number(b.taken) || 0;
   const pending = Number(b.pending) || 0;
@@ -370,12 +367,12 @@ export function LeaveBalance({ b }: { b: any }) {
   return (
     <>
       <div><span className="text-[30px] font-extrabold tabular-nums">{left}</span> <span className="text-[15px] font-bold text-ims-muted">days left</span></div>
-      <div role="img" aria-label={`${ent} days: ${taken} taken, ${pending} pending, ${after} available after approval`} className="flex h-2.5 overflow-hidden rounded-[5px] bg-ims-neutral-bg">
+      <div role="img" aria-label={`${ent} days: ${taken} taken, ${pending} pending, ${after} available after approval`} className="flex h-2.5 overflow-hidden rounded-pill bg-ims-neutral-bg">
         <span style={{ width: pct(taken) }} className="bg-ims-primary" />
-        <span style={{ width: pct(pending) }} className="bg-[repeating-linear-gradient(45deg,#F2B544_0_4px,#F8D58E_4px_8px)]" />
+        <span style={{ width: pct(pending) }} className="bg-ims-priority-high/70" />
         <span style={{ width: pct(Math.max(after, 0)) }} className="bg-ims-link" />
       </div>
-      <div className="grid grid-cols-3 gap-2 text-[12.5px]">
+      <div className="grid grid-cols-3 gap-2 text-t-small">
         <div><div className="text-ims-muted">Taken</div><b className="text-[15px] tabular-nums">{round1(taken)}</b></div>
         <div><div className="text-ims-warning">Pending</div><b className="text-[15px] tabular-nums text-ims-warning">{round1(pending)}</b></div>
         <div><div className="text-ims-muted">After approval</div><b className="text-[15px] tabular-nums">{after}</b></div>
@@ -384,7 +381,6 @@ export function LeaveBalance({ b }: { b: any }) {
   );
 }
 
-/** Page title in the workspace style. */
 /** Page title in the workspace: the ims PageHeader with "Dashboard › My workspace › Page". */
 export function MyHeader({ title, subtitle, actions, eyebrow }: { title: string; subtitle?: React.ReactNode; actions?: React.ReactNode; eyebrow?: React.ReactNode }) {
   const crumbs = typeof eyebrow === "string" && eyebrow !== title ? [{ label: eyebrow, to: "/dashboard/my" }, { label: title }] : [{ label: title }];

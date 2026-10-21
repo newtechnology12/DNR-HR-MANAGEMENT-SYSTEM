@@ -1,10 +1,9 @@
 import { useQuery } from "react-query";
 import { useParams } from "react-router-dom";
-import { format } from "date-fns";
 import { Printer } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import useSettings from "@/hooks/useSettings";
-import { Button } from "@/components/ui/button";
+import { Button, fmtDate, fmtDateTime, fmtNumber } from "@/components/ims";
 
 /** Supplier-specific RFQ document, formatted for A4 printing or "Save as PDF". */
 export default function RfqPrint() {
@@ -17,69 +16,70 @@ export default function RfqPrint() {
     ]);
     return { rfq, supplier };
   });
-  if (q.isLoading) return <p className="p-8 text-[13px] text-slate-500">Preparing document…</p>;
-  if (!q.data) return <p className="p-8 text-[13px] text-red-600">This RFQ is not available to you.</p>;
+  if (q.isLoading) return <p className="p-8 text-t-body text-ims-muted">Preparing the document…</p>;
+  if (!q.data) return <p className="p-8 text-t-body text-ims-danger">This RFQ is not available to you.</p>;
   const { rfq, supplier }: any = q.data;
+  const currency = rfq.currency || "RWF";
 
   return (
-    <div className="min-h-screen bg-slate-100 py-6 print:bg-white print:py-0">
+    <div className="min-h-screen bg-ims-page py-6 print:bg-ims-card print:py-0">
       <div className="mx-auto mb-4 flex max-w-[210mm] justify-end gap-2 px-4 print:hidden">
-        <Button onClick={() => window.print()}><Printer size={15} /> Print / save as PDF</Button>
+        <Button variant="primary" icon={Printer} onClick={() => window.print()}>Print or save as PDF</Button>
       </div>
-      <article className="mx-auto max-w-[210mm] bg-white px-12 py-10 text-[12.5px] leading-relaxed text-slate-900 shadow-card print:shadow-none">
-        <header className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
+      <article className="mx-auto max-w-[210mm] rounded-card border border-ims-border bg-ims-card px-12 py-10 text-t-small leading-relaxed text-ims-text print:rounded-none print:border-0">
+        <header className="flex items-start justify-between border-b-2 border-ims-text pb-4">
           <div>
             <img src="/dnr_log.png" alt="" className="mb-2 h-10" />
             <p className="font-semibold">{settings?.company_name || "DNR Partners CPA"}</p>
-            <p className="text-slate-600">{settings?.company_address}</p>
-            <p className="text-slate-600">{settings?.company_phone} · {settings?.company_email}</p>
+            <p className="text-ims-body">{settings?.company_address}</p>
+            <p className="text-ims-body">{[settings?.company_phone, settings?.company_email].filter(Boolean).join(" · ")}</p>
           </div>
           <div className="text-right">
-            <h1 className="text-[20px] font-bold tracking-tight">REQUEST FOR QUOTATION</h1>
-            <p className="mt-1 text-[14px] font-semibold">{rfq.number}</p>
-            <p className="text-slate-600">Issued {rfq.issue_date ? format(new Date(rfq.issue_date), "d MMMM yyyy") : format(new Date(), "d MMMM yyyy")}</p>
+            <h1 className="text-t-section text-ims-text">Request for quotation</h1>
+            <p className="mt-1 whitespace-nowrap font-mono text-t-body font-semibold">{rfq.number}</p>
+            <p className="text-ims-body">Issued {fmtDate(rfq.issue_date || new Date())}</p>
           </div>
         </header>
 
         <section className="mt-5 grid grid-cols-2 gap-6">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">To</p>
+            <p className="text-t-small font-semibold text-ims-muted">To</p>
             <p className="font-semibold">{supplier.name}</p>
             <p>{[supplier.address, supplier.district, supplier.country].filter(Boolean).join(", ")}</p>
-            <p>{supplier.email} · {supplier.phone}</p>
-            <p className="text-slate-600">Supplier code {supplier.code}{supplier.tin ? ` · TIN ${supplier.tin}` : ""}</p>
+            <p>{[supplier.email, supplier.phone].filter(Boolean).join(" · ")}</p>
+            <p className="text-ims-body">Supplier code {supplier.code}{supplier.tin ? ` · TIN ${supplier.tin}` : ""}</p>
           </div>
-          <div className="rounded border border-slate-300 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Quotation deadline</p>
-            <p className="text-[15px] font-bold">{format(new Date(rfq.closing_date), "EEEE d MMMM yyyy, HH:mm")}</p>
-            <p className="mt-1 text-slate-600">Quote reference {rfq.number} in all correspondence.</p>
+          <div className="rounded-control border border-ims-field p-3">
+            <p className="text-t-small font-semibold text-ims-muted">Quotation deadline</p>
+            <p className="text-t-body font-bold">{fmtDateTime(rfq.closing_date)}</p>
+            <p className="mt-1 text-ims-body">Quote the reference <span className="whitespace-nowrap font-mono">{rfq.number}</span> in all correspondence.</p>
           </div>
         </section>
 
-        <p className="mt-5">Dear Sir/Madam,</p>
-        <p className="mt-1">We invite you to submit your best quotation for the goods/services listed below, subject to the terms that follow.</p>
+        <p className="mt-5">Dear Sir or Madam,</p>
+        <p className="mt-1">We invite you to submit your best quotation for the goods or services listed below, subject to the terms that follow.</p>
 
-        <h2 className="mt-5 text-[13px] font-semibold">Subject: {rfq.title}</h2>
-        <table className="mt-2 w-full border-collapse text-[12.5px]">
+        <h2 className="mt-5 text-t-body font-semibold">Subject: {rfq.title}</h2>
+        <table className="mt-2 w-full border-collapse text-t-small">
           <thead>
-            <tr className="bg-slate-100 text-left">
-              <th className="border border-slate-300 px-2 py-1.5">#</th>
-              <th className="border border-slate-300 px-2 py-1.5">Description / specification</th>
-              <th className="border border-slate-300 px-2 py-1.5 text-right">Quantity</th>
-              <th className="border border-slate-300 px-2 py-1.5">Unit</th>
-              <th className="w-28 border border-slate-300 px-2 py-1.5 text-right">Unit price</th>
-              <th className="w-28 border border-slate-300 px-2 py-1.5 text-right">Total</th>
+            <tr className="bg-ims-thead text-left">
+              <th className="border border-ims-field px-2 py-1.5">#</th>
+              <th className="border border-ims-field px-2 py-1.5">Description and specification</th>
+              <th className="border border-ims-field px-2 py-1.5 text-right">Quantity</th>
+              <th className="border border-ims-field px-2 py-1.5">Unit</th>
+              <th className="w-32 whitespace-nowrap border border-ims-field px-2 py-1.5 text-right">Unit price ({currency})</th>
+              <th className="w-32 whitespace-nowrap border border-ims-field px-2 py-1.5 text-right">Total ({currency})</th>
             </tr>
           </thead>
           <tbody>
             {(rfq.items || []).map((it: any) => (
               <tr key={it.line}>
-                <td className="border border-slate-300 px-2 py-1.5 align-top">{it.line}</td>
-                <td className="border border-slate-300 px-2 py-1.5">{it.description}{it.specification && <span className="block text-slate-600">{it.specification}</span>}</td>
-                <td className="border border-slate-300 px-2 py-1.5 text-right align-top">{it.quantity}</td>
-                <td className="border border-slate-300 px-2 py-1.5 align-top">{it.unit}</td>
-                <td className="border border-slate-300 px-2 py-1.5" />
-                <td className="border border-slate-300 px-2 py-1.5" />
+                <td className="border border-ims-field px-2 py-1.5 align-top">{it.line}</td>
+                <td className="border border-ims-field px-2 py-1.5">{it.description}{it.specification && <span className="block text-ims-body">{it.specification}</span>}</td>
+                <td className="border border-ims-field px-2 py-1.5 text-right align-top tabular-nums">{fmtNumber(it.quantity, true)}</td>
+                <td className="border border-ims-field px-2 py-1.5 align-top">{it.unit}</td>
+                <td className="border border-ims-field px-2 py-1.5" />
+                <td className="border border-ims-field px-2 py-1.5" />
               </tr>
             ))}
           </tbody>
@@ -95,22 +95,22 @@ export default function RfqPrint() {
             ["Quotation validity", "At least 30 days from the deadline"],
           ].map(([k, v]) => (
             <div key={k}>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{k}</p>
+              <p className="text-t-small font-semibold text-ims-muted">{k}</p>
               <p>{v || "—"}</p>
             </div>
           ))}
         </section>
         {rfq.notes && <p className="mt-4"><span className="font-semibold">Notes: </span>{rfq.notes}</p>}
 
-        <p className="mt-5">Please state delivery time, warranty and any discounts. Quotations must be signed and stamped. Late quotations may not be considered. {settings?.company_name || "The company"} is not bound to accept the lowest or any quotation.</p>
+        <p className="mt-5">State the delivery time, the warranty and any discounts. Quotations must be signed and stamped. Late quotations may not be considered. {settings?.company_name || "The company"} is not bound to accept the lowest or any quotation.</p>
 
         <footer className="mt-10 grid grid-cols-2 gap-8">
           <div>
-            <p className="border-t border-slate-400 pt-1">{rfq.expand?.buyer?.name}</p>
-            <p className="text-slate-600">Procurement · {rfq.expand?.buyer?.email}</p>
+            <p className="border-t border-ims-faint pt-1">{rfq.expand?.buyer?.name}</p>
+            <p className="text-ims-body">Procurement · {rfq.expand?.buyer?.email}</p>
           </div>
           <div>
-            <p className="border-t border-slate-400 pt-1">Supplier signature and stamp</p>
+            <p className="border-t border-ims-faint pt-1">Supplier signature and stamp</p>
           </div>
         </footer>
       </article>

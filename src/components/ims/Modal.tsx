@@ -30,15 +30,32 @@ export function Modal({
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className={cn("gap-0 !p-0", WIDTH[size])}>
-        <div className="border-b border-ims-divider px-5 pb-4 pt-5 pr-12">
+      <DialogContent className={cn("flex max-h-[92vh] flex-col gap-0 !p-0", WIDTH[size])}>
+        <div className="shrink-0 border-b border-ims-divider px-5 pb-4 pt-5 pr-12">
           <DialogTitle className="text-[18px] font-extrabold leading-snug text-ims-text">{title}</DialogTitle>
           {description ? <DialogDescription className="mt-1 text-t-body text-ims-muted">{description}</DialogDescription> : <DialogDescription className="sr-only">{typeof title === "string" ? title : "Dialog"}</DialogDescription>}
         </div>
-        {children && <div className="space-y-4 px-5 py-5">{children}</div>}
-        {footer && <div className="flex flex-col-reverse gap-2 border-t border-ims-divider px-5 py-4 sm:flex-row sm:justify-end">{footer}</div>}
+        {children && <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 [counter-reset:ims-section]">{children}</div>}
+        {footer && <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-ims-divider px-5 py-4 sm:flex-row sm:justify-end">{footer}</div>}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Numbered group inside a dialog form ("1 · Supplier"); numbers count up by themselves. */
+export function ModalSection({ title, description, children, className }: { title: string; description?: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={cn("space-y-3 border-t border-ims-divider pt-4 [counter-increment:ims-section] first:border-t-0 first:pt-0", className)}>
+      <header>
+        <h3 className="text-[15px] font-extrabold text-ims-text">
+          <span className="before:content-[counter(ims-section)]" />
+          <span className="px-1.5 text-ims-faint">·</span>
+          {title}
+        </h3>
+        {description && <p className="mt-0.5 text-t-small text-ims-muted">{description}</p>}
+      </header>
+      {children}
+    </section>
   );
 }
 
@@ -83,6 +100,8 @@ export function ConfirmDialog({
     try {
       await onConfirm(text.trim());
       onClose();
+    } catch (_) {
+      // The caller reports the error (toast); keep the dialog open so the person can retry or cancel.
     } finally {
       setBusy(false);
     }

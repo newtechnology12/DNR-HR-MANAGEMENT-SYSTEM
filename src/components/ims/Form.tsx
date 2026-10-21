@@ -76,7 +76,37 @@ export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttrib
   );
 });
 
-/** Money: "RWF" before the number, thousands separators while typing, whole francs. */
+/** A checkbox with its label on the right (and an optional hint under it). */
+export function Checkbox({
+  label,
+  hint,
+  checked,
+  onChange,
+  disabled,
+  id,
+  className,
+}: {
+  label: React.ReactNode;
+  hint?: React.ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  id?: string;
+  className?: string;
+}) {
+  return (
+    <label className={cn("flex items-start gap-2.5 text-t-body text-ims-text", disabled && "cursor-not-allowed opacity-60", className)}>
+      <input id={id} type="checkbox" className={checkboxClass} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span className="min-w-0">
+        {label}
+        {hint && <span className="mt-0.5 block text-t-hint text-ims-muted">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+export const checkboxClass = "mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-ims-field accent-ims-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus disabled:cursor-not-allowed";
+
+/** Money: the currency (RWF) before the number, thousands separators while typing, whole units. */
 export function MoneyInput({
   value,
   onChange,
@@ -85,6 +115,7 @@ export function MoneyInput({
   placeholder = "0",
   disabled,
   className,
+  currency = "RWF",
 }: {
   value: number | "" | null | undefined;
   onChange: (v: number | "") => void;
@@ -93,11 +124,13 @@ export function MoneyInput({
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Shown before the number; RWF unless the document is in another currency. */
+  currency?: string;
 }) {
   const shown = value === "" || value === null || value === undefined ? "" : Number(value).toLocaleString("en-US");
   return (
     <span className={cn("relative block", className)}>
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] font-semibold text-ims-muted">RWF</span>
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] font-semibold text-ims-muted">{currency}</span>
       <input
         id={id}
         inputMode="numeric"

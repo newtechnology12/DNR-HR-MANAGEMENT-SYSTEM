@@ -1,16 +1,37 @@
 import * as React from "react";
 import { useQuery } from "react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { differenceInHours, format, formatDistanceToNowStrict, startOfMonth, startOfQuarter, startOfYear, subMonths } from "date-fns";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Clock, FileSearch, FileSignature, Plus, ShoppingCart, Wallet } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Clock, FileSignature, Plus, Wallet } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/utils";
-import { CHART, ChartTooltip, EmptyState, HorizontalBars, ListSkeleton, MetricGroup, PageHeader, Panel, StatusBadge } from "@/components/enterprise/ui";
-import { DOC_STATUS, compactMoney, money, phase5Api } from "@/lib/procurement";
+import { CHART, ChartTooltip, HorizontalBars, ListSkeleton, StatusBadge } from "@/components/enterprise/ui";
+import {
+  Card,
+  CardHeader,
+  Column,
+  DataTable,
+  Details,
+  DocNo,
+  EmptyState,
+  FilterBar,
+  FilterSelect,
+  KpiBand,
+  Num,
+  Page,
+  PageHeader,
+  Pill,
+  fmtDate,
+  fmtMoney,
+  fmtMoneyShort,
+  fmtNumber,
+  overdue,
+  sentence,
+} from "@/components/ims";
+import { DOC_STATUS, compactMoney, phase5Api } from "@/lib/procurement";
 
 const PERIODS = [
   { key: "month", label: "This month", from: () => startOfMonth(new Date()) },
@@ -176,292 +197,268 @@ export default function ProcurementDashboard() {
     };
   }, [d]);
 
-  const cycleLabel = stats?.avgCycle == null ? "—" : stats.avgCycle < 1 ? "<1 h" : stats.avgCycle < 48 ? `${Math.round(stats.avgCycle)} h` : `${(stats.avgCycle / 24).toFixed(1)} days`;
+  const cycleLabel = stats?.avgCycle == null ? "—" : stats.avgCycle < 1 ? "Under 1 hour" : stats.avgCycle < 48 ? `${Math.round(stats.avgCycle)} hours` : `${(stats.avgCycle / 24).toFixed(1)} days`;
+  const periodLabel = PERIODS.find((p) => p.key === period)?.label;
+  const lookup = (list: any[] | undefined, id: string) => list?.find((x: any) => x.id === id)?.name || "…";
+  const chips = [
+    ...(filters.department ? [{ key: "department", label: `Department: ${lookup(lookups.data?.departments, filters.department)}`, onRemove: () => setFilters((f) => ({ ...f, department: "" })) }] : []),
+    ...(filters.supplier ? [{ key: "supplier", label: `Supplier: ${lookup(lookups.data?.suppliers, filters.supplier)}`, onRemove: () => setFilters((f) => ({ ...f, supplier: "" })) }] : []),
+  ];
+  const canReports = canPerform("view_procurement_reports") || canPerform("view_procurement_dashboard");
+
+  const approvedColumns: Column<any>[] = [
+    { key: "number", header: "Number", nowrap: true, cell: (r) => <DocNo value={r.number} /> },
+    { key: "title", header: "Title", clamp: true, cell: (r) => r.title, sub: (r) => r.expand?.department?.name },
+    { key: "total", header: "Total (RWF)", numeric: true, cell: (r) => <Num value={r.total} /> },
+    { key: "status", header: "Status", cell: (r) => <StatusBadge status={r.status} map={DOC_STATUS} hideNote /> },
+    { key: "approved_at", header: "Approved", nowrap: true, cell: (r) => fmtDate(r.approved_at) },
+  ];
+  const recentlyApproved = stats ? [...stats.approved].sort((a: any, b: any) => (b.approved_at || "").localeCompare(a.approved_at || "")).slice(0, 6) : [];
 
   return (
-    <div className="space-y-5 px-4 py-4 sm:px-6">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Procurement" }]}
         title="Procurement overview"
-        description="Purchase requisitions and approvals. Figures reflect the records your role can see."
-        breadcrumbs={[{ title: "Procurement", link: "/dashboard/procurement" }]}
-        actions={
-          <>
-            <div role="radiogroup" aria-label="Reporting period" className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 shadow-card">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  role="radio"
-                  aria-checked={period === p.key}
-                  onClick={() => setPeriod(p.key)}
-                  className={cn("rounded px-3 py-1.5 text-[12.5px] font-medium", period === p.key ? "bg-ralga-navy text-white" : "text-slate-600 hover:bg-slate-100")}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            {canPerform("create_purchase_requisition") && (
-              <Button onClick={() => navigate("/dashboard/procurement/requisitions/new")}>
-                <Plus size={15} /> New requisition
-              </Button>
-            )}
-          </>
-        }
+        subtitle="Requisitions, sourcing and orders at a glance, for the records your role can see."
+        primary={canPerform("create_purchase_requisition") ? { label: "New requisition", icon: Plus, to: "/dashboard/procurement/requisitions/new" } : undefined}
+        secondary={canReports ? [{ label: "Reports", icon: BarChart3, to: "/dashboard/procurement/reports" }] : []}
       />
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-card">
-        <span className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">Filter</span>
-        <select aria-label="Department" className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[13px]" value={filters.department} onChange={(e) => setFilters((f) => ({ ...f, department: e.target.value }))}>
-          <option value="">All departments</option>
-          {(lookups.data?.departments || []).map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
-        <select aria-label="Supplier" className="h-8 max-w-[240px] rounded-md border border-slate-200 bg-white px-2 text-[13px]" value={filters.supplier} onChange={(e) => setFilters((f) => ({ ...f, supplier: e.target.value }))}>
-          <option value="">All suppliers</option>
-          {(lookups.data?.suppliers || []).map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
-        {(filters.department || filters.supplier) && (
-          <button type="button" className="text-[12.5px] font-medium text-primary hover:underline" onClick={() => setFilters({ department: "", supplier: "" })}>Clear</button>
-        )}
-        <span className="ml-auto hidden text-[12px] text-slate-500 sm:inline">Supplier filter applies to orders and receipts</span>
-        {(canPerform("view_procurement_reports") || canPerform("view_procurement_dashboard")) && (
-          <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/procurement/reports")}><BarChart3 size={14} /> Reports</Button>
-        )}
-      </div>
+      <Card padded={false}>
+        <FilterBar
+          chips={chips}
+          onClear={() => setFilters({ department: "", supplier: "" })}
+          right={<span className="text-t-small text-ims-muted">The supplier filter applies to orders and deliveries.</span>}
+        >
+          <FilterSelect label="Period" all={false} value={period} onChange={setPeriod} options={PERIODS.map((p) => ({ value: p.key, label: p.label }))} />
+          <FilterSelect label="Department" value={filters.department} onChange={(v) => setFilters((f) => ({ ...f, department: v }))} options={(lookups.data?.departments || []).map((x: any) => ({ value: x.id, label: x.name }))} />
+          <FilterSelect label="Supplier" value={filters.supplier} onChange={(v) => setFilters((f) => ({ ...f, supplier: v }))} options={(lookups.data?.suppliers || []).map((x: any) => ({ value: x.id, label: x.name }))} className="[&_select]:w-[220px]" />
+        </FilterBar>
+      </Card>
+
+      <KpiBand
+        loading={q.isLoading}
+        items={[
+          { label: "Waiting for my approval", value: fmtNumber(stats?.awaitingMe.length), tone: stats?.awaitingMe.length ? "warning" : "default", sub: "Requisitions", to: "/dashboard/procurement/approvals" },
+          { label: "In approval", value: fmtNumber(stats?.pending.length), sub: fmtMoneyShort(stats?.pending.reduce((a: number, r: any) => a + r.total, 0)), to: "/dashboard/procurement/requisitions?view=pending" },
+          { label: "Approved", value: fmtMoneyShort(stats?.approvedValue), tone: "success", sub: `${plural(stats?.approved.length, "requisition")} · ${periodLabel?.toLowerCase()}`, to: "/dashboard/procurement/requisitions?view=approved" },
+          { label: "RFQs to award", value: fmtNumber(stats?.rfqToAward.length), tone: stats?.rfqToAward.length ? "warning" : "default", sub: `${fmtNumber(stats?.rfqOpen.length)} still open`, to: "/dashboard/procurement/rfqs?view=evaluate" },
+          { label: "Committed in orders", value: fmtMoneyShort(stats?.committed), sub: `${plural(stats?.poOpen.length, "open order")}`, to: "/dashboard/procurement/purchase-orders?view=open" },
+          { label: "Late deliveries", value: fmtNumber(stats?.overdue.length), tone: stats?.overdue.length ? "danger" : "default", sub: "Past the expected date", to: "/dashboard/procurement/purchase-orders?view=overdue" },
+        ]}
+      />
 
       {(d?.alerts || []).length > 0 && (
-        <Panel title="Contract alerts" subtitle="Expiry, renewal decisions, spend limits and missing documents" action={{ label: "All contracts", onClick: () => navigate("/dashboard/procurement/contracts") }}>
-          <ul className="-mx-1 divide-y divide-slate-100">
+        <Card>
+          <CardHeader title="Contract alerts" subtitle="Expiry, renewal decisions, spend limits and missing documents." link={{ label: "All contracts", to: "/dashboard/procurement/contracts" }} />
+          <ul className="divide-y divide-ims-divider">
             {(d!.alerts as any[]).slice(0, 8).map((a) => (
               <li key={a.contract + a.key}>
-                <button type="button" onClick={() => navigate(`/dashboard/procurement/contracts/${a.contract}`)} className="flex w-full items-center gap-3 rounded px-1 py-2 text-left hover:bg-slate-50">
-                  {a.level === "danger" ? <AlertTriangle size={15} className="shrink-0 text-red-600" /> : <FileSignature size={15} className="shrink-0 text-amber-600" />}
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-slate-800">{a.text}</span>
-                  <span className="hidden truncate text-[12px] text-slate-500 sm:block sm:max-w-[40%]">{a.title}</span>
-                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", a.level === "danger" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700")}>{a.level === "danger" ? "Action needed" : "Attention"}</span>
-                </button>
+                <Link to={`/dashboard/procurement/contracts/${a.contract}`} className="flex w-full items-center gap-3 rounded-control px-2 py-2.5 text-left hover:bg-ims-hover">
+                  {a.level === "danger" ? <AlertTriangle size={16} className="shrink-0 text-ims-danger" aria-hidden /> : <FileSignature size={16} className="shrink-0 text-ims-warning" aria-hidden />}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-t-body text-ims-text">{datesInText(a.text)}</span>
+                    <span className="block truncate text-t-small text-ims-muted">{a.title}</span>
+                  </span>
+                  <span className={cn("shrink-0 text-t-small font-semibold", a.level === "danger" ? "text-ims-danger" : "text-ims-warning")}>{a.level === "danger" ? "Action needed" : "Check soon"}</span>
+                </Link>
               </li>
             ))}
           </ul>
-        </Panel>
+        </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <MetricGroup
-          title="Requisitions"
-          icon={ClipboardList}
-          loading={q.isLoading}
-          metrics={[
-            { label: "Requests", value: stats?.total, sub: `${stats?.drafts ?? 0} drafts`, onClick: () => navigate("/dashboard/procurement/requisitions") },
-            { label: "Waiting for me", value: stats?.awaitingMe.length, tone: stats?.awaitingMe.length ? "danger" : "default", sub: "Your decision", onClick: () => navigate("/dashboard/procurement/approvals") },
-            { label: "In review", value: stats?.pending.length, tone: "warning", sub: compactMoney(stats?.pending.reduce((a: number, r: any) => a + r.total, 0)), onClick: () => navigate("/dashboard/procurement/requisitions?view=pending") },
-            { label: "Approved", value: stats?.approved.length, tone: "success", sub: compactMoney(stats?.approvedValue), onClick: () => navigate("/dashboard/procurement/requisitions?view=approved") },
-            { label: "Declined", value: (stats?.rejected ?? 0) + (stats?.returned ?? 0), sub: `${stats?.returned ?? 0} returned · ${stats?.approvalRate == null ? "—" : stats.approvalRate + "%"} approval`, onClick: () => navigate("/dashboard/procurement/requisitions?view=attention") },
-            { label: "Cycle time", value: cycleLabel, sub: "Submit → approve" },
-          ]}
-        />
-        <MetricGroup
-          title="Sourcing"
-          icon={FileSearch}
-          columns={2}
-          loading={q.isLoading}
-          metrics={[
-            { label: "Open RFQs", value: stats?.rfqOpen.length, sub: `${stats?.rfqDraft.length ?? 0} drafts not sent`, onClick: () => navigate("/dashboard/procurement/rfqs?view=open") },
-            { label: "To award", value: stats?.rfqToAward.length, tone: stats?.rfqToAward.length ? "warning" : "default", sub: "Closed, awaiting decision", onClick: () => navigate("/dashboard/procurement/rfqs?view=evaluate") },
-            { label: "Awarded", value: compactMoney(stats?.awardedValue), sub: `${stats?.awardedCount ?? 0} RFQs${stats?.notLowest ? ` · ${stats.notLowest} not lowest` : ""}`, onClick: () => navigate("/dashboard/procurement/rfqs?view=awarded") },
-            { label: "Savings", value: compactMoney(stats?.savings), tone: (stats?.savings ?? 0) >= 0 ? "success" : "danger", sub: stats?.savingsPct == null ? "vs approved estimate" : `${stats.savingsPct}% below estimate` },
-          ]}
-        />
-        <MetricGroup
-          title="Orders & delivery"
-          icon={ShoppingCart}
-          columns={2}
-          loading={q.isLoading}
-          metrics={[
-            { label: "POs to approve", value: stats?.poPending.length, tone: stats?.poPending.length ? "warning" : "default", sub: "Finance / director", onClick: () => navigate("/dashboard/procurement/purchase-orders?view=approval") },
-            { label: "Committed", value: compactMoney(stats?.committed), sub: `${stats?.poOpen.length ?? 0} open orders`, onClick: () => navigate("/dashboard/procurement/purchase-orders?view=open") },
-            { label: "Late deliveries", value: stats?.overdue.length, tone: stats?.overdue.length ? "danger" : "default", sub: "Past expected date", onClick: () => navigate("/dashboard/procurement/purchase-orders?view=overdue") },
-            { label: "Received", value: compactMoney(stats?.receivedValue), tone: "success", sub: `${d?.expiringDocs.length ?? 0} supplier docs expiring`, onClick: () => navigate("/dashboard/procurement/receipts") },
-          ]}
-        />
-      </div>
-
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title="Requested value by month" subtitle="Submitted requisitions, last 12 months (RWF)">
+        <Card className="xl:col-span-2">
+          <CardHeader title="Requested value by month" subtitle="Submitted requisitions in the last 12 months, in RWF." />
           {q.isLoading ? (
             <Skeleton className="h-[260px] w-full" />
           ) : !stats?.trend.some((t) => t.approved + t.other > 0) ? (
-            <EmptyState icon={ClipboardList} text="No submitted requisitions in the last 12 months" />
+            <EmptyState icon={ClipboardList} text="No requisitions were submitted in the last 12 months." />
           ) : (
             <div className="h-[260px]" role="img" aria-label="Stacked bars of approved and other requested value per month">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={stats.trend} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke={CHART.grid} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: CHART.axis }} />
-                  <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: CHART.axis }} tickFormatter={(v) => compactMoney(v, "").trim()} width={48} />
-                  <Tooltip content={<ChartTooltip format={(v: number) => money(v)} />} cursor={{ fill: "#f1f5f9" }} />
-                  <Bar isAnimationActive={false} dataKey="approved" name="Approved" stackId="a" fill={CHART.series1} stroke="#fff" strokeWidth={1} />
-                  <Bar isAnimationActive={false} dataKey="other" name="Pending / other" stackId="a" fill={CHART.series2} stroke="#fff" strokeWidth={1} radius={[3, 3, 0, 0]} />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART.axis }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART.axis }} tickFormatter={(v) => compactMoney(v, "").trim()} width={48} />
+                  <Tooltip content={<ChartTooltip format={(v: number) => fmtMoney(v)} />} cursor={{ fill: CHART.grid }} />
+                  <Bar isAnimationActive={false} dataKey="approved" name="Approved" stackId="a" fill={CHART.series1} />
+                  <Bar isAnimationActive={false} dataKey="other" name="Pending and other" stackId="a" fill={CHART.series2} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-              <div className="-mt-1 flex justify-end gap-4 text-[12px] text-slate-500">
+              <div className="-mt-1 flex justify-end gap-4 text-t-small text-ims-muted">
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: CHART.series1 }} />Approved</span>
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: CHART.series2 }} />Pending / other</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: CHART.series2 }} />Pending and other</span>
               </div>
             </div>
           )}
-        </Panel>
+        </Card>
 
-        <Panel title="Approval queue" subtitle="Oldest first — delays are highlighted" action={{ label: "All pending", onClick: () => navigate("/dashboard/procurement/requisitions?view=pending") }}>
+        <Card>
+          <CardHeader title="Approval queue" subtitle="Oldest first. Long waits are marked." link={{ label: "All pending", to: "/dashboard/procurement/requisitions?view=pending" }} />
           {q.isLoading ? (
             <ListSkeleton rows={5} />
           ) : !d?.openApprovals.length ? (
-            <EmptyState icon={CheckCircle2} text="Nothing is waiting for approval" />
+            <EmptyState compact icon={CheckCircle2} text="Nothing is waiting for approval." />
           ) : (
-            <ul className="-mx-1 max-h-[300px] divide-y divide-slate-100 overflow-y-auto">
+            <ul className="max-h-[300px] divide-y divide-ims-divider overflow-y-auto">
               {(d.openApprovals as any[]).slice(0, 12).map((r) => {
                 const hours = r.submitted_at ? differenceInHours(new Date(), new Date(r.submitted_at)) : 0;
                 const mine = (r.pending_approvers || "").split(",").includes(d.me?.id);
                 return (
                   <li key={r.id}>
-                    <button type="button" onClick={() => navigate(`/dashboard/procurement/requisitions/${r.id}`)} className="flex w-full items-start gap-3 rounded-md px-1 py-2.5 text-left hover:bg-slate-50">
-                      <Clock size={15} className={cn("mt-0.5 shrink-0", hours > 72 ? "text-red-500" : hours > 24 ? "text-amber-500" : "text-slate-400")} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-medium text-slate-800">
-                          {r.number} · {r.title}
-                        </p>
-                        <p className="truncate text-[12px] text-slate-500">
-                          {r.expand?.requester?.name} · {money(r.total, r.currency)}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className={cn("text-[12px]", hours > 72 ? "font-medium text-red-600" : "text-slate-500")}>
-                          {r.submitted_at ? formatDistanceToNowStrict(new Date(r.submitted_at)) : "—"}
-                        </p>
-                        {mine && <p className="text-[11px] font-semibold text-amber-700">Your turn</p>}
-                      </div>
-                    </button>
+                    <Link to={`/dashboard/procurement/requisitions/${r.id}`} className="flex w-full items-start gap-3 rounded-control px-2 py-2.5 text-left hover:bg-ims-hover">
+                      <Clock size={16} className={cn("mt-0.5 shrink-0", hours > 72 ? "text-ims-danger" : hours > 24 ? "text-ims-warning" : "text-ims-faint")} aria-hidden />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-t-body font-semibold text-ims-text"><span className="whitespace-nowrap font-mono text-[13px]">{r.number}</span> · {r.title}</span>
+                        <span className="block truncate text-t-small text-ims-muted">
+                          {fmtMoney(r.total)} · <span className={cn(hours > 72 && "font-semibold text-ims-danger")}>{r.submitted_at ? formatDistanceToNowStrict(new Date(r.submitted_at)) : "—"}</span>
+                          {mine ? <span className="font-semibold text-ims-warning"> · your decision</span> : ` · ${r.expand?.requester?.name || ""}`}
+                        </span>
+                      </span>
+                    </Link>
                   </li>
                 );
               })}
             </ul>
           )}
-        </Panel>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel title="Approved value by department" subtitle={PERIODS.find((p) => p.key === period)?.label}>
+        <Card>
+          <CardHeader title="Approved value by department" subtitle={periodLabel} />
           {q.isLoading ? <Skeleton className="h-[220px] w-full" /> : !stats?.byDepartment.length ? (
-            <EmptyState icon={Wallet} text="No approved requisitions in this period" />
+            <EmptyState compact icon={Wallet} text="No requisitions were approved in this period." />
           ) : (
             <HorizontalBars data={stats.byDepartment} label="Approved value" format={(v) => compactMoney(v, "")} />
           )}
-        </Panel>
-        <Panel title="Approved value by category" subtitle={PERIODS.find((p) => p.key === period)?.label}>
+        </Card>
+        <Card>
+          <CardHeader title="Approved value by category" subtitle={periodLabel} />
           {q.isLoading ? <Skeleton className="h-[220px] w-full" /> : !stats?.byCategory.length ? (
-            <EmptyState icon={Wallet} text="No approved requisitions in this period" />
+            <EmptyState compact icon={Wallet} text="No requisitions were approved in this period." />
           ) : (
             <HorizontalBars data={stats.byCategory} label="Approved value" format={(v) => compactMoney(v, "")} labelWidth={150} />
           )}
-        </Panel>
-        <Panel title="Requisitions by status" subtitle={PERIODS.find((p) => p.key === period)?.label}>
+        </Card>
+        <Card>
+          <CardHeader title="Requisitions by status" subtitle={periodLabel} />
           {q.isLoading ? <Skeleton className="h-[220px] w-full" /> : !stats?.statusCounts.length ? (
-            <EmptyState icon={ClipboardList} text="No requisitions in this period" />
+            <EmptyState compact icon={ClipboardList} text="No requisitions in this period." />
           ) : (
             <HorizontalBars data={stats.statusCounts} label="Requisitions" />
           )}
-        </Panel>
+        </Card>
       </div>
 
-      <Panel title="Exceptions" subtitle="Items that need attention, calculated from live records">
+      <Card>
+        <CardHeader title="Performance" subtitle={`${periodLabel}. How fast and how well requests turn into orders.`} />
+        {q.isLoading ? <ListSkeleton rows={2} /> : (
+          <Details
+            columns={3}
+            items={[
+              { label: "Requisitions raised", value: fmtNumber(stats?.total), hint: `${fmtNumber(stats?.drafts)} still in draft` },
+              { label: "Time to approve", value: cycleLabel, hint: "From submission to approval, on average" },
+              { label: "Approval rate", value: stats?.approvalRate == null ? "—" : `${stats.approvalRate}%`, hint: `${fmtNumber(stats?.rejected)} rejected · ${fmtNumber(stats?.returned)} returned` },
+              { label: "Awarded from RFQs", value: fmtMoney(stats?.awardedValue), hint: `${plural(stats?.awardedCount, "RFQ")}${stats?.notLowest ? ` · ${stats.notLowest} not to the lowest bid` : ""}` },
+              { label: "Savings against estimates", value: <span className={(stats?.savings ?? 0) < 0 ? "text-ims-danger" : undefined}>{fmtMoney(stats?.savings)}</span>, hint: stats?.savingsPct == null ? "Compared with the approved estimate" : `${stats.savingsPct}% below the approved estimate` },
+              { label: "Received from suppliers", value: fmtMoney(stats?.receivedValue), hint: `${plural(stats?.poPending.length, "order")} waiting for approval · ${plural(d?.expiringDocs.length, "supplier document")} expiring` },
+            ]}
+          />
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader title="Needs attention" subtitle="Worked out from live records." />
         {q.isLoading ? <ListSkeleton rows={3} /> : (
           <ExceptionGroups groups={[
               {
-                title: "Approval delays (> 3 days)",
-                rows: (d?.openApprovals as any[] || []).filter((r) => r.submitted_at && differenceInHours(new Date(), new Date(r.submitted_at)) > 72).map((r) => ({ id: r.id, label: `${r.number} · ${r.title}`, sub: `waiting ${formatDistanceToNowStrict(new Date(r.submitted_at))}`, link: `/dashboard/procurement/requisitions/${r.id}` })),
+                title: "Approvals waiting more than 3 days",
+                rows: (d?.openApprovals as any[] || []).filter((r) => r.submitted_at && differenceInHours(new Date(), new Date(r.submitted_at)) > 72).map((r) => ({ id: r.id, label: `${r.number} · ${r.title}`, sub: `Waiting ${formatDistanceToNowStrict(new Date(r.submitted_at))}`, link: `/dashboard/procurement/requisitions/${r.id}` })),
               },
               {
-                title: "RFQs past closing date",
-                rows: (stats?.rfqToAward || []).filter((x: any) => x.status === "sent").map((x: any) => ({ id: x.id, label: `${x.number} · ${x.title}`, sub: `closed ${formatDistanceToNowStrict(new Date(x.closing_date))} ago — close & evaluate`, link: `/dashboard/procurement/rfqs/${x.id}` })),
+                title: "RFQs past their closing date",
+                rows: (stats?.rfqToAward || []).filter((x: any) => x.status === "sent").map((x: any) => ({ id: x.id, label: `${x.number} · ${x.title}`, sub: `Closed ${fmtDate(x.closing_date)}. Close it and evaluate the quotes.`, link: `/dashboard/procurement/rfqs/${x.id}` })),
               },
               {
-                title: "Overdue deliveries",
-                rows: (stats?.overdue || []).map((p: any) => ({ id: p.id, label: `${p.number} · ${p.expand?.supplier?.name || ""}`, sub: `expected ${format(new Date(p.expected_delivery_date), "d MMM")} · ${formatDistanceToNowStrict(new Date(p.expected_delivery_date))} late`, link: `/dashboard/procurement/purchase-orders/${p.id}` })),
+                title: "Late deliveries",
+                rows: (stats?.overdue || []).map((p: any) => ({ id: p.id, label: `${p.number} · ${p.expand?.supplier?.name || ""}`, sub: `Expected ${fmtDate(p.expected_delivery_date)} · ${overdue(p.expected_delivery_date) || "Overdue"}`, link: `/dashboard/procurement/purchase-orders/${p.id}` })),
               },
               {
-                title: "Rejected deliveries",
-                rows: (d?.rejectedReceipts as any[] || []).map((g) => ({ id: g.id, label: `${g.number} · ${g.expand?.supplier?.name || ""}`, sub: `on ${g.expand?.purchase_order?.number} · ${format(new Date(g.receipt_date), "d MMM")}`, link: `/dashboard/procurement/purchase-orders/${g.purchase_order}?tab=receipts` })),
+                title: "Deliveries with rejected items",
+                rows: (d?.rejectedReceipts as any[] || []).map((g) => ({ id: g.id, label: `${g.number} · ${g.expand?.supplier?.name || ""}`, sub: `On ${g.expand?.purchase_order?.number} · ${fmtDate(g.receipt_date)}`, link: `/dashboard/procurement/purchase-orders/${g.purchase_order}?tab=receipts` })),
               },
               {
-                title: "Direct purchases (no competition)",
-                rows: (stats?.direct || []).map((p: any) => ({ id: p.id, label: `${p.number} · ${p.title}`, sub: `${p.expand?.supplier?.name || ""} · ${compactMoney(p.grand_total)}`, link: `/dashboard/procurement/purchase-orders/${p.id}` })),
+                title: "Direct purchases without competition",
+                rows: (stats?.direct || []).map((p: any) => ({ id: p.id, label: `${p.number} · ${p.title}`, sub: `${p.expand?.supplier?.name || ""} · ${fmtMoney(p.grand_total)}`, link: `/dashboard/procurement/purchase-orders/${p.id}` })),
               },
               {
                 title: "Supplier documents expiring",
-                rows: (d?.expiringDocs as any[] || []).map((x) => ({ id: x.id, label: x.expand?.supplier?.name, sub: `${x.document_type.replace(/_/g, " ")} · ${new Date(x.expiry_date) < new Date() ? "expired" : "expires"} ${format(new Date(x.expiry_date), "d MMM")}`, link: `/dashboard/procurement/suppliers/${x.supplier}?tab=documents` })),
+                rows: (d?.expiringDocs as any[] || []).map((x) => ({ id: x.id, label: x.expand?.supplier?.name, sub: `${sentence(x.document_type)} · ${new Date(x.expiry_date) < new Date() ? "expired" : "expires"} ${fmtDate(x.expiry_date)}`, link: `/dashboard/procurement/suppliers/${x.supplier}?tab=documents` })),
               },
             ]} />
         )}
-      </Panel>
+      </Card>
 
-      <Panel title="Recently approved" subtitle="Ready for sourcing — create an RFQ from the requisition" action={{ label: "All approved", onClick: () => navigate("/dashboard/procurement/requisitions?view=approved") }}>
-        {q.isLoading ? <ListSkeleton rows={3} /> : !stats?.approved.length ? (
-          <EmptyState icon={CheckCircle2} text="No approved requisitions in this period" />
-        ) : (
-          <div className="-mx-4 overflow-x-auto">
-            <table className="dnr-grid w-full min-w-[560px] text-[13px]">
-              <tbody className="divide-y divide-slate-100">
-                {[...stats.approved].sort((a: any, b: any) => (b.approved_at || "").localeCompare(a.approved_at || "")).slice(0, 6).map((r: any) => (
-                  <tr key={r.id} className="cursor-pointer hover:bg-slate-50" onClick={() => navigate(`/dashboard/procurement/requisitions/${r.id}`)}>
-                    <td className="whitespace-nowrap px-4 py-2.5 font-medium">{r.number}</td>
-                    <td className="max-w-[280px] truncate px-4 py-2.5 text-slate-700">{r.title}</td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-500">{r.expand?.department?.name}</td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums">{money(r.total, r.currency)}</td>
-                    <td className="px-4 py-2.5"><StatusBadge status={r.status} map={DOC_STATUS} /></td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right text-slate-500">{r.approved_at ? format(new Date(r.approved_at), "d MMM yyyy") : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-    </div>
+      <Card padded={false}>
+        <div className="px-5 pt-5">
+          <CardHeader title="Recently approved" subtitle="Ready for sourcing: create an RFQ from the requisition." link={{ label: "All approved", to: "/dashboard/procurement/requisitions?view=approved" }} />
+        </div>
+        <DataTable
+          columns={approvedColumns}
+          rows={recentlyApproved}
+          rowKey={(r) => r.id}
+          loading={q.isLoading}
+          onRowClick={(r) => navigate(`/dashboard/procurement/requisitions/${r.id}`)}
+          minWidth={620}
+          caption="Recently approved requisitions"
+          empty={<EmptyState compact icon={CheckCircle2} text="No requisitions were approved in this period." />}
+        />
+      </Card>
+    </Page>
   );
 }
+
+const plural = (n: number | undefined, word: string) => `${fmtNumber(n ?? 0)} ${word}${n === 1 ? "" : "s"}`;
+
+/** Server alert text carries ISO dates ("ends on 2026-11-30"); show them as "30 Nov 2026". */
+const datesInText = (text: string) => String(text || "").replace(/\b\d{4}-\d{2}-\d{2}\b/g, (d) => fmtDate(d));
 
 type ExceptionRow = { id: string; label: string; sub: string; link: string };
 
 /** Only groups with items are shown; clear groups are summarised in one line. */
 function ExceptionGroups({ groups }: { groups: { title: string; rows: ExceptionRow[] }[] }) {
-  const navigate = useNavigate();
   const open = groups.filter((g) => g.rows.length);
   const clear = groups.filter((g) => !g.rows.length);
   return (
     <div className="space-y-3">
-      {!open.length && <p className="flex items-center gap-2 text-[13px] text-emerald-700"><CheckCircle2 size={15} /> Nothing needs attention right now.</p>}
+      {!open.length && <p className="flex items-center gap-2 text-t-body text-ims-success"><CheckCircle2 size={16} aria-hidden /> Nothing needs attention right now.</p>}
       {open.length > 0 && (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {open.map((group) => (
-            <li key={group.title} className="rounded-md border border-amber-200 bg-amber-50/40 p-3">
-              <p className="mb-2 flex items-center justify-between text-[12.5px] font-semibold text-slate-700">
-                {group.title} <span className="rounded-full bg-amber-100 px-2 text-[11px] text-amber-800">{group.rows.length}</span>
+            <li key={group.title} className="rounded-control border border-ims-border p-3.5">
+              <p className="mb-2 flex items-center justify-between gap-2 text-t-body font-bold text-ims-text">
+                {group.title} <Pill tone="warning">{group.rows.length}</Pill>
               </p>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {group.rows.slice(0, 4).map((row) => (
                   <li key={row.id}>
-                    <button type="button" onClick={() => navigate(row.link)} className="w-full text-left text-[12.5px] hover:underline">
-                      <span className="block truncate text-slate-800">{row.label}</span>
-                      <span className="block truncate text-slate-500">{row.sub}</span>
-                    </button>
+                    <Link to={row.link} className="block rounded-sm text-t-small hover:underline">
+                      <span className="block truncate text-t-body text-ims-text">{row.label}</span>
+                      <span className="block truncate text-ims-muted">{row.sub}</span>
+                    </Link>
                   </li>
                 ))}
-                {group.rows.length > 4 && <li className="text-[12px] text-slate-500">+{group.rows.length - 4} more</li>}
+                {group.rows.length > 4 && <li className="text-t-small text-ims-muted">and {group.rows.length - 4} more</li>}
               </ul>
             </li>
           ))}
         </ul>
       )}
-      {clear.length > 0 && <p className="text-[12px] text-slate-400">No issues: {clear.map((g) => g.title.toLowerCase()).join(" · ")}</p>}
+      {clear.length > 0 && <p className="text-t-small text-ims-muted">Nothing to report on: {clear.map((g) => (/^[A-Z]{2}/.test(g.title) ? g.title : g.title.charAt(0).toLowerCase() + g.title.slice(1))).join(" · ")}.</p>}
     </div>
   );
 }

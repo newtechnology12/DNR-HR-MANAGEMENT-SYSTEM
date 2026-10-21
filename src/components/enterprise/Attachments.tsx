@@ -76,10 +76,10 @@ export default function Attachments({
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
           onDragLeave={() => setDrag(false)}
           onDrop={(e) => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
-          className={cn("flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-5 text-center text-[13px] transition-colors", drag ? "border-primary bg-primary/[0.05]" : "border-ims-border bg-ims-thead hover:border-primary/40 hover:bg-primary/[0.03]")}
+          className={cn("flex cursor-pointer flex-col items-center justify-center gap-1 rounded-card border-2 border-dashed px-4 py-5 text-center text-t-small transition-colors", drag ? "border-ims-link bg-ims-info-bg" : "border-ims-field bg-ims-thead hover:border-ims-faint")}
         >
-          {busy ? <Loader2 size={18} className="animate-spin text-primary" /> : <Upload size={18} className="text-ims-faint" />}
-          <span><span className="font-medium text-primaryDark">Add documents</span> — choose files or drop them here</span>
+          {busy ? <Loader2 size={18} className="animate-spin text-ims-link" /> : <Upload size={18} className="text-ims-faint" />}
+          <span><span className="font-medium text-ims-link">Add documents</span> — choose files or drop them here</span>
           <span className="text-[11.5px] text-ims-muted">{hint || "PDF, images, Word, Excel… up to 20 MB each"}</span>
           <input type="file" multiple className="hidden" disabled={busy} onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
         </label>
@@ -92,7 +92,7 @@ export default function Attachments({
             const Icon = iconFor(f);
             const url = pocketbase.files.getUrl(record, f);
             return (
-              <li key={f} className="flex items-center gap-3 rounded-lg border border-ims-border bg-white p-2.5">
+              <li key={f} className="flex items-center gap-3 rounded-lg border border-ims-border bg-ims-card p-2.5">
                 {IMAGE.test(f) ? (
                   <a href={url} target="_blank" rel="noreferrer" className="shrink-0"><img src={pocketbase.files.getUrl(record, f, { thumb: "100x100" })} alt="" className="h-11 w-11 rounded object-cover" /></a>
                 ) : (
@@ -101,12 +101,12 @@ export default function Attachments({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium text-ims-text" title={displayName(f)}>{displayName(f)}</span>
                   <span className="flex items-center gap-2 text-[12px]">
-                    <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primaryDark hover:underline"><ExternalLink size={12} /> Open</a>
+                    <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ims-link hover:underline"><ExternalLink size={12} /> Open</a>
                     <a href={`${url}?download=1`} className="inline-flex items-center gap-1 text-ims-body hover:underline"><Download size={12} /> Download</a>
                   </span>
                 </span>
                 {canRemove ? (
-                  <button type="button" onClick={() => remove(f)} className="rounded-md p-1.5 text-ims-faint hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${displayName(f)}`}><Trash2 size={14} /></button>
+                  <button type="button" onClick={() => remove(f)} className="rounded-md p-1.5 text-ims-faint hover:bg-ims-danger-bg hover:text-ims-danger" aria-label={`Remove ${displayName(f)}`}><Trash2 size={14} /></button>
                 ) : (
                   <span title="Part of the record — cannot be removed" className="p-1.5 text-ims-faint"><Lock size={13} /></span>
                 )}

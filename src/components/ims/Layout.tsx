@@ -176,7 +176,7 @@ export function KpiBand({ items, loading, className }: { items: Kpi[]; loading?:
           const body = (
             <>
               <span className="block truncate text-t-small text-ims-muted">{k.label}</span>
-              {loading ? <Skeleton className="mt-1.5 h-6 w-20" /> : <span className={cn("mt-1 block break-words text-t-kpi tabular-nums", KPI_TONE[k.tone || "default"])}>{k.value ?? "—"}</span>}
+              {loading ? <Skeleton className="mt-1.5 h-6 w-20" /> : <span className={cn("mt-1 block break-words text-[18px] font-extrabold leading-6 tabular-nums sm:text-t-kpi", KPI_TONE[k.tone || "default"])}>{k.value ?? "—"}</span>}
               {k.sub && !loading && <span className="mt-0.5 block truncate text-t-small text-ims-muted">{k.sub}</span>}
             </>
           );

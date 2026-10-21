@@ -8,7 +8,7 @@ import { PILL_TONE, PillTone, StatusWord, statusWord, toneOf } from "./status";
 
 export function Pill({ tone = "neutral", children, className, title }: { tone?: PillTone; children: React.ReactNode; className?: string; title?: string }) {
   return (
-    <span title={title} className={cn("inline-flex items-center whitespace-nowrap rounded-pill px-2.5 py-[3px] text-[12.5px] font-semibold leading-none", PILL_TONE[tone], className)}>
+    <span title={title} className={cn("inline-flex w-fit items-center whitespace-nowrap rounded-pill px-2.5 py-[3px] text-[12.5px] font-semibold leading-none", PILL_TONE[tone], className)}>
       {children}
     </span>
   );

@@ -84,6 +84,7 @@ export function DataTable<T>({
   caption,
   fetching,
   className,
+  rowClassName,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -105,6 +106,8 @@ export function DataTable<T>({
   /** Refreshing in the background: dims the rows. */
   fetching?: boolean;
   className?: string;
+  /** Extra classes for one row, e.g. muted text for a cancelled line or a highlight for a changed one. */
+  rowClassName?: (row: T) => string | undefined | false;
 }) {
   const hasTotals = columns.some((c) => c.total !== undefined);
   const span = columns.length + (rowActions ? 1 : 0);
@@ -120,7 +123,7 @@ export function DataTable<T>({
 
   return (
     <div className={cn("min-w-0", className)}>
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full border-collapse text-left text-t-body text-ims-text" style={{ minWidth }}>
           {caption && <caption className="sr-only">{caption}</caption>}
           <thead>
@@ -179,6 +182,7 @@ export function DataTable<T>({
                     tabIndex={onRowClick ? 0 : undefined}
                     className={cn(
                       "border-b border-ims-divider last:border-b-0",
+                      rowClassName?.(row),
                       onRowClick && "cursor-pointer outline-none hover:bg-ims-hover focus-visible:bg-ims-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ims-focus"
                     )}
                   >

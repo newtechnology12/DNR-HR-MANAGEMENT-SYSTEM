@@ -1,59 +1,73 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { format, isPast } from "date-fns";
 import { toast } from "sonner";
 import {
-  AlertTriangle, ArrowUpRight, FileSignature, GitBranch, Undo2, ArrowRight, Ban, Banknote, Check, CheckCheck, Clock, CornerUpLeft, FileText, Lock, MessageSquare, PackageCheck, Pencil, Printer, Receipt, Send, ShieldCheck, ShoppingCart, Truck, UserPlus, XCircle,
+  AlertTriangle, ArrowUpRight, Ban, Check, CheckCheck, ChevronRight, Clock, CornerUpLeft, GitBranch, Lock, LucideIcon, MessageSquare, PackageCheck, Pencil, Printer, Receipt, Send, ShoppingCart, Undo2, UserPlus, XCircle,
 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/utils";
 import DocumentUploads from "@/components/enterprise/Attachments";
-import { Badge, EmptyState, Panel, StatusBadge } from "@/components/enterprise/ui";
+import { Badge, StatusBadge } from "@/components/enterprise/ui";
 import { ActionDialog, ActionKind, ApprovalTracker } from "@/components/enterprise/Approval";
-import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, SmartButtons, Totals, toChatter } from "@/components/enterprise/DocumentLayout";
+import { Chatter, Totals, toChatter } from "@/components/enterprise/DocumentLayout";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  Column,
+  DataTable,
+  DatePicker,
+  DetailHeader,
+  Details,
+  DocNo,
+  EmptyState,
+  Field,
+  Input,
+  KpiBand,
+  MenuItem,
+  Modal,
+  MoneyInput,
+  MoreMenu,
+  Num,
+  Page,
+  Person,
+  Select,
+  Tabs,
+  Textarea,
+  buttonClass,
+  fmtDate,
+  fmtDateTime,
+  fmtMoney,
+  fmtNumber,
+  overdue,
+} from "@/components/ims";
 import { INVOICE_STATUS, LINE_TYPES, OPEN_PO_STATUSES, PAYMENT_METHODS, PO_STATUS, errorMessage, money, procurementApi, purchasingApi } from "@/lib/procurement";
 import RecordInvoiceDialog from "@/pages/finance/RecordInvoiceDialog";
 import { ReturnFormDialog } from "./Returns";
 import { BudgetPanel } from "@/components/budget/BudgetKit";
-import { Field, FormBlock, FormDialog, textareaCls } from "@/components/portal/kit";
 
-const TABS = ["lines", "receipts", "bills", "other", "revisions", "documents", "approval"] as const;
-const inputCls = "h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+type TabKey = "details" | "items" | "receipts" | "approval" | "activity";
+const TAB_KEYS: TabKey[] = ["details", "items", "receipts", "approval", "activity"];
+/** Older links (?tab=lines, ?tab=bills…) still land on the right section. */
+const TAB_ALIAS: Record<string, TabKey> = { lines: "items", bills: "receipts", other: "details", revisions: "details", documents: "details" };
+const LIST = "/dashboard/procurement/purchase-orders";
 
-const STEPS = [
-  { key: "draft", label: "Draft" },
-  { key: "pending_approval", label: "To approve" },
-  { key: "approved", label: "Approved" },
-  { key: "sent", label: "Sent" },
-  { key: "received", label: "Received" },
-  { key: "billed", label: "Billed" },
-  { key: "done", label: "Done" },
-];
+/** Money in text: "RWF 1,250,000" (or the order's own currency). */
+const amountIn = (n: number | undefined, currency?: string) => (!currency || currency === "RWF" ? fmtMoney(n || 0) : money(n, currency));
 
-function stepOf(po: any) {
-  if (["completed", "closed"].includes(po.status)) return "done";
-  if (po.invoiced_value > 0 && ["partially_received", "fully_received", "partially_invoiced", "fully_invoiced"].includes(po.status)) return "billed";
-  if (["partially_received", "fully_received"].includes(po.status)) return "received";
-  if (["sent", "acknowledged"].includes(po.status)) return "sent";
-  if (po.status === "approved") return "approved";
-  if (po.status === "pending_approval") return "pending_approval";
-  return "draft";
-}
-
-const dateOf = (v?: string, f = "d MMM yyyy") => (v ? format(new Date(v), f) : "");
-const th = "px-3 py-2";
+type Act = { key: string; label: string; icon: LucideIcon; run?: () => void; href?: string; main?: boolean };
 
 export default function PurchaseOrderDetail() {
   const { poId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const tab = (params.get("tab") as (typeof TABS)[number]) || "lines";
+  const rawTab = params.get("tab") || "details";
+  const tab: TabKey = TAB_ALIAS[rawTab] || (TAB_KEYS.includes(rawTab as TabKey) ? (rawTab as TabKey) : "details");
   const { canPerform } = useRoles();
   const me = pocketbase.authStore.model as any;
   const [decision, setDecision] = React.useState<ActionKind | null>(null);
@@ -83,10 +97,31 @@ export default function PurchaseOrderDetail() {
   };
 
   const po: any = q.data?.po;
-  if (q.isLoading) return <div className="space-y-4 px-4 py-4 sm:px-6"><Skeleton className="h-12 w-80" /><Skeleton className="h-[480px] w-full" /></div>;
-  if (!po) return <div className="px-4 py-4 sm:px-6"><Panel><EmptyState icon={ShoppingCart} title="Purchase order not available" text="It may be outside what your role can see." /></Panel></div>;
+  if (q.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-64 w-full" />
+      </Page>
+    );
+  }
+  if (!po) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState
+            icon={ShoppingCart}
+            text="This purchase order is not available. It may have been deleted, or your role cannot see it."
+            action={<ButtonLink to={LIST}>Back to purchase orders</ButtonLink>}
+          />
+        </Card>
+      </Page>
+    );
+  }
 
   const { receipts, invoices, payments, actions, audit } = q.data!;
+  const returns: any[] = q.data!.returns;
   const approval = po.expand?.approval;
   const isBuyer = po.buyer === me?.id;
   // The server additionally requires the buyer or an organisation-wide procurement role.
@@ -94,7 +129,7 @@ export default function PurchaseOrderDetail() {
   const isApprover = approval?.status === "pending" && (approval.pending_approvers || "").split(",").includes(me?.id);
   const editable = ["draft", "returned"].includes(po.status);
   const receivable = OPEN_PO_STATUSES.includes(po.status);
-  const late = receivable && po.expected_delivery_date && isPast(new Date(po.expected_delivery_date));
+  const late = receivable ? overdue(po.expected_delivery_date) : null;
   const items: any[] = po.items || [];
   const hasDisc = items.some((l) => l.discount_pct);
   const activeBills = invoices.filter((i: any) => !["cancelled", "rejected"].includes(i.status));
@@ -103,312 +138,382 @@ export default function PurchaseOrderDetail() {
   const canBill = canPerform("manage_invoices") && po.received_value > 0 && !["cancelled", "rejected", "draft", "pending_approval", "returned"].includes(po.status) && (po.invoiced_value || 0) < po.received_value - 1;
   const openExceptions = invoices.filter((i: any) => i.status === "exception").length;
   const paid = (payments as any[]).reduce((a: number, p: any) => a + p.amount, 0) || po.paid_value || 0;
-  const setTab = (t: string) => setParams(t === "lines" ? {} : { tab: t });
+  const setTab = (t: string) => setParams(t === "details" ? {} : { tab: t });
+  const cur = po.currency || "RWF";
+  const amount = (n?: number) => amountIn(n, cur);
+  const pct = (v: number) => (po.grand_total ? Math.min(100, Math.round((v / po.grand_total) * 100)) : 0);
+  const stepName = approval?.status === "pending" ? approval.steps?.[approval.current_level]?.name : null;
+  const canReceive = canPerform("receive_goods") && receivable;
+  const printable = !["draft", "pending_approval", "returned", "rejected", "cancelled"].includes(po.status);
+  const goReceive = () => navigate(`${LIST}/${po.id}/receive`);
 
-  const ribbon =
-    po.status === "cancelled" ? { label: "Cancelled", tone: "neutral" as const }
-    : po.status === "rejected" ? { label: "Rejected", tone: "danger" as const }
-    : po.status === "completed" ? { label: "Paid", tone: "success" as const }
-    : po.status === "closed" ? { label: "Closed", tone: "neutral" as const }
-    : undefined;
+  // The next step is the primary button, then at most two secondary buttons; the rest go under "More".
+  const acts = ([
+    isApprover && { key: "approve", label: "Approve", icon: Check, run: () => setDecision("approve"), main: true },
+    isApprover && { key: "return", label: "Return", icon: CornerUpLeft, run: () => setDecision("return") },
+    isApprover && { key: "reject", label: "Reject", icon: XCircle, run: () => setDecision("reject") },
+    canManage && editable && isBuyer && { key: "submit", label: "Submit for approval", icon: Send, run: () => setDecision("submit"), main: true },
+    canManage && editable && { key: "edit", label: "Edit", icon: Pencil, run: () => setEditing(true) },
+    canManage && po.status === "approved" && { key: "send", label: "Send to supplier", icon: Send, run: () => setStep("send"), main: true },
+    canManage && po.status === "sent" && { key: "acknowledge", label: "Record acknowledgement", icon: CheckCheck, run: () => setStep("acknowledge"), main: true },
+    canReceive && { key: "receive", label: "Receive delivery", icon: PackageCheck, run: goReceive, main: true },
+    canBill && { key: "bill", label: "Create bill", icon: Receipt, run: () => setBilling(true), main: true },
+    printable && { key: "print", label: "Print", icon: Printer, href: `/print/po/${po.id}` },
+  ].filter(Boolean) as Act[]);
+  const primaryAct = acts.find((a) => a.main);
+  const rest = acts.filter((a) => a !== primaryAct);
+  const shownSecondary = rest.slice(0, 2);
+  const renderAct = (a: Act, variant: "primary" | "secondary") =>
+    a.href ? (
+      <a key={a.key} href={a.href} target="_blank" rel="noreferrer" className={buttonClass({ variant })}>
+        <a.icon size={16} aria-hidden /> {a.label}
+      </a>
+    ) : (
+      <Button key={a.key} variant={variant} icon={a.icon} onClick={a.run}>{a.label}</Button>
+    );
+  const more: MenuItem[] = [
+    ...rest.slice(2).map((a) => ({ label: a.label, icon: a.icon, onSelect: a.href ? () => window.open(a.href, "_blank", "noopener,noreferrer") : a.run! })),
+    { label: "Delegate", icon: UserPlus, onSelect: () => setDecision("delegate"), hidden: !isApprover },
+    { label: "Escalate", icon: ArrowUpRight, onSelect: () => setDecision("escalate"), hidden: !isApprover },
+    { label: "Comment", icon: MessageSquare, onSelect: () => setDecision("comment"), hidden: !approval },
+    { label: "Close order", icon: Lock, onSelect: () => setStep("close"), hidden: !(canManage && ["partially_received", "fully_received"].includes(po.status)) },
+    { label: "Amend order", icon: GitBranch, onSelect: () => setAmending(true), hidden: !(canPerform("amend_purchase_orders") && ["approved", "sent", "acknowledged", "partially_received"].includes(po.status)) },
+    { label: "Cancel order", icon: Ban, danger: true, onSelect: () => setDecision("cancel"), hidden: !(canManage && ["draft", "returned", "pending_approval", "approved", "sent", "acknowledged"].includes(po.status)) },
+  ];
 
-  const actionsBar = (
-    <>
-      {isApprover && (
-        <>
-          <Button size="sm" onClick={() => setDecision("approve")}><Check size={14} /> Approve</Button>
-          <Button size="sm" variant="outline" onClick={() => setDecision("return")}><CornerUpLeft size={14} /> Send back</Button>
-          <Button size="sm" variant="outline" className="text-red-700" onClick={() => setDecision("reject")}><XCircle size={14} /> Reject</Button>
-          <Button size="sm" variant="ghost" onClick={() => setDecision("delegate")}><UserPlus size={14} /> Delegate</Button>
-          <Button size="sm" variant="ghost" onClick={() => setDecision("escalate")}><ArrowUpRight size={14} /> Escalate</Button>
-        </>
-      )}
-      {canManage && editable && isBuyer && <Button size="sm" onClick={() => setDecision("submit")}><Send size={14} /> Confirm order</Button>}
-      {canManage && editable && <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>}
-      {canManage && po.status === "approved" && <Button size="sm" onClick={() => setStep("send")}><Send size={14} /> Send to supplier</Button>}
-      {canManage && po.status === "sent" && <Button size="sm" variant="outline" onClick={() => setStep("acknowledge")}><CheckCheck size={14} /> Supplier acknowledged</Button>}
-      {canPerform("receive_goods") && receivable && <Button size="sm" onClick={() => navigate(`/dashboard/procurement/purchase-orders/${po.id}/receive`)}><PackageCheck size={14} /> Receive products</Button>}
-      {canBill && <Button size="sm" onClick={() => setBilling(true)}><Receipt size={14} /> Create bill</Button>}
-      {!["draft", "pending_approval", "returned", "rejected", "cancelled"].includes(po.status) && (
-        <a href={`/print/po/${po.id}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-btn border border-slate-200 bg-white px-3 text-[12.7px] text-slate-700 hover:bg-slate-50"><Printer size={14} /> Print</a>
-      )}
-      {canManage && ["partially_received", "fully_received"].includes(po.status) && <Button size="sm" variant="ghost" onClick={() => setStep("close")}><Lock size={14} /> Lock</Button>}
-      {canPerform("amend_purchase_orders") && ["approved", "sent", "acknowledged", "partially_received"].includes(po.status) && <Button size="sm" variant="ghost" onClick={() => setAmending(true)}><GitBranch size={14} /> Amend</Button>}
-      {canManage && ["draft", "returned", "pending_approval", "approved", "sent", "acknowledged"].includes(po.status) && <Button size="sm" variant="ghost" onClick={() => setDecision("cancel")}><Ban size={14} /> Cancel</Button>}
-    </>
-  );
+  const statusNote = [stepName ? `At “${stepName}”` : PO_STATUS[po.status]?.note, late].filter(Boolean).join(" · ");
+  const showMoney = receivable || po.received_value > 0 || (po.invoiced_value || 0) > 0;
+  const lineSum = items.reduce((a, l) => a + (Number(l.total) || 0), 0);
+
+  const lineColumns: Column<any>[] = [
+    { key: "line", header: "#", width: "48px", cell: (l, i) => <span className="text-ims-muted">{l.line || i + 1}</span> },
+    { key: "description", header: "Description", clamp: true, cell: (l) => l.description, sub: (l) => [l.brand, l.specification].filter(Boolean).join(" · ") },
+    { key: "type", header: "Type", nowrap: true, cell: (l) => (LINE_TYPES[l.line_type] ? <Badge tone={LINE_TYPES[l.line_type].tone}>{LINE_TYPES[l.line_type].label}</Badge> : "—") },
+    { key: "quantity", header: "Quantity", numeric: true, cell: (l) => `${fmtNumber(l.quantity, true)} ${l.unit || ""}`.trim() },
+    {
+      key: "received",
+      header: "Received",
+      numeric: true,
+      cell: (l) => {
+        const rec = l.received_qty || 0;
+        return <span className={cn(rec >= l.quantity ? "text-ims-success" : rec > 0 ? "text-ims-warning" : "text-ims-faint")}>{fmtNumber(rec, true)}</span>;
+      },
+      sub: (l) => (l.rejected_qty ? <span className="text-ims-danger">{fmtNumber(l.rejected_qty, true)} rejected</span> : null),
+    },
+    {
+      key: "billed",
+      header: "Billed",
+      numeric: true,
+      cell: (l) => {
+        const rec = l.received_qty || 0;
+        const bil = billedQty[l.line] || 0;
+        return <span className={cn(bil >= rec && bil > 0 ? "text-ims-success" : bil > 0 ? "text-ims-warning" : "text-ims-faint")}>{fmtNumber(bil, true)}</span>;
+      },
+    },
+    { key: "unit_price", header: `Unit price (${cur})`, numeric: true, cell: (l) => <Num value={l.unit_price} /> },
+    ...(hasDisc ? [{ key: "discount", header: "Discount (%)", numeric: true, cell: (l: any) => (l.discount_pct ? fmtNumber(l.discount_pct, true) : "—") }] : []),
+    { key: "tax", header: "Tax", numeric: true, cell: (l) => (l.tax_rate ? `VAT ${fmtNumber(l.tax_rate, true)}%` : "Exempt") },
+    { key: "total", header: `Total (${cur})`, numeric: true, cell: (l) => <Num value={l.total} />, total: <Num value={lineSum} /> },
+  ];
+
+  const receiptColumns: Column<any>[] = [
+    { key: "number", header: "Receipt", nowrap: true, cell: (g) => <DocNo value={g.number} />, sub: (g) => (g.delivery_note_number ? `Delivery note ${g.delivery_note_number}` : null) },
+    { key: "date", header: "Date", nowrap: true, cell: (g) => fmtDate(g.receipt_date) },
+    { key: "location", header: "Location", cell: (g) => (g.receipt_type === "service" ? "Service confirmation" : g.expand?.warehouse?.name || "—") },
+    { key: "by", header: "Received by", className: "max-w-[180px]", cell: (g) => <Person name={g.expand?.received_by?.name} /> },
+    {
+      key: "lines",
+      header: "Lines",
+      className: "min-w-[220px]",
+      cell: (g) => (
+        <ul className="space-y-0.5 text-t-small text-ims-body">
+          {(g.items || []).map((i: any) => (
+            <li key={i.line}>
+              {i.description}: <span className="font-semibold tabular-nums text-ims-text">{fmtNumber(i.accepted, true)}</span>
+              {i.rejected ? <span className="text-ims-danger"> · {fmtNumber(i.rejected, true)} rejected ({i.rejection_reason})</span> : null}
+            </li>
+          ))}
+        </ul>
+      ),
+    },
+    { key: "value", header: `Accepted (${cur})`, numeric: true, cell: (g) => <Num value={g.accepted_value} />, total: <Num value={receipts.reduce((a: number, g: any) => a + (g.accepted_value || 0), 0)} /> },
+  ];
+
+  const billColumns: Column<any>[] = [
+    { key: "number", header: "Bill", nowrap: true, cell: (i) => <DocNo value={i.number} /> },
+    { key: "ref", header: "Supplier reference", cell: (i) => i.supplier_invoice_number || "—" },
+    { key: "date", header: "Bill date", nowrap: true, cell: (i) => fmtDate(i.invoice_date) },
+    {
+      key: "due",
+      header: "Due",
+      nowrap: true,
+      cell: (i) => {
+        const o = i.balance > 0 ? overdue(i.due_date) : null;
+        return <span className={cn(o && "font-semibold text-ims-danger")}>{fmtDate(i.due_date)}</span>;
+      },
+      sub: (i) => (i.balance > 0 && overdue(i.due_date) ? <span className="text-ims-danger">{overdue(i.due_date)}</span> : null),
+    },
+    { key: "total", header: `Total (${cur})`, numeric: true, cell: (i) => <Num value={i.total} />, total: <Num value={(invoices as any[]).reduce((a: number, i: any) => a + (i.total || 0), 0)} /> },
+    { key: "balance", header: `Balance (${cur})`, numeric: true, cell: (i) => <Num value={i.balance} />, total: <Num value={(invoices as any[]).reduce((a: number, i: any) => a + (i.balance || 0), 0)} /> },
+    { key: "status", header: "Status", cell: (i) => <StatusBadge status={i.status} map={INVOICE_STATUS} /> },
+  ];
+
+  const paymentColumns: Column<any>[] = [
+    { key: "number", header: "Payment", nowrap: true, cell: (p) => <DocNo value={p.number} /> },
+    { key: "date", header: "Date", nowrap: true, cell: (p) => fmtDate(p.payment_date) },
+    { key: "bill", header: "Bill", nowrap: true, cell: (p) => <DocNo value={p.expand?.invoice?.number} /> },
+    { key: "method", header: "Method", cell: (p) => PAYMENT_METHODS[p.method] || p.method || "—" },
+    { key: "reference", header: "Reference", cell: (p) => p.reference || "—" },
+    { key: "amount", header: `Amount (${cur})`, numeric: true, cell: (p) => <Num value={p.amount} />, total: <Num value={paid} /> },
+  ];
 
   return (
-    <DocumentPage
-      chatter={
-        <Chatter
-          items={toChatter(actions, audit)}
-          composer={approval ? <Button size="sm" variant="outline" className="w-full" onClick={() => setDecision("comment")}><MessageSquare size={14} /> Log a note</Button> : undefined}
-        />
-      }
-    >
-      <ControlBar
-        breadcrumbs={[{ title: "Purchase", link: "/dashboard/procurement" }, { title: "Purchase orders", link: "/dashboard/procurement/purchase-orders" }, { title: po.number }]}
-        actions={actionsBar}
-        steps={STEPS}
-        current={stepOf(po)}
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to purchase orders", to: LIST }}
+        number={po.number}
+        type={`${po.source === "direct" ? "Direct purchase order" : "Purchase order"}${po.revision > 0 ? ` · revision ${po.revision}` : ""}`}
+        status={PO_STATUS[po.status]?.label || po.status}
+        statusNote={statusNote ? <span className={cn(late && "text-ims-danger")}>{statusNote}</span> : undefined}
+        title={po.title || "Untitled order"}
+        facts={[
+          { label: "Supplier", value: po.expand?.supplier?.name || "—" },
+          po.expand?.department?.name,
+          po.expected_delivery_date ? { label: "Expected", value: fmtDate(po.expected_delivery_date) } : null,
+          <strong key="total" className="font-bold text-ims-text">{amount(po.grand_total)}</strong>,
+        ]}
+        actions={
+          <>
+            <MoreMenu items={more} />
+            {shownSecondary.map((a) => renderAct(a, "secondary"))}
+            {primaryAct && renderAct(primaryAct, "primary")}
+          </>
+        }
       />
 
       {isApprover && (
-        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900">
-          <Clock size={15} /> Waiting for your approval at step “{approval.steps?.[approval.current_level]?.name}”.
-        </div>
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+          <Clock size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Waiting for your decision{stepName ? ` at step “${stepName}”` : ""}. Approve it, return it for changes, or reject it.</span>
+        </p>
       )}
       {late && (
-        <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-[13px] text-red-800">
-          <AlertTriangle size={15} /> Delivery was expected on {dateOf(po.expected_delivery_date)} and is overdue. Follow up with the supplier.
-        </div>
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-danger/30 bg-ims-danger-bg px-4 py-3 text-t-body text-ims-danger">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Delivery was expected on {fmtDate(po.expected_delivery_date)} ({late.toLowerCase()}). Follow up with the supplier.</span>
+        </p>
       )}
       {openExceptions > 0 && (
-        <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-[13px] text-red-800">
-          <AlertTriangle size={15} /> {openExceptions} vendor bill{openExceptions > 1 ? "s have" : " has"} a three-way match exception.{" "}
-          <button type="button" className="font-medium underline" onClick={() => setTab("bills")}>Review</button>
-        </div>
+        <p role="status" className="flex flex-wrap items-start gap-2 rounded-card border border-ims-danger/30 bg-ims-danger-bg px-4 py-3 text-t-body text-ims-danger">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>
+            {openExceptions} supplier bill{openExceptions > 1 ? "s have" : " has"} a three-way match exception.{" "}
+            <button type="button" className="font-bold underline underline-offset-2 hover:no-underline" onClick={() => setTab("receipts")}>Review the bills</button>
+          </span>
+        </p>
+      )}
+      {po.status === "cancelled" && po.cancel_reason && (
+        <p className="rounded-card border border-ims-border bg-ims-card px-4 py-3 text-t-body text-ims-body">
+          <span className="font-semibold text-ims-text">Cancelled.</span> {po.cancel_reason}
+        </p>
       )}
 
-      <DocumentFlow po={po} receipts={receipts} invoices={invoices} payments={payments} returns={q.data!.returns} onTab={setTab} />
-
-      {po.status !== "cancelled" && (
-        <BudgetPanel
-          documentType="purchase_order" documentId={po.id} number={po.number} lineId={po.budget_line} department={po.department}
-          amount={Math.round(po.grand_total || 0)} committed={po.committed_amount || 0} overrideId={po.budget_override}
-          editable={editable && canManage && !po.committed_amount} allowOverride={editable}
-          onChangeLine={(id) => pocketbase.collection("purchase_orders").update(po.id, { budget_line: id })} onDone={refresh}
+      {showMoney && (
+        <KpiBand
+          items={[
+            { label: "Received", value: amount(po.received_value), sub: `${pct(po.received_value)}% of the order`, onClick: () => setTab("receipts") },
+            { label: "Still to receive", value: amount(Math.max((po.grand_total || 0) - (po.received_value || 0), 0)), sub: `${receipts.length} deliver${receipts.length === 1 ? "y" : "ies"} so far` },
+            {
+              label: "Billed",
+              value: amount(po.invoiced_value || 0),
+              sub: openExceptions ? `${openExceptions} match exception${openExceptions > 1 ? "s" : ""}` : `${activeBills.length} bill${activeBills.length === 1 ? "" : "s"}`,
+              tone: openExceptions ? "danger" : "default",
+              onClick: () => setTab("receipts"),
+            },
+            { label: "Paid", value: amount(paid), sub: `${pct(paid)}% of the order`, tone: paid > 0 && paid >= po.grand_total - 1 ? "success" : "default", onClick: () => setTab("receipts") },
+          ]}
         />
       )}
 
-      <SmartButtons
-        items={[
-          ...(po.expand?.contract ? [{ icon: FileSignature, label: "Contract", value: po.expand.contract.number, onClick: () => navigate(`/dashboard/procurement/contracts/${po.contract}`) }] : []),
-          ...(q.data!.returns.length ? [{ icon: Undo2, label: "Returns", value: q.data!.returns.length, onClick: () => navigate(`/dashboard/procurement/returns/${q.data!.returns[0].id}`) }] : []),
-          { icon: Truck, label: "Receipts", value: receipts.length, onClick: () => setTab("receipts") },
-          { icon: FileText, label: "Vendor bills", value: activeBills.length, onClick: () => setTab("bills"), tone: openExceptions ? "danger" : "default" },
-          { icon: Banknote, label: "Paid", value: money(paid, po.currency), onClick: () => setTab("bills") },
-          ...(approval ? [{ icon: ShieldCheck, label: "Approval", value: approval.status === "pending" ? `Step ${approval.current_level + 1}/${approval.steps?.length || 1}` : approval.status.charAt(0).toUpperCase() + approval.status.slice(1).replace(/_/g, " "), onClick: () => setTab("approval"), tone: approval.status === "pending" ? ("warning" as const) : ("default" as const) }] : []),
+      <Tabs
+        label="Purchase order sections"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "items", label: "Items", count: items.length },
+          { key: "receipts", label: "Deliveries & bills" },
+          { key: "approval", label: "Approvals" },
+          { key: "activity", label: "Activity" },
         ]}
       />
 
-      <Sheet ribbon={ribbon}>
-        <SheetTitle
-          kicker={po.source === "direct" ? "Direct purchase order" : "Purchase order"}
-          title={po.number}
-          badges={
-            <>
-              <StatusBadge status={po.status} map={PO_STATUS} />
-              {po.source === "direct" && <Badge tone="warning">Direct</Badge>}
-              {po.revision > 0 && <Badge tone="violet">Revision {po.revision}</Badge>}
-            </>
-          }
-        />
-        <FieldGrid
-          left={[
-            {
-              label: "Vendor",
-              value: <Link className="font-medium text-primaryDark hover:underline" to={`/dashboard/procurement/suppliers/${po.supplier}`}>{po.expand?.supplier?.name}</Link>,
-              hint: [po.expand?.supplier?.email, po.expand?.supplier?.phone].filter(Boolean).join(" · "),
-            },
-            { label: "Vendor reference", value: po.expand?.supplier?.code },
-            { label: "Subject", value: po.title },
-            { label: "Requisition", value: po.requisition && <Link className="text-primaryDark hover:underline" to={`/dashboard/procurement/requisitions/${po.requisition}`}>{po.expand?.requisition?.number}</Link> },
-            { label: "Source", value: po.expand?.rfq ? <Link className="text-primaryDark hover:underline" to={`/dashboard/procurement/rfqs/${po.rfq}`}>{po.expand.rfq.number}</Link> : "Direct purchase" },
-          ]}
-          right={[
-            { label: "Order date", value: dateOf(po.order_date) },
-            { label: "Expected arrival", value: <span className={cn(late && "font-medium text-red-600")}>{dateOf(po.expected_delivery_date)}{late ? " · late" : ""}</span> },
-            { label: "Deliver to", value: po.delivery_location || po.expand?.branch?.name },
-            { label: "Buyer", value: po.expand?.buyer?.name },
-            { label: "Department", value: po.expand?.department?.name, hint: po.expand?.requester?.name ? `Requested by ${po.expand.requester.name}` : undefined },
-          ]}
-        />
-
-        <Notebook
-          active={tab}
-          onChange={setTab}
-          tabs={[
-            { key: "lines", label: "Products", count: items.length },
-            { key: "receipts", label: "Receipts", count: receipts.length },
-            { key: "bills", label: "Bills & payments", count: activeBills.length },
-            { key: "other", label: "Other information" },
-            ...((po.revisions || []).length ? [{ key: "revisions", label: "Revisions", count: po.revisions.length }] : []),
-            { key: "documents", label: "Documents", count: (po.attachments || []).length },
-            ...(approval ? [{ key: "approval", label: "Approval" }] : []),
-          ]}
-        />
-
-        <div className="pt-4">
-          {tab === "lines" && (
-            <>
-              <div className="overflow-x-auto">
-                <table className="dnr-grid w-full min-w-[760px] text-[13px]">
-                  <thead>
-                    <tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      <th className={cn(th, "w-10")}>#</th><th className={th}>Product</th><th className={th}>Type</th>
-                      <th className={cn(th, "text-right")}>Quantity</th><th className={cn(th, "text-right")}>Received</th><th className={cn(th, "text-right")}>Billed</th>
-                      <th className={cn(th, "text-right")}>Unit price</th>{hasDisc && <th className={cn(th, "text-right")}>Disc. %</th>}<th className={cn(th, "text-right")}>Taxes</th><th className={cn(th, "text-right")}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {items.map((l) => {
-                      const rec = l.received_qty || 0;
-                      const bil = billedQty[l.line] || 0;
-                      return (
-                        <tr key={l.line} className="hover:bg-slate-50/60">
-                          <td className="px-3 py-2.5 text-slate-500">{l.line}</td>
-                          <td className="px-3 py-2.5"><p className="font-medium text-slate-800">{l.description}</p>{(l.brand || l.specification) && <p className="text-[12px] text-slate-500">{[l.brand, l.specification].filter(Boolean).join(" · ")}</p>}</td>
-                          <td className="px-3 py-2.5"><Badge tone={LINE_TYPES[l.line_type]?.tone}>{LINE_TYPES[l.line_type]?.label}</Badge></td>
-                          <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">{l.quantity} <span className="text-[12px] text-slate-500">{l.unit}</span></td>
-                          <td className={cn("px-3 py-2.5 text-right tabular-nums", rec >= l.quantity ? "text-emerald-700" : rec > 0 ? "text-amber-700" : "text-slate-400")}>
-                            {rec}{l.rejected_qty ? <span className="block text-[11px] text-red-600">{l.rejected_qty} rejected</span> : null}
-                          </td>
-                          <td className={cn("px-3 py-2.5 text-right tabular-nums", bil >= rec && bil > 0 ? "text-emerald-700" : bil > 0 ? "text-amber-700" : "text-slate-400")}>{bil}</td>
-                          <td className="px-3 py-2.5 text-right tabular-nums">{Math.round(l.unit_price).toLocaleString()}</td>
-                          {hasDisc && <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{l.discount_pct || ""}</td>}
-                          <td className="px-3 py-2.5 text-right text-slate-600">{l.tax_rate ? `VAT ${l.tax_rate}%` : "Exempt"}</td>
-                          <td className="px-3 py-2.5 text-right font-medium tabular-nums">{Math.round(l.total).toLocaleString()}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <p className="mt-4 max-w-md text-[12.5px] text-slate-500">{po.payment_terms ? <>Payment terms: <span className="text-slate-700">{po.payment_terms}</span></> : "Define payment terms on the order."}</p>
-                <Totals
-                  rows={[
-                    ["Untaxed amount", money(po.subtotal - (po.discount_total || 0), po.currency)],
-                    ...(po.discount_total ? [["Discount", `− ${money(po.discount_total, po.currency)}`] as [string, string]] : []),
-                    ["VAT", money(po.tax_total, po.currency)],
-                    ...(po.delivery_cost + po.other_charges ? [["Delivery & other charges", money(po.delivery_cost + po.other_charges, po.currency)] as [string, string]] : []),
-                  ]}
-                  total={["Total", money(po.grand_total, po.currency)]}
-                />
-              </div>
-            </>
-          )}
-
-          {tab === "receipts" && (
-            !receipts.length ? (
-              <EmptyState icon={Truck} text={receivable ? "Nothing received yet." : "Deliveries can be recorded once the order is approved."} action={canPerform("receive_goods") && receivable && <Button size="sm" onClick={() => navigate(`/dashboard/procurement/purchase-orders/${po.id}/receive`)}><PackageCheck size={14} /> Receive products</Button>} />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="dnr-grid w-full min-w-[760px] text-[13px]">
-                  <thead><tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Reference</th><th className={th}>Date</th><th className={th}>Location</th><th className={th}>Received by</th><th className={th}>Lines</th><th className={cn(th, "text-right")}>Accepted value</th><th className={th} /></tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {receipts.map((g: any) => (
-                      <tr key={g.id}>
-                        <td className="px-3 py-2.5 font-medium">{g.number}{g.delivery_note_number && <span className="block text-[12px] font-normal text-slate-500">DN {g.delivery_note_number}</span>}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">{dateOf(g.receipt_date)}</td>
-                        <td className="px-3 py-2.5 text-slate-600">{g.receipt_type === "service" ? "Service confirmation" : g.expand?.warehouse?.name || "—"}</td>
-                        <td className="px-3 py-2.5">{g.expand?.received_by?.name}</td>
-                        <td className="px-3 py-2.5 text-[12.5px] text-slate-600">
-                          {g.items.map((i: any) => <p key={i.line}>{i.description}: {i.accepted}{i.rejected ? <span className="text-red-600"> · {i.rejected} rejected ({i.rejection_reason})</span> : ""}</p>)}
-                        </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">{money(g.accepted_value, po.currency)}</td>
-                        <td className="px-3 py-2.5 text-right"><a className="inline-flex items-center gap-1 text-[12.5px] text-primaryDark hover:underline" href={`/print/grn/${g.id}`} target="_blank" rel="noreferrer"><Printer size={13} /> Print</a>{(canPerform("receive_goods") || canManage) && (g.items || []).some((i: any) => i.line_type === "goods" && i.accepted > 0) && <button type="button" onClick={() => setReturning(g.id)} className="ml-3 inline-flex items-center gap-1 text-[12.5px] text-red-700 hover:underline"><Undo2 size={13} /> Return</button>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
-          )}
-
-          {tab === "bills" && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {[
-                  ["Ordered", po.grand_total],
-                  ["Received", po.received_value],
-                  ["Billed", po.invoiced_value || 0],
-                  ["Paid", paid],
-                ].map(([k, v]: any) => {
-                  const pct = po.grand_total ? Math.min(100, Math.round((v / po.grand_total) * 100)) : 0;
-                  return (
-                    <div key={k} className="rounded-md border border-slate-200 px-3 py-2.5">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{k}</p>
-                      <p className="mt-0.5 text-[15px] font-semibold tabular-nums">{money(v, po.currency)}</p>
-                      <div className="mt-1.5 h-1.5 rounded-full bg-slate-100"><div className="h-1.5 rounded-full bg-primary" style={{ width: `${pct}%` }} /></div>
-                      <p className="mt-0.5 text-[11px] tabular-nums text-slate-500">{pct}% of order</p>
-                    </div>
-                  );
-                })}
-              </div>
-              {!invoices.length ? (
-                <EmptyState icon={Receipt} text={po.received_value > 0 ? "No vendor bill recorded yet." : "Bills can be recorded once goods or services have been received."} action={canBill && <Button size="sm" onClick={() => setBilling(true)}><Receipt size={14} /> Create bill</Button>} />
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="dnr-grid w-full min-w-[760px] text-[13px]">
-                    <thead><tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Bill</th><th className={th}>Vendor ref.</th><th className={th}>Bill date</th><th className={th}>Due</th><th className={cn(th, "text-right")}>Total</th><th className={cn(th, "text-right")}>Balance</th><th className={th}>Status</th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {invoices.map((i: any) => (
-                        <tr key={i.id} className="cursor-pointer hover:bg-slate-50" onClick={() => navigate(`/dashboard/finance/invoices/${i.id}`)}>
-                          <td className="px-3 py-2.5 font-medium text-primaryDark">{i.number}</td>
-                          <td className="px-3 py-2.5 text-slate-600">{i.supplier_invoice_number}</td>
-                          <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">{dateOf(i.invoice_date)}</td>
-                          <td className={cn("whitespace-nowrap px-3 py-2.5", i.balance > 0 && i.due_date && isPast(new Date(i.due_date)) ? "font-medium text-red-600" : "text-slate-600")}>{dateOf(i.due_date)}</td>
-                          <td className="px-3 py-2.5 text-right tabular-nums">{money(i.total, i.currency)}</td>
-                          <td className="px-3 py-2.5 text-right font-medium tabular-nums">{money(i.balance, i.currency)}</td>
-                          <td className="px-3 py-2.5"><StatusBadge status={i.status} map={INVOICE_STATUS} /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {payments.length > 0 && (
-                <div>
-                  <h4 className="mb-2 text-[13px] font-semibold text-slate-800">Payments</h4>
-                  <div className="overflow-x-auto">
-                    <table className="dnr-grid w-full min-w-[640px] text-[13px]">
-                      <thead><tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Payment</th><th className={th}>Date</th><th className={th}>Bill</th><th className={th}>Method</th><th className={th}>Reference</th><th className={cn(th, "text-right")}>Amount</th></tr></thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {payments.map((p: any) => (
-                          <tr key={p.id}>
-                            <td className="px-3 py-2.5 font-medium">{p.number}</td>
-                            <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">{dateOf(p.payment_date)}</td>
-                            <td className="px-3 py-2.5">{p.expand?.invoice?.number}</td>
-                            <td className="px-3 py-2.5 text-slate-600">{PAYMENT_METHODS[p.method] || p.method}</td>
-                            <td className="px-3 py-2.5 text-slate-600">{p.reference || "—"}</td>
-                            <td className="px-3 py-2.5 text-right font-medium tabular-nums">{money(p.amount, p.currency)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {tab === "other" && (
-            <FieldGrid
-              left={[
-                { label: "Payment terms", value: po.payment_terms },
-                { label: "Delivery terms", value: po.delivery_terms },
-                { label: "Delivery location", value: po.delivery_location },
-                { label: "Office", value: po.expand?.branch?.name },
-                { label: "Category", value: po.expand?.category?.name },
-              ]}
-              right={[
-                { label: "Currency", value: po.currency },
-                { label: "Sent to supplier", value: dateOf(po.sent_at, "d MMM yyyy, HH:mm") },
-                { label: "Direct purchase reason", value: po.source === "direct" ? po.justification : "" },
-                { label: "Cancellation reason", value: po.cancel_reason },
-                { label: "Internal notes", value: po.notes },
-              ]}
-            />
-          )}
-
-          {tab === "revisions" && <Revisions po={po} />}
-          {tab === "documents" && <DocumentUploads collection="purchase_orders" record={po} canAdd={canManage || canPerform("receive_goods") || canPerform("approve_purchase_orders") || canPerform("manage_invoices")} canRemove={canManage && editable} onChange={refresh} hint="Signed order, delivery notes, correspondence…" />}
-          {tab === "approval" && <ApprovalTracker approval={approval} actions={actions} />}
+      {tab === "details" && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="min-w-0 space-y-4 xl:col-span-2">
+            <Card>
+              <CardHeader title="Order" />
+              <Details
+                items={[
+                  {
+                    label: "Supplier",
+                    value: <Link className="font-semibold text-ims-link hover:underline" to={`/dashboard/procurement/suppliers/${po.supplier}`}>{po.expand?.supplier?.name}</Link>,
+                    hint: [po.expand?.supplier?.email, po.expand?.supplier?.phone].filter(Boolean).join(" · ") || undefined,
+                  },
+                  { label: "Supplier code", value: po.expand?.supplier?.code },
+                  { label: "Order date", value: po.order_date ? fmtDate(po.order_date) : null },
+                  {
+                    label: "Expected delivery",
+                    value: po.expected_delivery_date ? <span className={cn(late && "font-semibold text-ims-danger")}>{fmtDate(po.expected_delivery_date)}</span> : null,
+                    hint: late ? <span className="text-ims-danger">{late}</span> : undefined,
+                  },
+                  { label: "Deliver to", value: po.delivery_location || po.expand?.branch?.name },
+                  { label: "Buyer", value: po.expand?.buyer?.name },
+                  { label: "Department", value: po.expand?.department?.name, hint: po.expand?.requester?.name ? `Requested by ${po.expand.requester.name}` : undefined },
+                  { label: "Category", value: po.expand?.category?.name },
+                  { label: "Office", value: po.expand?.branch?.name },
+                  { label: "Currency", value: po.currency },
+                  { label: "Payment terms", value: po.payment_terms },
+                  { label: "Delivery terms", value: po.delivery_terms },
+                  { label: "Sent to supplier", value: po.sent_at ? fmtDateTime(po.sent_at) : null },
+                  { label: "Created", value: fmtDateTime(po.created) },
+                  ...(po.source === "direct" ? [{ label: "Why a direct purchase", value: po.justification ? <span className="whitespace-pre-line">{po.justification}</span> : null, wide: true }] : []),
+                  ...(po.cancel_reason ? [{ label: "Cancellation reason", value: <span className="whitespace-pre-line">{po.cancel_reason}</span>, wide: true }] : []),
+                  ...(po.notes ? [{ label: "Internal notes", value: <span className="whitespace-pre-line">{po.notes}</span>, wide: true }] : []),
+                ]}
+              />
+            </Card>
+            {(po.revisions || []).length > 0 && <Revisions po={po} />}
+          </div>
+          <div className="min-w-0 space-y-4">
+            {po.status !== "cancelled" && (
+              <BudgetPanel
+                documentType="purchase_order" documentId={po.id} number={po.number} lineId={po.budget_line} department={po.department}
+                amount={Math.round(po.grand_total || 0)} committed={po.committed_amount || 0} overrideId={po.budget_override}
+                editable={editable && canManage && !po.committed_amount} allowOverride={editable}
+                onChangeLine={(id) => pocketbase.collection("purchase_orders").update(po.id, { budget_line: id })} onDone={refresh} stacked
+              />
+            )}
+            <DocumentFlow po={po} receipts={receipts} invoices={invoices} payments={payments} returns={returns} onTab={setTab} />
+            <Card>
+              <CardHeader title="Documents" subtitle="Signed order, delivery notes and correspondence." />
+              <DocumentUploads collection="purchase_orders" record={po} canAdd={canManage || canPerform("receive_goods") || canPerform("approve_purchase_orders") || canPerform("manage_invoices")} canRemove={canManage && editable} onChange={refresh} hint="PDF, images, Word or Excel, up to 20 MB each" />
+            </Card>
+          </div>
         </div>
-      </Sheet>
+      )}
+
+      {tab === "items" && (
+        <Card padded={false}>
+          <div className="px-5 pt-5">
+            <CardHeader title="Items and services" subtitle={po.source === "direct" ? "Direct purchase: prices can be corrected in the draft." : "Prices are those of the awarded quotation."} />
+          </div>
+          <DataTable columns={lineColumns} rows={items} rowKey={(l, i) => String(l.line ?? i)} minWidth={hasDisc ? 980 : 900} caption="Items and services" empty={<EmptyState compact text="No items on this order." />} />
+          <div className="flex flex-col gap-4 border-t border-ims-divider px-5 pb-5 sm:flex-row sm:items-start sm:justify-between">
+            <p className="mt-4 max-w-md text-t-small text-ims-muted">
+              {po.payment_terms ? (
+                <>
+                  Payment terms: <span className="text-ims-body">{po.payment_terms}</span>
+                </>
+              ) : (
+                "No payment terms on the order yet."
+              )}
+            </p>
+            <Totals
+              rows={[
+                ["Untaxed amount", amount(po.subtotal - (po.discount_total || 0))],
+                ...(po.discount_total ? [["Discount", `− ${amount(po.discount_total)}`] as [string, string]] : []),
+                ["VAT", amount(po.tax_total)],
+                ...(po.delivery_cost + po.other_charges ? [["Delivery and other charges", amount(po.delivery_cost + po.other_charges)] as [string, string]] : []),
+              ]}
+              total={["Total", amount(po.grand_total)]}
+            />
+          </div>
+        </Card>
+      )}
+
+      {tab === "receipts" && (
+        <div className="space-y-4">
+          <Card padded={false}>
+            <div className="px-5 pt-5">
+              <CardHeader
+                title="Deliveries"
+                subtitle="Goods received notes and service confirmations for this order."
+                action={canReceive && receipts.length > 0 ? <Button icon={PackageCheck} onClick={goReceive}>Receive delivery</Button> : undefined}
+              />
+            </div>
+            <DataTable
+              columns={receiptColumns}
+              rows={receipts}
+              rowKey={(g) => g.id}
+              minWidth={860}
+              caption="Deliveries"
+              rowActions={(g) => [
+                { label: "Print receipt", icon: Printer, onSelect: () => window.open(`/print/grn/${g.id}`, "_blank", "noopener,noreferrer") },
+                ...((canPerform("receive_goods") || canManage) && (g.items || []).some((i: any) => i.line_type === "goods" && i.accepted > 0)
+                  ? [{ label: "Return to supplier", icon: Undo2, onSelect: () => setReturning(g.id) }]
+                  : []),
+              ]}
+              empty={
+                <EmptyState
+                  compact
+                  icon={PackageCheck}
+                  text={receivable ? "Nothing received yet." : "Deliveries can be recorded once the order is approved."}
+                  action={canReceive ? <Button variant="primary" icon={PackageCheck} onClick={goReceive}>Receive delivery</Button> : undefined}
+                />
+              }
+            />
+          </Card>
+
+          <Card padded={false}>
+            <div className="px-5 pt-5">
+              <CardHeader
+                title="Supplier bills"
+                subtitle="Each bill is matched against the order and what was received."
+                action={canBill && invoices.length > 0 ? <Button icon={Receipt} onClick={() => setBilling(true)}>Create bill</Button> : undefined}
+              />
+            </div>
+            <DataTable
+              columns={billColumns}
+              rows={invoices}
+              rowKey={(i) => i.id}
+              minWidth={820}
+              caption="Supplier bills"
+              onRowClick={(i) => navigate(`/dashboard/finance/invoices/${i.id}`)}
+              empty={
+                <EmptyState
+                  compact
+                  icon={Receipt}
+                  text={po.received_value > 0 ? "No supplier bill recorded yet." : "Bills can be recorded once goods or services have been received."}
+                  action={canBill ? <Button variant="primary" icon={Receipt} onClick={() => setBilling(true)}>Create bill</Button> : undefined}
+                />
+              }
+            />
+          </Card>
+
+          {payments.length > 0 && (
+            <Card padded={false}>
+              <div className="px-5 pt-5">
+                <CardHeader title="Payments" subtitle="Payments made against the bills of this order." />
+              </div>
+              <DataTable columns={paymentColumns} rows={payments} rowKey={(p) => p.id} minWidth={680} caption="Payments" />
+            </Card>
+          )}
+        </div>
+      )}
+
+      {tab === "approval" && <ApprovalTracker approval={approval} actions={actions} />}
+
+      {tab === "activity" && (
+        // The avatar wrapper in Chatter stretches with the row; keep its status dot on the avatar.
+        <div className="[&_ol>li>div.relative]:self-start">
+          <Chatter
+            items={toChatter(actions, audit)}
+            composer={approval ? <Button size="sm" icon={MessageSquare} onClick={() => setDecision("comment")}>Add a comment</Button> : undefined}
+          />
+        </div>
+      )}
+
       {amending && <AmendDialog po={po} onClose={() => setAmending(false)} onDone={() => { setAmending(false); refresh(); }} />}
       {returning && <ReturnFormDialog grnId={returning} onClose={() => setReturning("")} />}
 
@@ -429,38 +534,70 @@ export default function PurchaseOrderDetail() {
       <StepDialog po={po} step={step} onClose={() => setStep(null)} onDone={() => { setStep(null); refresh(); }} />
       {editing && <EditPo po={po} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh(); }} />}
       <RecordInvoiceDialog po={po} open={billing} onClose={() => { setBilling(false); refresh(); }} />
-    </DocumentPage>
+    </Page>
+  );
+}
+
+/** Keeps a document number on one line inside a sentence. */
+function withNumber(text: string, number: string) {
+  const i = number ? text.indexOf(number) : -1;
+  if (i < 0) return text;
+  return (
+    <>
+      {text.slice(0, i)}
+      <span className="whitespace-nowrap">{number}</span>
+      {text.slice(i + number.length)}
+    </>
   );
 }
 
 function StepDialog({ po, step, onClose, onDone }: { po: any; step: "send" | "acknowledge" | "close" | null; onClose: () => void; onDone: () => void }) {
   const [reason, setReason] = React.useState("");
-  React.useEffect(() => setReason(""), [step]);
-  const run = useMutation(() => purchasingApi.action(po.id, step!, { reason }), {
-    onSuccess: () => { toast.success(`${po.number} updated`); onDone(); },
-    onError: (e) => { toast.error(errorMessage(e)); },
-  });
+  const [tried, setTried] = React.useState(false);
+  React.useEffect(() => {
+    setReason("");
+    setTried(false);
+  }, [step]);
   const copy = {
-    send: { title: `Send ${po.number} to ${po.expand?.supplier?.name}?`, text: "Print or save the PO as PDF and send it to the supplier. This records the date it was issued." },
-    acknowledge: { title: `Supplier acknowledged ${po.number}?`, text: "Record that the supplier confirmed the order and delivery date." },
-    close: { title: `Close ${po.number}?`, text: "No further deliveries will be accepted. Use this when the remaining quantity will not be delivered." },
+    send: { title: `Send ${po.number} to ${po.expand?.supplier?.name || "the supplier"}?`, text: "Print or save the order as PDF and send it to the supplier. This records the date it was issued.", verb: "Send to supplier", done: `${po.number} sent to the supplier` },
+    acknowledge: { title: `Record that the supplier acknowledged ${po.number}?`, text: "The supplier confirmed the order and the delivery date.", verb: "Record acknowledgement", done: `${po.number} acknowledged by the supplier` },
+    close: { title: `Close ${po.number}?`, text: "No further deliveries will be accepted. Use this when the remaining quantity will not be delivered.", verb: "Close order", done: `${po.number} closed` },
   } as const;
   const c = step ? copy[step] : null;
+  const run = useMutation(() => purchasingApi.action(po.id, step!, { reason }), {
+    onSuccess: () => { toast.success(c?.done || `${po.number} updated`); onDone(); },
+    onError: (e) => { toast.error(errorMessage(e)); },
+  });
+  const missing = step === "close" && !reason.trim();
   return (
-    <Dialog open={Boolean(step)} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md bg-white">
-        <DialogHeader><DialogTitle>{c?.title}</DialogTitle><DialogDescription>{c?.text}</DialogDescription></DialogHeader>
-        {step === "close" && (
-          <label className="block text-[12.5px] font-medium text-slate-700">Reason <span className="text-red-600">*</span>
-            <textarea className="mt-1 h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-[13px]" value={reason} onChange={(e) => setReason(e.target.value)} />
-          </label>
-        )}
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Back</Button>
-          <Button disabled={run.isLoading || (step === "close" && !reason.trim())} onClick={() => run.mutate()}>Confirm</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={Boolean(step)}
+      onClose={run.isLoading ? () => undefined : onClose}
+      size="sm"
+      title={c ? withNumber(c.title, po.number) : ""}
+      description={c?.text}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={run.isLoading}>Cancel</Button>
+          <Button
+            variant="primary"
+            loading={run.isLoading}
+            onClick={() => {
+              setTried(true);
+              if (!missing) run.mutate();
+            }}
+          >
+            {c?.verb}
+          </Button>
+        </>
+      }
+    >
+      {step === "close" && (
+        <Field label="Reason" required htmlFor="po-close-reason" error={tried && missing ? "Say why the rest of the order will not be delivered." : null}>
+          <Textarea id="po-close-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="For example: the supplier discontinued the item" invalid={tried && missing} />
+        </Field>
+      )}
+    </Modal>
   );
 }
 
@@ -476,105 +613,177 @@ function EditPo({ po, onClose, onSaved }: { po: any; onClose: () => void; onSave
   const [items, setItems] = React.useState<any[]>(po.items || []);
   const save = useMutation(
     () => pocketbase.collection("purchase_orders").update(po.id, { ...v, expected_delivery_date: v.expected_delivery_date ? `${v.expected_delivery_date} 00:00:00.000Z` : "", items }),
-    { onSuccess: () => { toast.success("Purchase order updated"); onSaved(); }, onError: (e) => { toast.error(errorMessage(e)); } }
+    { onSuccess: () => { toast.success(`${po.number} saved`); onSaved(); }, onError: (e) => { toast.error(errorMessage(e)); } }
   );
   const set = (k: string) => (e: any) => setV((x) => ({ ...x, [k]: e.target.value }));
+  const setItem = (i: number, patch: Record<string, unknown>) => setItems((x) => x.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  const cur = po.currency || "RWF";
+
+  const columns: Column<any>[] = [
+    { key: "line", header: "Line", clamp: true, cell: (l) => l.description, sub: (l) => `Ordered ${fmtNumber(l.quantity, true)} ${l.unit || ""}`.trim() },
+    ...(amended
+      ? [{
+          key: "quantity",
+          header: "Quantity",
+          width: "120px",
+          cell: (l: any, i: number) => (
+            <Input type="number" min={l.received_qty || 0} step="any" inputMode="decimal" className="text-right tabular-nums" value={l.quantity} onChange={(e) => setItem(i, { quantity: Number(e.target.value) })} aria-label={`Line ${l.line} quantity`} />
+          ),
+          sub: (l: any) => `At least ${fmtNumber(l.received_qty || 0, true)} (received)`,
+        }]
+      : []),
+    {
+      key: "type",
+      header: "Receive as",
+      width: "240px",
+      cell: (l, i) => (
+        <Select value={l.line_type} onChange={(e) => setItem(i, { line_type: e.target.value })} aria-label={`Line ${l.line} type`}>
+          {Object.entries(LINE_TYPES).map(([k, t]) => (
+            <option key={k} value={k}>{t.label}</option>
+          ))}
+        </Select>
+      ),
+      sub: (l) => LINE_TYPES[l.line_type]?.hint,
+    },
+    ...(direct
+      ? [
+          {
+            key: "price",
+            header: `Unit price (${cur})`,
+            width: "190px",
+            cell: (l: any, i: number) => <MoneyInput value={l.unit_price} onChange={(n) => setItem(i, { unit_price: Number(n) || 0 })} />,
+          },
+          {
+            key: "tax",
+            header: "Tax (%)",
+            width: "96px",
+            cell: (l: any, i: number) => (
+              <Input type="number" min={0} max={100} step="any" inputMode="decimal" className="text-right tabular-nums" value={l.tax_rate} onChange={(e) => setItem(i, { tax_rate: Number(e.target.value) })} aria-label={`Line ${l.line} tax`} />
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto bg-white">
-        <DialogHeader>
-          <DialogTitle>Edit {po.number}</DialogTitle>
-          <DialogDescription>{direct ? "Direct purchase: prices can be corrected to the supplier's actual offer." : "Prices are locked to the awarded quotation. You can change delivery details and how each line is received."}</DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block text-[12.5px] font-medium text-slate-700">Expected delivery<input type="date" className={cn(inputCls, "mt-1")} value={v.expected_delivery_date} onChange={set("expected_delivery_date")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700">Delivery location<input className={cn(inputCls, "mt-1")} value={v.delivery_location} onChange={set("delivery_location")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700">Payment terms<input className={cn(inputCls, "mt-1")} value={v.payment_terms} onChange={set("payment_terms")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700">Delivery terms<input className={cn(inputCls, "mt-1")} value={v.delivery_terms} onChange={set("delivery_terms")} /></label>
-          {direct && <label className="block text-[12.5px] font-medium text-slate-700">Delivery cost<input type="number" min={0} className={cn(inputCls, "mt-1")} value={v.delivery_cost} onChange={set("delivery_cost")} /></label>}
-          {direct && <label className="block text-[12.5px] font-medium text-slate-700">Other charges<input type="number" min={0} className={cn(inputCls, "mt-1")} value={v.other_charges} onChange={set("other_charges")} /></label>}
-          <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">Contract
-            <select className={cn(inputCls, "mt-1")} value={v.contract} onChange={set("contract")}>
-              <option value="">Not under a contract</option>
-              {(contracts.data || []).map((c: any) => <option key={c.id} value={c.id}>{c.number} — {c.title} (remaining {money(c.remaining_value)})</option>)}
-            </select>
-            <span className="mt-1 block text-[11.5px] font-normal text-slate-500">When linked, the order must fit the contract period and remaining value.</span>
-          </label>
-          <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">Notes<textarea className={cn(inputCls, "mt-1 h-16 py-2")} value={v.notes} onChange={set("notes")} /></label>
-        </div>
-        <table className="dnr-grid w-full text-[13px]">
-          <thead><tr className="border-y border-slate-100 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-2 py-2">Line</th>{amended && <th className="px-2 py-2">Quantity</th>}<th className="px-2 py-2">Receive as</th>{direct && <th className="px-2 py-2">Unit price</th>}{direct && <th className="px-2 py-2">Tax %</th>}</tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {items.map((l, i) => (
-              <tr key={l.line}>
-                <td className="px-2 py-2">{l.description} <span className="text-slate-500">× {l.quantity}</span></td>
-                {amended && <td className="w-28 px-2 py-2"><input type="number" min={l.received_qty || 0} className={inputCls} value={l.quantity} onChange={(e) => setItems((x) => x.map((it, idx) => (idx === i ? { ...it, quantity: Number(e.target.value) } : it)))} aria-label={`Line ${l.line} quantity`} /><span className="text-[11px] text-slate-500">min {l.received_qty || 0} received</span></td>}
-                <td className="px-2 py-2">
-                  <select className={inputCls} value={l.line_type} onChange={(e) => setItems((x) => x.map((it, idx) => (idx === i ? { ...it, line_type: e.target.value } : it)))} aria-label={`Line ${l.line} type`}>
-                    {Object.entries(LINE_TYPES).map(([k, t]) => <option key={k} value={k}>{t.label} — {t.hint}</option>)}
-                  </select>
-                </td>
-                {direct && <td className="px-2 py-2"><input type="number" min={0} className={inputCls} value={l.unit_price} onChange={(e) => setItems((x) => x.map((it, idx) => (idx === i ? { ...it, unit_price: Number(e.target.value) } : it)))} aria-label={`Line ${l.line} price`} /></td>}
-                {direct && <td className="px-2 py-2"><input type="number" min={0} max={100} className={inputCls} value={l.tax_rate} onChange={(e) => setItems((x) => x.map((it, idx) => (idx === i ? { ...it, tax_rate: Number(e.target.value) } : it)))} aria-label={`Line ${l.line} tax`} /></td>}
-              </tr>
+    <Modal
+      open
+      onClose={save.isLoading ? () => undefined : onClose}
+      size={direct ? "xl" : "lg"}
+      title={<>Edit <span className="whitespace-nowrap">{po.number}</span></>}
+      description={direct ? "Direct purchase: prices can be corrected to the supplier's actual offer." : "Prices are locked to the awarded quotation. You can change the delivery details and how each line is received."}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={save.isLoading}>Cancel</Button>
+          <Button variant="primary" onClick={() => save.mutate()} loading={save.isLoading}>Save</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Expected delivery" htmlFor="po-expected">
+          <DatePicker id="po-expected" value={v.expected_delivery_date} onChange={(d) => setV((x) => ({ ...x, expected_delivery_date: d }))} />
+        </Field>
+        <Field label="Delivery location" htmlFor="po-location">
+          <Input id="po-location" value={v.delivery_location} onChange={set("delivery_location")} />
+        </Field>
+        <Field label="Payment terms" htmlFor="po-payment-terms">
+          <Input id="po-payment-terms" value={v.payment_terms} onChange={set("payment_terms")} placeholder="For example: 30 days after delivery" />
+        </Field>
+        <Field label="Delivery terms" htmlFor="po-delivery-terms">
+          <Input id="po-delivery-terms" value={v.delivery_terms} onChange={set("delivery_terms")} />
+        </Field>
+        {direct && (
+          <Field label="Delivery cost" htmlFor="po-delivery-cost">
+            <MoneyInput id="po-delivery-cost" value={v.delivery_cost} onChange={(n) => setV((x) => ({ ...x, delivery_cost: n === "" ? 0 : n }))} />
+          </Field>
+        )}
+        {direct && (
+          <Field label="Other charges" htmlFor="po-other-charges">
+            <MoneyInput id="po-other-charges" value={v.other_charges} onChange={(n) => setV((x) => ({ ...x, other_charges: n === "" ? 0 : n }))} />
+          </Field>
+        )}
+        <Field label="Contract" htmlFor="po-contract" className="sm:col-span-2" hint="When linked, the order must fit the contract period and remaining value.">
+          <Select id="po-contract" value={v.contract} onChange={set("contract")}>
+            <option value="">Not under a contract</option>
+            {(contracts.data || []).map((c: any) => (
+              <option key={c.id} value={c.id}>{c.number} · {c.title} (remaining {fmtMoney(c.remaining_value)})</option>
             ))}
-          </tbody>
-        </table>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => save.mutate()} disabled={save.isLoading}>{save.isLoading ? "Saving…" : "Save"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </Select>
+        </Field>
+        <Field label="Notes" htmlFor="po-notes" className="sm:col-span-2">
+          <Textarea id="po-notes" value={v.notes} onChange={set("notes")} className="min-h-[72px]" />
+        </Field>
+      </div>
+      <div className="overflow-hidden rounded-control border border-ims-border">
+        <DataTable columns={columns} rows={items} rowKey={(l, i) => String(l.line ?? i)} minWidth={direct ? 840 : 560} caption="Lines" />
+      </div>
+    </Modal>
   );
 }
 
-/** Where the order comes from and what followed: requisition, RFQ, PO, receipts, bills, payments, returns. */
+/** Where the order comes from and what followed: requisition, RFQ, contract, receipts, bills, payments, returns. */
 function DocumentFlow({ po, receipts, invoices, payments, returns, onTab }: { po: any; receipts: any[]; invoices: any[]; payments: any[]; returns: any[]; onTab: (t: string) => void }) {
   const navigate = useNavigate();
-  const steps: { label: string; value: string; done: boolean; go?: () => void }[] = [
-    { label: "Requisition", value: po.expand?.requisition?.number || "—", done: Boolean(po.requisition), go: po.requisition ? () => navigate(`/dashboard/procurement/requisitions/${po.requisition}`) : undefined },
-    { label: po.source === "direct" ? "Direct purchase" : "RFQ", value: po.expand?.rfq?.number || (po.source === "direct" ? "No RFQ" : "—"), done: true, go: po.rfq ? () => navigate(`/dashboard/procurement/rfqs/${po.rfq}?tab=comparison`) : undefined },
-    { label: "Purchase order", value: po.number, done: true },
-    { label: "Goods received", value: receipts.length ? `${receipts.length} receipt${receipts.length > 1 ? "s" : ""}` : "None yet", done: receipts.length > 0, go: () => onTab("receipts") },
-    { label: "Vendor bills", value: invoices.length ? `${invoices.length} bill${invoices.length > 1 ? "s" : ""}` : "None yet", done: invoices.length > 0, go: () => onTab("bills") },
-    { label: "Payments", value: payments.length ? money(payments.reduce((a: number, p: any) => a + p.amount, 0)) : "None yet", done: payments.length > 0, go: () => onTab("bills") },
-    ...(returns.length ? [{ label: "Returns", value: String(returns.length), done: true, go: () => navigate(`/dashboard/procurement/returns/${returns[0].id}`) }] : []),
+  const steps: { label: string; value: string; done: boolean; go?: () => void; mono?: boolean }[] = [
+    { label: "Requisition", value: po.expand?.requisition?.number || "—", mono: Boolean(po.requisition), done: Boolean(po.requisition), go: po.requisition ? () => navigate(`/dashboard/procurement/requisitions/${po.requisition}`) : undefined },
+    { label: po.source === "direct" ? "Direct purchase" : "Request for quotation", value: po.expand?.rfq?.number || (po.source === "direct" ? "No RFQ" : "—"), mono: Boolean(po.rfq), done: true, go: po.rfq ? () => navigate(`/dashboard/procurement/rfqs/${po.rfq}?tab=comparison`) : undefined },
+    ...(po.expand?.contract ? [{ label: "Contract", value: po.expand.contract.number, mono: true, done: true, go: () => navigate(`/dashboard/procurement/contracts/${po.contract}`) }] : []),
+    { label: "Deliveries", value: receipts.length ? `${receipts.length} receipt${receipts.length > 1 ? "s" : ""}` : "None yet", done: receipts.length > 0, go: () => onTab("receipts") },
+    { label: "Supplier bills", value: invoices.length ? `${invoices.length} bill${invoices.length > 1 ? "s" : ""}` : "None yet", done: invoices.length > 0, go: () => onTab("receipts") },
+    { label: "Payments", value: payments.length ? amountIn(payments.reduce((a: number, p: any) => a + p.amount, 0), po.currency) : "None yet", done: payments.length > 0, go: () => onTab("receipts") },
+    ...(returns.length ? [{ label: "Returns", value: `${returns.length} return${returns.length > 1 ? "s" : ""}`, done: true, go: () => navigate(`/dashboard/procurement/returns/${returns[0].id}`) }] : []),
   ];
   return (
-    <nav aria-label="Document flow" className="flex items-stretch gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 shadow-card">
-      {steps.map((st, i) => (
-        <React.Fragment key={st.label}>
-          {i > 0 && <ArrowRight size={14} className="mt-3 shrink-0 text-slate-300" />}
-          <button type="button" disabled={!st.go} onClick={st.go} className={cn("min-w-[120px] shrink-0 rounded-md px-2.5 py-1.5 text-left", st.go && "hover:bg-slate-50", st.done ? "" : "opacity-60")}>
-            <span className="block text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{st.label}</span>
-            <span className={cn("block truncate text-[13px] font-medium", st.done ? "text-slate-900" : "text-slate-400")}>{st.value}</span>
-          </button>
-        </React.Fragment>
-      ))}
-    </nav>
+    <Card>
+      <CardHeader title="Linked documents" subtitle="Where the order comes from and what followed." />
+      <nav aria-label="Linked documents">
+        <ul className="-mx-2 divide-y divide-ims-divider">
+          {steps.map((st) => {
+            const body = (
+              <>
+                <span className="min-w-0">
+                  <span className="block text-t-small text-ims-muted">{st.label}</span>
+                  <span className={cn("block truncate", st.mono ? "whitespace-nowrap font-mono text-[13px]" : "text-t-body", st.done ? "font-semibold text-ims-text" : "text-ims-faint")}>{st.value}</span>
+                </span>
+                {st.go && <ChevronRight size={16} className="shrink-0 text-ims-faint" aria-hidden />}
+              </>
+            );
+            return (
+              <li key={st.label}>
+                {st.go ? (
+                  <button type="button" onClick={st.go} className="flex w-full items-center justify-between gap-3 rounded-control px-2 py-2.5 text-left hover:bg-ims-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus">
+                    {body}
+                  </button>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 px-2 py-2.5">{body}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </Card>
   );
 }
 
 function Revisions({ po }: { po: any }) {
+  const rows = [...(po.revisions || [])].reverse();
+  const cur = po.currency || "RWF";
+  const columns: Column<any>[] = [
+    { key: "revision", header: "Revision", nowrap: true, cell: (r) => `${r.revision} to ${r.revision + 1}` },
+    { key: "at", header: "Amended", nowrap: true, cell: (r) => fmtDateTime(r.amended_at) },
+    { key: "by", header: "By", cell: (r) => r.amended_by || "—" },
+    { key: "reason", header: "Reason", clamp: true, cell: (r) => r.reason },
+    { key: "value", header: `Value before (${cur})`, numeric: true, cell: (r) => <Num value={r.grand_total} /> },
+    { key: "lines", header: "Lines before", clamp: true, cell: (r) => (r.items || []).map((l: any) => `${l.description} × ${fmtNumber(l.quantity, true)}`).join("; ") },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <table className="dnr-grid w-full min-w-[640px] text-[13px]">
-        <thead><tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-3 py-2">Revision</th><th className="px-3 py-2">Amended</th><th className="px-3 py-2">By</th><th className="px-3 py-2">Reason</th><th className="px-3 py-2 text-right">Value before</th><th className="px-3 py-2">Lines before</th></tr></thead>
-        <tbody className="divide-y divide-slate-100">
-          {[...(po.revisions || [])].reverse().map((r: any) => (
-            <tr key={r.revision}>
-              <td className="px-3 py-2 font-medium">Rev {r.revision} to {r.revision + 1}</td>
-              <td className="whitespace-nowrap px-3 py-2 text-slate-600">{String(r.amended_at || "").slice(0, 16).replace("T", " ")}</td>
-              <td className="px-3 py-2">{r.amended_by}</td>
-              <td className="px-3 py-2 text-slate-700">{r.reason}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{money(r.grand_total, po.currency)}</td>
-              <td className="px-3 py-2 text-[12px] text-slate-600">{(r.items || []).map((l: any) => `${l.description} x ${l.quantity}`).join("; ")}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Card padded={false}>
+      <div className="px-5 pt-5">
+        <CardHeader title="Revisions" subtitle="The approved version is kept each time the order is amended." />
+      </div>
+      <DataTable columns={columns} rows={rows} rowKey={(r) => String(r.revision)} minWidth={720} caption="Revisions" />
+    </Card>
   );
 }
 
@@ -583,21 +792,46 @@ function AmendDialog({ po, onClose, onDone }: { po: any; onClose: () => void; on
   const [tried, setTried] = React.useState(false);
   const run = useMutation(() => purchasingApi.action(po.id, "amend" as any, { reason }), {
     onSuccess: () => {
-      toast.success(`${po.number} is back in draft (revision ${(po.revision || 0) + 1}); edit it and submit it for approval`);
+      toast.success(`${po.number} is back in draft as revision ${(po.revision || 0) + 1}. Edit it and submit it for approval.`);
       onDone();
     },
     onError: (e) => {
       toast.error(errorMessage(e));
     },
   });
+  const short = reason.trim().length < 10;
   return (
-    <FormDialog open onClose={onClose} icon={GitBranch} title={`Amend ${po.number}`} description="The approved version is kept in the revision history. The amended order must be approved again before it is sent." submitLabel="Start amendment" busy={run.isLoading} onSubmit={() => { setTried(true); if (reason.trim().length >= 10) run.mutate(); }}>
-      <FormBlock icon={GitBranch} title="Why is the order amended?">
-        <Field label="Reason" required error={tried && reason.trim().length < 10 && "At least 10 characters."}>
-          <textarea className={textareaCls} rows={4} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. The supplier can only deliver 8 of the 10 units this quarter; quantity reduced as agreed by email on 12 Sept." />
-        </Field>
-        <p className="text-[12.5px] text-slate-500">Quantities cannot go below what was already received. For orders from an RFQ, prices stay as awarded.</p>
-      </FormBlock>
-    </FormDialog>
+    <Modal
+      open
+      onClose={run.isLoading ? () => undefined : onClose}
+      title={<>Amend <span className="whitespace-nowrap">{po.number}</span>?</>}
+      description="The approved version is kept in the revision history. The amended order must be approved again before it is sent."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={run.isLoading}>Cancel</Button>
+          <Button
+            variant="primary"
+            icon={GitBranch}
+            loading={run.isLoading}
+            onClick={() => {
+              setTried(true);
+              if (reason.trim().length >= 10) run.mutate();
+            }}
+          >
+            Start amendment
+          </Button>
+        </>
+      }
+    >
+      <Field
+        label="Why is the order amended?"
+        required
+        htmlFor="po-amend-reason"
+        error={tried && short ? "Write at least 10 characters so approvers know what changed." : null}
+        hint="Quantities cannot go below what was already received. For orders from an RFQ, prices stay as awarded."
+      >
+        <Textarea id="po-amend-reason" rows={4} value={reason} onChange={(e) => setReason(e.target.value)} invalid={tried && short} placeholder="For example: the supplier can only deliver 8 of the 10 units this quarter; quantity reduced as agreed by email on 12 Sept." />
+      </Field>
+    </Modal>
   );
 }

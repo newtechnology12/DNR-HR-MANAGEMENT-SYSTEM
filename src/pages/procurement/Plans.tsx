@@ -2,14 +2,14 @@ import * as React from "react";
 import { useMutation, useQuery } from "react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarRange, ClipboardList, Plus } from "lucide-react";
+import { CalendarRange, ExternalLink, Plus } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
-import RecordTable, { RecordColumn, RecordView } from "@/components/enterprise/RecordTable";
-import { PageHeader, StatusBadge } from "@/components/enterprise/ui";
-import { PLAN_STATUS, errorMessage, money } from "@/lib/procurement";
-import { Field, FormBlock, FormDialog, inputCls, useMe } from "@/components/portal/kit";
+import RecordTable, { RecordColumn, RecordFilter, RecordView } from "@/components/enterprise/RecordTable";
+import { StatusBadge } from "@/components/enterprise/ui";
+import { Button, DocNo, Field, Input, Modal, Num, Page, PageHeader, Person, Select, fmtNumber } from "@/components/ims";
+import { PLAN_STATUS, errorMessage } from "@/lib/procurement";
+import { useMe } from "@/components/portal/kit";
 import { fyLabel, useFiscalYears } from "@/lib/fiscal";
 
 export default function Plans() {
@@ -26,23 +26,30 @@ export default function Plans() {
     { key: "approval", label: "In approval", filter: `status = "pending_approval"` },
     { key: "approved", label: "Approved", filter: `status = "approved"` },
   ];
+  const filters: RecordFilter[] = [
+    { field: "status", label: "Status", options: Object.entries(PLAN_STATUS).map(([value, m]) => ({ value, label: m.label })) },
+    { field: "department", label: "Department", collection: "departments" },
+    { field: "fiscal_year", label: "Fiscal year", options: (years.data || []).map((f) => ({ value: String(f.year), label: f.name })), filterFor: (v) => `fiscal_year = ${Number(v)}` },
+  ];
   const columns: RecordColumn<any>[] = [
-    { key: "number", header: "Plan", sortField: "number", cell: (r) => <span className="whitespace-nowrap font-medium">{r.number}</span> },
-    { key: "name", header: "Name", className: "max-w-[320px]", cell: (r) => <span className="line-clamp-1">{r.name}</span>, csv: (r) => r.name },
-    { key: "year", header: "Fiscal year", sortField: "fiscal_year", cell: (r) => fyLabel(r.fiscal_year), csv: (r) => fyLabel(r.fiscal_year) },
-    { key: "department", header: "Department", cell: (r) => <span className="whitespace-nowrap">{r.expand?.department?.name}</span>, csv: (r) => r.expand?.department?.name },
-    { key: "lines", header: "Planned purchases", align: "right", cell: (r) => <span className="tabular-nums">{r.lines_count}</span>, csv: (r) => r.lines_count },
-    { key: "total", header: "Estimated total", sortField: "total_estimated", align: "right", cell: (r) => <span className="whitespace-nowrap font-medium tabular-nums">{money(r.total_estimated)}</span>, csv: (r) => r.total_estimated },
-    { key: "by", header: "Prepared by", cell: (r) => <span className="whitespace-nowrap text-slate-600">{r.expand?.created_by?.name}</span>, csv: (r) => r.expand?.created_by?.name },
+    { key: "number", header: "Number", sortField: "number", nowrap: true, cell: (r) => <DocNo value={r.number} />, csv: (r) => r.number },
+    { key: "name", header: "Name", sortField: "name", clamp: true, cell: (r) => r.name || "—", sub: (r) => r.expand?.department?.name, csv: (r) => r.name },
+    { key: "department", header: "Department", exportOnly: true, cell: (r) => r.expand?.department?.name || "—", csv: (r) => r.expand?.department?.name },
+    { key: "year", header: "Fiscal year", sortField: "fiscal_year", nowrap: true, cell: (r) => fyLabel(r.fiscal_year), csv: (r) => fyLabel(r.fiscal_year) },
+    { key: "lines", header: "Planned purchases", align: "right", cell: (r) => fmtNumber(r.lines_count), csv: (r) => r.lines_count },
+    { key: "total", header: "Estimated total (RWF)", sortField: "total_estimated", align: "right", sum: "total_estimated", format: "money", cell: (r) => <Num value={r.total_estimated} />, csv: (r) => r.total_estimated },
+    { key: "by", header: "Prepared by", className: "max-w-[180px]", cell: (r) => <Person name={r.expand?.created_by?.name} />, csv: (r) => r.expand?.created_by?.name },
     { key: "status", header: "Status", sortField: "status", cell: (r) => <StatusBadge status={r.status} map={PLAN_STATUS} />, csv: (r) => PLAN_STATUS[r.status]?.label },
   ];
+  const canCreate = canPerform("manage_procurement_plan");
+  const open = (r: any) => navigate(`/dashboard/procurement/plans/${r.id}`);
   return (
-    <div className="space-y-4 px-4 py-4 sm:px-6">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Procurement", to: "/dashboard/procurement" }, { label: "Procurement plans" }]}
         title="Procurement plans"
-        description="Each department's annual procurement plan: what will be bought, when, how and for how much. Requisitions are raised against approved plan lines."
-        breadcrumbs={[{ title: "Procurement", link: "/dashboard/procurement" }, { title: "Plans", link: "/dashboard/procurement/plans" }]}
-        actions={canPerform("manage_procurement_plan") && <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} /> New plan</Button>}
+        subtitle="Each department's yearly plan of what will be bought, when, how and for how much."
+        primary={canCreate ? { label: "New plan", icon: Plus, onClick: () => setCreating(true) } : undefined}
       />
       <RecordTable
         collection="procurement_plans"
@@ -51,14 +58,23 @@ export default function Plans() {
         activeView={view}
         onViewChange={(v) => setParams(v === "all" ? {} : { view: v })}
         searchFields={["number", "name", "department.name"]}
+        searchPlaceholder="Search number, name or department"
+        filters={filters}
         expand="department,created_by"
         defaultSort="-fiscal_year,department.name"
         exportName="procurement-plans"
-        onRowClick={(r) => navigate(`/dashboard/procurement/plans/${r.id}`)}
-        empty={{ icon: CalendarRange, title: "No procurement plan yet", text: "Create your department's plan for the coming year and list the planned purchases." }}
+        exportTitle="Procurement plans"
+        onRowClick={open}
+        rowActions={() => [{ label: "Open", icon: ExternalLink, onSelect: open }]}
+        empty={{
+          icon: CalendarRange,
+          title: "No procurement plan yet",
+          text: "No procurement plan yet. Create your department's plan for the coming year and list the planned purchases.",
+          action: canCreate ? <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>New plan</Button> : undefined,
+        }}
       />
       {creating && <NewPlanDialog onClose={() => setCreating(false)} />}
-    </div>
+    </Page>
   );
 }
 
@@ -77,7 +93,7 @@ function NewPlanDialog({ onClose }: { onClose: () => void }) {
   }, [me.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const save = useMutation(() => pocketbase.collection("procurement_plans").create(v), {
     onSuccess: (p: any) => {
-      toast.success(`${p.number} created — add the planned purchases`);
+      toast.success(`${p.number} created; add the planned purchases`);
       navigate(`/dashboard/procurement/plans/${p.id}`);
     },
     onError: (e) => {
@@ -85,18 +101,33 @@ function NewPlanDialog({ onClose }: { onClose: () => void }) {
     },
   });
   return (
-    <FormDialog open onClose={onClose} icon={CalendarRange} title="New procurement plan" description="One plan per department and fiscal year. Each planned purchase is charged to a budget line." submitLabel="Create plan" busy={save.isLoading} onSubmit={() => v.department && v.fiscal_year && save.mutate()}>
-      <FormBlock icon={ClipboardList} title="Plan">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Fiscal year" required>
-            <select className={inputCls} value={v.fiscal_year} onChange={(e) => setV((x) => ({ ...x, fiscal_year: Number(e.target.value) }))}>{(years.data || []).filter((f) => f.status === "open").map((f) => <option key={f.id} value={f.year}>{f.name}{f.is_current ? " (current)" : ""}</option>)}</select>
-          </Field>
-          <Field label="Department" required>
-            <select className={inputCls} value={v.department} onChange={(e) => setV((x) => ({ ...x, department: e.target.value }))}>{(depts.data || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
-          </Field>
-          <Field label="Notes" className="sm:col-span-2"><input className={inputCls} value={v.notes} onChange={(e) => setV((x) => ({ ...x, notes: e.target.value }))} placeholder="e.g. Based on the department's action plan and budget ceiling" /></Field>
-        </div>
-      </FormBlock>
-    </FormDialog>
+    <Modal
+      open
+      onClose={onClose}
+      title="New procurement plan"
+      description="One plan per department and fiscal year. Each planned purchase is charged to a budget line."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={save.isLoading} disabled={!v.department || !v.fiscal_year} onClick={() => v.department && v.fiscal_year && save.mutate()}>Create plan</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Fiscal year" required htmlFor="plan-fy" hint="Only open fiscal years are listed.">
+          <Select id="plan-fy" value={v.fiscal_year} onChange={(e) => setV((x) => ({ ...x, fiscal_year: Number(e.target.value) }))}>
+            {(years.data || []).filter((f) => f.status === "open").map((f) => <option key={f.id} value={f.year}>{f.name}{f.is_current ? " (current)" : ""}</option>)}
+          </Select>
+        </Field>
+        <Field label="Department" required htmlFor="plan-dept">
+          <Select id="plan-dept" value={v.department} onChange={(e) => setV((x) => ({ ...x, department: e.target.value }))}>
+            {(depts.data || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Notes" htmlFor="plan-notes" className="sm:col-span-2">
+          <Input id="plan-notes" value={v.notes} onChange={(e) => setV((x) => ({ ...x, notes: e.target.value }))} placeholder="e.g. Based on the department's action plan and budget ceiling" />
+        </Field>
+      </div>
+    </Modal>
   );
 }

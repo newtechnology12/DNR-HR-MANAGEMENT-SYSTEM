@@ -6,7 +6,7 @@
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "react-query";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { CalendarRange, Laptop, Plus, Wallet } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useAuth } from "@/context/auth.context";
@@ -14,10 +14,8 @@ import { useRoles } from "@/context/roles.context";
 import useSettings from "@/hooks/useSettings";
 import { LOAN_TYPES, MONTHS, leaveApi } from "@/lib/hr";
 import { ASSET_STATUS, CONDITIONS } from "@/lib/assets";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/procurement";
-import { cn } from "@/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LeaveFormModal } from "@/components/modals/LeaveFormModal";
 import { PettryCashRequestModal } from "@/components/modals/PettryCashRequestModal";
@@ -29,31 +27,38 @@ import EmployeePerfomance from "@/pages/dashboard/EmployeePerfomance";
 import MyAppraisals from "@/pages/portal/MyAppraisals";
 import MyPayslipList from "@/pages/portal/MyPayslips";
 import {
-  AttendanceCalendar, AttendanceNotice, ClockCard, LeaveBalance, MyHeader, Pill, RequestTable, RequestTabs, ReqTab, WCard, WHead, WLink, btnOutline, btnPrimary,
+  AttendanceCalendar, AttendanceNotice, ClockCard, LeaveBalance, MyHeader, RequestTable, RequestTabs, ReqTab, WCard, WHead, WLink,
   buildCalendar, fetchMyAttendance, fetchMyRequests, money, myPage, tabOf, toDate,
 } from "@/components/workspace/WorkspaceKit";
 import CorrectionDialog, { CORRECTION_REASONS } from "@/components/workspace/CorrectionDialog";
+import {
+  Button,
+  Column,
+  DataTable,
+  EmptyState,
+  Field,
+  FilterSelect,
+  Modal,
+  Num,
+  Pill,
+  Select,
+  StatusPill,
+  StatusWord,
+  Tabs,
+  Textarea,
+  fmtDate,
+  fmtWhen,
+  statusWord,
+} from "@/components/ims";
 
 const useUid = () => {
   const { user }: any = useAuth();
   return { uid: (user?.id as string) || "", user };
 };
 const WORKING = ["monday", "tuesday", "wednesday", "thursday", "friday"];
-const statusTone = (s: string) => (["approved", "paid", "disbursed"].includes(s) ? "approved" : ["rejected", "cancelled"].includes(s) ? "rejected" : "pending");
-const ago = (v?: string) => (toDate(v) ? formatDistanceToNow(toDate(v) as Date, { addSuffix: true }).replace("about ", "") : "");
-
-function Tabs({ tabs, active, onChange }: { tabs: [string, string][]; active: string; onChange: (k: string) => void }) {
-  return (
-    <div role="tablist" className="flex gap-1 border-b border-[#E3E8EF]">
-      {tabs.map(([k, l]) => (
-        <button key={k} type="button" role="tab" aria-selected={active === k} onClick={() => onChange(k)}
-          className={cn("-mb-px border-b-2 px-3.5 py-2.5 text-[14px] font-bold", active === k ? "border-[#1466C0] text-[#0B3A6F]" : "border-transparent text-[#5B6577] hover:text-[#14213D]")}>
-          {l}
-        </button>
-      ))}
-    </div>
-  );
-}
+/** Stored statuses of the staff member's own records → the status glossary. */
+const OWN_WORDS: Record<string, StatusWord> = { paid: "Completed", disbursed: "Completed", repaid: "Completed", active: "In progress" };
+const word = (s?: string) => statusWord(s || "pending", OWN_WORDS) || "Pending approval";
 
 // ------------------------------------------------------------------ attendance
 export function MyAttendance() {
@@ -70,43 +75,43 @@ export function MyAttendance() {
   const hours = month.reduce((s: number, a: any) => (toDate(a.clockin_time) && toDate(a.clockout_time) ? s + ((toDate(a.clockout_time) as Date).getTime() - (toDate(a.clockin_time) as Date).getTime()) / 36e5 : s), 0);
   return (
     <main className={myPage}>
-      <MyHeader title="My attendance" subtitle="Clock in when you start and out when you leave. Your working days for the last eight weeks, corrections and the full log." actions={<ClockCard />} />
+      <MyHeader title="My attendance" subtitle="Your working days for the last eight weeks, your correction requests and the full log." actions={<ClockCard />} />
       <AttendanceNotice cal={cal} onAsk={() => setAsking(true)} />
-      <div className="flex flex-wrap items-start gap-[18px]">
+      <div className="flex flex-wrap items-start gap-4">
         <WCard className="flex-[2_1_560px]">
-          <WHead title="Working days" subtitle="Last 8 weeks · hover a day for the times" right={<button type="button" onClick={() => setAsking(true)} className="text-[13px] font-bold text-[#1466C0] hover:underline">Ask HR to correct</button>} />
+          <WHead title="Working days" subtitle="Last 8 weeks · point at a day to see the times" right={<Button variant="link" onClick={() => setAsking(true)}>Ask HR to correct</Button>} />
           {q.isLoading ? <Skeleton className="mt-4 h-[300px] w-full" /> : <AttendanceCalendar cal={cal} />}
         </WCard>
         <WCard className="flex flex-[1_1_300px] flex-col gap-3">
           <WHead title={format(new Date(), "MMMM yyyy")} subtitle="This month so far" />
-          <dl className="grid grid-cols-2 gap-3 text-[13px]">
+          <dl className="grid grid-cols-2 gap-3 text-t-small">
             {[
               ["Days present", String(month.length)],
               ["Late arrivals", String(month.filter((a: any) => a.behaviour === "late").length)],
               ["Average arrival", avg === null ? "—" : `${String(Math.floor(avg / 60)).padStart(2, "0")}:${String(Math.round(avg % 60)).padStart(2, "0")}`],
               ["Hours recorded", `${Math.round(hours)} h`],
-            ].map(([k, v]) => <div key={k}><dt className="text-[#5B6577]">{k}</dt><dd className="text-[20px] font-extrabold tabular-nums">{v}</dd></div>)}
+            ].map(([k, v]) => <div key={k}><dt className="text-ims-muted">{k}</dt><dd className="text-t-kpi tabular-nums">{v}</dd></div>)}
           </dl>
-          <p className="rounded-lg bg-[#F8FAFC] px-3 py-2 text-[12.5px] text-[#36435A]">Working hours: <b>{settings?.work_start_time || "08:00"} – {settings?.work_end_time || "17:00"}</b>, {working.length} days a week. Clock-in opens {Number(settings?.early_clockin_mins) || 0} minutes before the start.</p>
+          <p className="rounded-control bg-ims-thead px-3 py-2 text-t-small text-ims-body">Working hours: <b>{settings?.work_start_time || "08:00"} – {settings?.work_end_time || "17:00"}</b>, {working.length} days a week. Clock-in opens {Number(settings?.early_clockin_mins) || 0} minutes before the start.</p>
         </WCard>
       </div>
       <WCard>
         <WHead title="Correction requests" subtitle="Days you were on duty without a clock-in, sent to HR" />
         {corrections.isLoading ? <Skeleton className="mt-3 h-16 w-full" /> : !(corrections.data || []).length ? (
-          <p className="mt-3 text-[13px] text-[#5B6577]">None yet. If you were on mission or training, use <b>Ask HR to correct</b>.</p>
+          <p className="mt-3 text-t-body text-ims-muted">None yet. If you were on mission or training, use <b>Ask HR to correct</b>.</p>
         ) : (
-          <ul className="mt-3 divide-y divide-[#EDF0F5]">
+          <ul className="mt-3 divide-y divide-ims-divider">
             {(corrections.data as any[]).map((c) => (
               <li key={c.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <p className="text-[14px] font-bold">{c.number} · {CORRECTION_REASONS[c.reason] || c.reason}</p>
-                  <p className="text-[13px] text-[#36435A]">{(c.dates || []).map((d: string) => format(new Date(`${d}T12:00:00`), "EEE d MMM")).join(", ")}</p>
-                  <p className="text-[12.5px] text-[#5B6577]">{c.explanation}</p>
-                  {c.review_comment && <p className="mt-1 text-[12.5px] text-[#36435A]">HR: {c.review_comment}{c.expand?.reviewed_by ? ` — ${c.expand.reviewed_by.name}` : ""}</p>}
+                  <p className="text-t-body font-bold"><span className="whitespace-nowrap font-mono">{c.number}</span> · {CORRECTION_REASONS[c.reason] || c.reason}</p>
+                  <p className="text-t-small text-ims-body">{(c.dates || []).map((d: string) => format(new Date(`${d}T12:00:00`), "EEE d MMM")).join(", ")}</p>
+                  <p className="text-t-small text-ims-muted">{c.explanation}</p>
+                  {c.review_comment && <p className="mt-1 text-t-small text-ims-body">HR: {c.review_comment}{c.expand?.reviewed_by ? ` · ${c.expand.reviewed_by.name}` : ""}</p>}
                 </div>
-                <div className="text-right">
-                  <Pill tone={statusTone(c.status)}>{c.status === "pending" ? "Waiting for HR" : c.status === "approved" ? `Approved · ${c.added_days} day${c.added_days === 1 ? "" : "s"} added` : "Rejected"}</Pill>
-                  <p className="mt-1 text-[12px] text-[#5B6577]">{ago(c.created)}</p>
+                <div className="flex flex-col items-end gap-1 text-right">
+                  <StatusPill status={word(c.status)} sub={c.status === "pending" ? "With HR" : c.status === "approved" ? `${c.added_days} day${c.added_days === 1 ? "" : "s"} added` : undefined} />
+                  <p className="text-t-hint text-ims-muted">{fmtWhen(c.created)}</p>
                 </div>
               </li>
             ))}
@@ -141,17 +146,17 @@ export function MyLeave() {
   const b: any = balance.data;
   return (
     <main className={myPage}>
-      <MyHeader title="My leave" subtitle="Your balance for the year, your requests and your leave plan. Requests go to your line manager, then HR." actions={<button type="button" onClick={() => setOpen(true)} className={btnPrimary}><Plus size={15} /> Request leave</button>} />
-      <div className="flex flex-wrap items-start gap-[18px]">
+      <MyHeader title="My leave" subtitle="Your balance, your requests and your leave plan. Requests go to your line manager, then HR." actions={<Button variant="primary" icon={Plus} onClick={() => setOpen(true)}>Request leave</Button>} />
+      <div className="flex flex-wrap items-start gap-4">
         <WCard className="flex flex-[1_1_320px] flex-col gap-3">
           <WHead title={`Annual leave ${year}`} subtitle={b ? `${Math.round(b.entitlement * 10) / 10} days entitlement` : ""} />
           {balance.isLoading ? <Skeleton className="h-28 w-full" /> : <LeaveBalance b={b} />}
           {b && (
-            <dl className="grid grid-cols-2 gap-2 border-t border-[#EDF0F5] pt-2.5 text-[12.5px]">
-              <div><dt className="text-[#5B6577]">Years of service</dt><dd className="font-bold">{b.years_of_service}</dd></div>
-              <div><dt className="text-[#5B6577]">Seniority days</dt><dd className="font-bold">{b.seniority_days}</dd></div>
-              <div><dt className="text-[#5B6577]">Carried over</dt><dd className="font-bold">{b.carried_over}</dd></div>
-              <div><dt className="text-[#5B6577]">Adjustment</dt><dd className="font-bold">{b.adjustment}{b.adjustment_reason ? ` · ${b.adjustment_reason}` : ""}</dd></div>
+            <dl className="grid grid-cols-2 gap-2 border-t border-ims-divider pt-2.5 text-t-small">
+              <div><dt className="text-ims-muted">Years of service</dt><dd className="font-bold">{b.years_of_service}</dd></div>
+              <div><dt className="text-ims-muted">Seniority days</dt><dd className="font-bold">{b.seniority_days}</dd></div>
+              <div><dt className="text-ims-muted">Carried over</dt><dd className="font-bold">{b.carried_over}</dd></div>
+              <div><dt className="text-ims-muted">Adjustment</dt><dd className="font-bold">{b.adjustment}{b.adjustment_reason ? ` · ${b.adjustment_reason}` : ""}</dd></div>
             </dl>
           )}
         </WCard>
@@ -159,20 +164,20 @@ export function MyLeave() {
           <WHead title={`Leave plan ${year}`} subtitle="When you intend to take your leave" right={<WLink to="/dashboard/leave-plan">Open →</WLink>} />
           {b?.plan ? (
             <>
-              <p className="text-[30px] font-extrabold tabular-nums">{b.planned}<span className="text-[15px] font-bold text-[#5B6577]"> days planned</span></p>
-              <Pill tone={b.plan.status === "approved" ? "approved" : "pending"}>{b.plan.status === "approved" ? "Plan approved" : "Plan in draft"}</Pill>
-              <p className="text-[12.5px] text-[#5B6577]">{b.unplanned > 0 ? `${b.unplanned} day(s) not planned yet.` : "All your days are planned."}</p>
+              <p className="text-t-title tabular-nums">{b.planned}<span className="text-t-body font-bold text-ims-muted"> days planned</span></p>
+              <StatusPill status={b.plan.status === "approved" ? "Approved" : "Draft"} />
+              <p className="text-t-small text-ims-muted">{b.unplanned > 0 ? `${b.unplanned} ${b.unplanned === 1 ? "day is" : "days are"} not planned yet.` : "All your days are planned."}</p>
             </>
-          ) : <p className="text-[13px] text-[#5B6577]">No leave plan yet. HR asks everyone to plan the year's leave early so the work is covered.</p>}
-          <button type="button" onClick={() => navigate("/dashboard/leave-plan")} className="h-10 rounded-[9px] border border-[#DDE3EC] text-[13.5px] font-bold hover:bg-[#F1F4F9]"><CalendarRange size={15} className="mr-1.5 inline" /> Plan my leave</button>
+          ) : <p className="text-t-body text-ims-muted">No leave plan yet. HR asks everyone to plan the year's leave early so the work is covered.</p>}
+          <Button icon={CalendarRange} onClick={() => navigate("/dashboard/leave-plan")}>Plan my leave</Button>
         </WCard>
         <WCard className="flex flex-[1_1_260px] flex-col gap-2">
           <WHead title="Public holidays" subtitle="Coming up" />
           {upcoming.length ? (
-            <ul className="divide-y divide-[#EDF0F5]">
-              {upcoming.map((h) => <li key={h.id} className="flex justify-between gap-3 py-2 text-[13px]"><span>{h.name}</span><span className="whitespace-nowrap text-[#5B6577]">{format(new Date(`${h.next}T12:00:00`), "EEE d MMM")}</span></li>)}
+            <ul className="divide-y divide-ims-divider">
+              {upcoming.map((h) => <li key={h.id} className="flex justify-between gap-3 py-2 text-t-body"><span>{h.name}</span><span className="whitespace-nowrap text-ims-muted">{format(new Date(`${h.next}T12:00:00`), "EEE d MMM")}</span></li>)}
             </ul>
-          ) : <p className="text-[13px] text-[#5B6577]">None in the calendar.</p>}
+          ) : <p className="text-t-body text-ims-muted">None in the calendar.</p>}
         </WCard>
       </div>
       <WCard>
@@ -189,7 +194,7 @@ export function MyPayslipsPage() {
   const { uid } = useUid();
   return (
     <main className={myPage}>
-      <MyHeader title="My payslips" subtitle="Your payslips from approved payrolls. Open one to print it or save it as PDF. Only you, HR & Payroll, Finance and the auditors can see them." />
+      <MyHeader title="My payslips" subtitle="Payslips from approved payrolls; open one to print it or save it as PDF. Only you, payroll, finance and the auditors see them." />
       <WCard><MyPayslipList employeeId={uid} /></WCard>
       <MyLoans uid={uid} />
     </main>
@@ -201,30 +206,29 @@ function MyLoans({ uid }: { uid: string }) {
   const q = useQuery(["my-loans", uid], () => pocketbase.collection("staff_loans").getFullList({ filter: `employee = "${uid}"`, sort: "-created" }), { enabled: Boolean(uid) });
   const rows = ((q.data || []) as any[]).filter((l) => l.status !== "cancelled");
   if (!rows.length) return null;
-  const STATE: Record<string, [string, string]> = { pending_approval: ["pending", "Waiting for Finance"], active: ["info", "Being repaid"], repaid: ["approved", "Repaid"], rejected: ["rejected", "Not approved"] };
+  const NOTE: Record<string, string> = { pending_approval: "With Finance", active: "Being repaid", repaid: "Repaid", rejected: "Not approved" };
   const end = (l: any) => {
     const k = l.start_year * 12 + l.start_month - 1 + Math.max(1, l.installments) - 1;
     return `${MONTHS[k % 12]} ${Math.floor(k / 12)}`;
   };
   return (
     <WCard>
-      <WHead title="My loans" subtitle="Loans repaid through your payslip. The balance goes down each month when the salaries are paid. Questions: HR & Payroll." />
-      <ul className="mt-3 divide-y divide-[#EDF0F5]">
+      <WHead title="My loans" subtitle="Repaid through your payslip; the balance goes down each month when salaries are paid." />
+      <ul className="mt-3 divide-y divide-ims-divider">
         {rows.map((l) => {
           const pct = l.principal ? Math.round((l.repaid / l.principal) * 100) : 0;
-          const [tone, label] = STATE[l.status] || ["neutral", l.status];
           return (
             <li key={l.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_220px_auto] sm:items-center">
               <div className="min-w-0">
-                <p className="text-[14px] font-bold text-[#14213D]">{LOAN_TYPES[l.loan_type] || "Loan"} · {money(l.principal)}</p>
-                <p className="truncate text-[12.5px] text-[#5B6577]">{l.number} · {l.purpose}</p>
+                <p className="text-t-body font-bold text-ims-text">{LOAN_TYPES[l.loan_type] || "Loan"} · {money(l.principal)}</p>
+                <p className="truncate text-t-small text-ims-muted"><span className="whitespace-nowrap font-mono">{l.number}</span> · {l.purpose}</p>
               </div>
               <div>
-                <div className="flex justify-between text-[12px] text-[#5B6577]"><span>{money(l.installment)} a month</span><span>until {end(l)}</span></div>
-                <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#EDF0F5]"><div className="h-full rounded-full bg-[#1F9D55]" style={{ width: `${pct}%` }} /></div>
-                <p className="mt-1 text-[12px] text-[#36435A]">Left to repay <b>{money(l.balance)}</b></p>
+                <div className="flex justify-between text-t-hint text-ims-muted"><span>{money(l.installment)} a month</span><span>until {end(l)}</span></div>
+                <div className="mt-1 h-2 overflow-hidden rounded-pill bg-ims-divider"><div className="h-full rounded-pill bg-ims-success" style={{ width: `${pct}%` }} /></div>
+                <p className="mt-1 text-t-hint text-ims-body">Left to repay <b>{money(l.balance)}</b></p>
               </div>
-              <Pill tone={tone}>{label}</Pill>
+              <StatusPill status={word(l.status)} sub={NOTE[l.status]} />
             </li>
           );
         })}
@@ -234,38 +238,34 @@ function MyLoans({ uid }: { uid: string }) {
 }
 
 // ------------------------------------------------------------------ all requests
-const KINDS = ["All", "Leave", "Expense", "Petty cash", "Equipment", "Purchase"];
+const KINDS = ["Leave", "Expense", "Petty cash", "Equipment", "Purchase"];
 export function MyRequests() {
   const { uid } = useUid();
   const navigate = useNavigate();
   const { canPerform } = useRoles();
   const [tab, setTab] = React.useState<ReqTab>("all");
-  const [kind, setKind] = React.useState("All");
+  const [kind, setKind] = React.useState("");
   const q = useQuery(["my-requests", uid], () => fetchMyRequests(uid, 60), { enabled: Boolean(uid) });
-  const rows = (q.data || []).filter((r) => kind === "All" || r.kind === kind);
+  const rows = (q.data || []).filter((r) => !kind || r.kind === kind);
   const shown = rows.filter((r) => tab === "all" || tabOf(r) === tab);
   return (
     <main className={myPage}>
       <MyHeader
         title="My requests"
-        subtitle="Everything you asked for — leave, expenses, petty cash, equipment and purchases — with where it stands and what happens next."
+        subtitle="Leave, expenses, petty cash, equipment and purchases: where each stands and what happens next."
         actions={
           <>
-            {canPerform("create_purchase_requisition") && <button type="button" onClick={() => navigate("/dashboard/procurement/requisitions/new")} className={btnOutline}><Plus size={15} /> Purchase requisition</button>}
-            <button type="button" onClick={() => navigate("/dashboard/my/leave?new=1")} className={btnPrimary}><Plus size={15} /> Request leave</button>
+            {canPerform("create_purchase_requisition") && <Button icon={Plus} onClick={() => navigate("/dashboard/procurement/requisitions/new")}>Purchase requisition</Button>}
+            <Button variant="primary" icon={Plus} onClick={() => navigate("/dashboard/my/leave?new=1")}>Request leave</Button>
           </>
         }
       />
       <WCard flush className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-[18px]">
-          <div className="flex flex-wrap gap-1.5">
-            {KINDS.map((k) => (
-              <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={cn("h-8 rounded-full border px-3 text-[12.5px] font-bold", kind === k ? "border-[#0B3A6F] bg-[#0B3A6F] text-white" : "border-[#DDE3EC] bg-white text-[#36435A] hover:bg-[#F1F4F9]")}>{k}</button>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+          <FilterSelect label="Type" value={kind} onChange={setKind} options={KINDS.map((k) => ({ value: k, label: k }))} />
           <RequestTabs rows={rows} tab={tab} onTab={setTab} />
         </div>
-        {q.isLoading ? <div className="px-5 pb-5"><Skeleton className="h-40 w-full" /></div> : <RequestTable rows={shown} empty="No request matches." />}
+        {q.isLoading ? <div className="px-5 pb-5"><Skeleton className="h-40 w-full" /></div> : <RequestTable rows={shown} empty="No request matches these filters." />}
       </WCard>
     </main>
   );
@@ -276,7 +276,7 @@ export function MyPerformance() {
   const { user } = useUid();
   return (
     <main className={myPage}>
-      <MyHeader title="My performance" subtitle="Your appraisals: self-assessment, your supervisor's review and the agreed objectives. Your work plans and their assessments are under My plans & reports." actions={<WLink to="/dashboard/my/plans">My plans & reports →</WLink>} />
+      <MyHeader title="My performance" subtitle="Your appraisals: self-assessment, your supervisor's review and the agreed objectives." actions={<WLink to="/dashboard/my/plans">My plans & reports →</WLink>} />
       <WCard><MyAppraisals /></WCard>
       <WCard><EmployeePerfomance employee={user} hideWhenEmpty /></WCard>
     </main>
@@ -300,41 +300,34 @@ export function MyExpenses() {
   const tab = params.get("tab") === "petty" || params.get("new") === "petty" ? "petty" : "expenses";
   const [pettyOpen, setPettyOpen] = React.useState(params.get("new") === "petty");
   const petty = useQuery(["my-petty", uid], () => pocketbase.collection("petty_cash_requests").getFullList({ filter: `requested_by = "${uid}"`, sort: "-created", expand: "approved_by,rejected_by" }), { enabled: Boolean(uid) });
+  const rows = (petty.data || []) as any[];
+  const columns: Column<any>[] = [
+    { key: "notes", header: "For", clamp: true, cell: (r) => r.notes || "Cash request" },
+    { key: "amount", header: "Amount (RWF)", numeric: true, cell: (r) => <Num value={r.amount} />, total: <Num value={rows.reduce((a, r) => a + (Number(r.amount) || 0), 0)} /> },
+    { key: "status", header: "Status", cell: (r) => <StatusPill status={word(r.status)} sub={r.status === "approved" ? "Collect the cash from finance" : r.status === "rejected" ? r.rejected_reason : r.status === "pending" || !r.status ? "With finance" : undefined} /> },
+    { key: "created", header: "Asked", nowrap: true, align: "right", cell: (r) => <span className="text-ims-muted">{fmtWhen(r.created)}</span> },
+  ];
   return (
     <main className={myPage}>
       <MyHeader
         title="Expenses & petty cash"
-        subtitle="Expenses you paid for RALGA (refunded after approval) and small cash advances from the petty cash."
-        actions={tab === "petty" && <button type="button" onClick={() => setPettyOpen(true)} className={btnPrimary}><Plus size={15} /> Request petty cash</button>}
+        subtitle="Expenses you paid for RALGA (refunded after approval) and small cash advances from petty cash."
+        actions={tab === "petty" && <Button variant="primary" icon={Plus} onClick={() => setPettyOpen(true)}>Request petty cash</Button>}
       />
-      <Tabs tabs={[["expenses", "Expense requests"], ["petty", "Petty cash"]]} active={tab} onChange={(k) => setParams(k === "petty" ? { tab: "petty" } : {})} />
+      <Tabs label="Expenses and petty cash" tabs={[{ key: "expenses", label: "Expense requests" }, { key: "petty", label: "Petty cash", count: petty.data ? rows.length : undefined }]} active={tab} onChange={(k) => setParams(k === "petty" ? { tab: "petty" } : {})} />
       {tab === "expenses" ? (
         <WCard><EmployeePrePayments employeeId={uid} autoOpen={params.get("new") === "expense"} /></WCard>
       ) : (
         <WCard flush className="overflow-hidden">
-          {petty.isLoading ? <div className="p-5"><Skeleton className="h-24 w-full" /></div> : !(petty.data || []).length ? (
-            <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
-              <Wallet size={26} className="text-[#5B6577]" />
-              <p className="text-[14px] font-bold">No petty cash request yet</p>
-              <p className="max-w-sm text-[13px] text-[#5B6577]">For small urgent payments (courier, transport, small supplies). Finance approves and gives you the cash.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-[14px]">
-                <thead><tr className="bg-[#F8FAFC] text-left text-[12.5px] text-[#5B6577]"><th className="px-5 py-2.5 font-bold">For</th><th className="px-3.5 py-2.5 text-right font-bold">Amount</th><th className="px-3.5 py-2.5 font-bold">Status</th><th className="py-2.5 pl-3.5 pr-5 text-right font-bold">Asked</th></tr></thead>
-                <tbody>
-                  {(petty.data as any[]).map((r) => (
-                    <tr key={r.id} className="border-t border-[#EDF0F5]">
-                      <td className="px-5 py-3">{r.notes || "Cash request"}</td>
-                      <td className="whitespace-nowrap px-3.5 py-3 text-right font-bold tabular-nums">{money(r.amount)}</td>
-                      <td className="px-3.5 py-3"><Pill tone={statusTone(r.status)}>{(r.status || "pending").replace(/^./, (c: string) => c.toUpperCase())}</Pill><div className="mt-[3px] text-[12px] text-[#5B6577]">{r.status === "approved" ? "Cash to collect from finance" : r.status === "rejected" ? r.rejected_reason : "Waiting for finance"}</div></td>
-                      <td className="whitespace-nowrap py-3 pl-3.5 pr-5 text-right text-[#5B6577]">{ago(r.created)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable
+            columns={columns}
+            rows={rows}
+            rowKey={(r) => r.id}
+            loading={petty.isLoading}
+            minWidth={600}
+            caption="My petty cash requests"
+            empty={<EmptyState icon={Wallet} text="No petty cash request yet. Use it for small urgent payments such as a courier, transport or small supplies." action={<Button variant="primary" icon={Plus} onClick={() => setPettyOpen(true)}>Request petty cash</Button>} />}
+          />
         </WCard>
       )}
       <PettryCashRequestModal open={pettyOpen} setOpen={(o: boolean) => setPettyOpen(o)} record={null} employeeId={uid} onComplete={() => { setPettyOpen(false); petty.refetch(); }} />
@@ -355,48 +348,56 @@ export function MyEquipment() {
     <main className={myPage}>
       <MyHeader
         title="Equipment"
-        subtitle="The RALGA equipment in your care, and your requests for more. You answer for what is in your care at the asset counts."
-        actions={<button type="button" onClick={() => setOpen(true)} className={btnPrimary}><Plus size={15} /> Request equipment</button>}
+        subtitle="RALGA equipment in your care, and your requests for more. You answer for it at the asset counts."
+        actions={<Button variant="primary" icon={Plus} onClick={() => setOpen(true)}>Request equipment</Button>}
       />
-      <Tabs tabs={[["assigned", `In my care${held.data ? ` (${held.data.length})` : ""}`], ["requests", `My requests${pending ? ` (${pending} waiting)` : ""}`]]} active={tab} onChange={(k) => setParams(k === "requests" ? { tab: "requests" } : {})} />
+      <Tabs
+        label="Equipment"
+        tabs={[{ key: "assigned", label: "In my care", count: held.data?.length }, { key: "requests", label: "My requests", count: pending || undefined }]}
+        active={tab}
+        onChange={(k) => setParams(k === "requests" ? { tab: "requests" } : {})}
+      />
       {tab === "assigned" ? (
         <WCard flush className="overflow-hidden">
           {held.isLoading ? <div className="p-5"><Skeleton className="h-24 w-full" /></div> : !(held.data || []).length ? (
-            <div className="flex flex-col items-center gap-2 px-5 py-10 text-center"><Laptop size={26} className="text-[#5B6577]" /><p className="text-[14px] font-bold">Nothing in your care</p><p className="text-[13px] text-[#5B6577]">Equipment given to you by the Store & Asset Officer appears here.</p></div>
+            <EmptyState icon={Laptop} text="Nothing in your care. Equipment the Store & Asset Officer gives you appears here." />
           ) : (
-            <ul className="divide-y divide-[#EDF0F5]">
+            <ul className="divide-y divide-ims-divider">
               {(held.data as any[]).map((a) => (
                 <li key={a.id} className="grid gap-2 px-5 py-3 sm:grid-cols-[1fr_auto] sm:items-center">
                   <div className="min-w-0">
-                    <p className="text-[14px] font-bold text-[#14213D]">{a.name}</p>
-                    <p className="text-[12.5px] text-[#5B6577]"><span className="font-mono">{a.code}</span>{a.serial_number ? ` · S/N ${a.serial_number}` : ""} · {a.expand?.category?.name}{a.location_name ? ` · ${a.location_name}` : ""}</p>
+                    <p className="text-t-body font-bold text-ims-text">{a.name}</p>
+                    <p className="text-t-small text-ims-muted"><span className="font-mono">{a.code}</span>{a.serial_number ? ` · S/N ${a.serial_number}` : ""} · {a.expand?.category?.name}{a.location_name ? ` · ${a.location_name}` : ""}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    {a.condition && <Pill tone={a.condition === "damaged" || a.condition === "poor" ? "rejected" : "neutral"}>{CONDITIONS[a.condition]}</Pill>}
-                    <Pill tone={a.status === "in_use" ? "approved" : a.status === "lost" || a.status === "damaged" ? "rejected" : "pending"}>{ASSET_STATUS[a.status]?.label || a.status}</Pill>
-                    {a.assigned_at && <span className="text-[12px] text-[#5B6577]">since {format(toDate(a.assigned_at) as Date, "d MMM yyyy")}</span>}
+                    {a.condition && <Pill tone={a.condition === "damaged" || a.condition === "poor" ? "danger" : "neutral"}>{CONDITIONS[a.condition]}</Pill>}
+                    <span className="text-t-small font-semibold text-ims-body">{ASSET_STATUS[a.status]?.label || a.status}</span>
+                    {a.assigned_at && <span className="text-t-hint text-ims-muted">since {fmtDate(a.assigned_at)}</span>}
                   </div>
                 </li>
               ))}
             </ul>
           )}
-          <p className="border-t border-[#EDF0F5] px-5 py-3 text-[12.5px] text-[#5B6577]">Something broken, lost or no longer needed? Tell the Store & Asset Officer; they record it and arrange repair, return or transfer.</p>
+          <p className="border-t border-ims-divider px-5 py-3 text-t-small text-ims-muted">Something broken, lost or no longer needed? Tell the Store & Asset Officer; they record it and arrange repair, return or transfer.</p>
         </WCard>
       ) : (
         <WCard flush className="overflow-hidden">
           {reqs.isLoading ? <div className="p-5"><Skeleton className="h-24 w-full" /></div> : !(reqs.data || []).length ? (
-            <div className="flex flex-col items-center gap-2 px-5 py-10 text-center"><Laptop size={26} className="text-[#5B6577]" /><p className="text-[14px] font-bold">No equipment request yet</p></div>
+            <EmptyState icon={Laptop} text="No equipment request yet." action={<Button variant="primary" icon={Plus} onClick={() => setOpen(true)}>Request equipment</Button>} />
           ) : (
-            <ul className="divide-y divide-[#EDF0F5]">
+            <ul className="divide-y divide-ims-divider">
               {(reqs.data as any[]).map((r) => (
                 <li key={r.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-3">
                   <div className="min-w-0">
-                    <p className="text-[14px] font-bold">{r.expand?.asset_type?.name || r.expand?.asset?.name || "Equipment"}</p>
-                    <p className="text-[13px] text-[#5B6577]">{r.notes}</p>
-                    {r.status === "approved" && r.expand?.asset && <p className="mt-1 text-[12.5px] text-[#0F6B3A]">Given: <span className="font-mono">{r.expand.asset.code}</span> {r.expand.asset.name}</p>}
-                    {r.status === "rejected" && r.rejected_reason && <p className="mt-1 text-[12.5px] text-[#B42318]">{r.rejected_reason}</p>}
+                    <p className="text-t-body font-bold">{r.expand?.asset_type?.name || r.expand?.asset?.name || "Equipment"}</p>
+                    <p className="text-t-small text-ims-muted">{r.notes}</p>
+                    {r.status === "approved" && r.expand?.asset && <p className="mt-1 text-t-small text-ims-success">Given: <span className="font-mono">{r.expand.asset.code}</span> {r.expand.asset.name}</p>}
+                    {r.status === "rejected" && r.rejected_reason && <p className="mt-1 text-t-small text-ims-danger">{r.rejected_reason}</p>}
                   </div>
-                  <div className="text-right"><Pill tone={statusTone(r.status)}>{r.status === "approved" ? "Given" : r.status === "rejected" ? "Declined" : "Waiting"}</Pill><p className="mt-1 text-[12px] text-[#5B6577]">{ago(r.created)}</p></div>
+                  <div className="flex flex-col items-end gap-1 text-right">
+                    <StatusPill status={word(r.status)} sub={r.status === "approved" ? "Given to you" : r.status === "pending" ? "With the asset officer" : undefined} />
+                    <p className="text-t-hint text-ims-muted">{fmtWhen(r.created)}</p>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -420,7 +421,12 @@ function EquipmentRequestDialog({ uid, onClose, onDone }: { uid: string; onClose
   const [type, setType] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [tried, setTried] = React.useState(false);
+  const typeError = tried && !type ? "Choose what you need." : null;
+  const notesError = tried && notes.trim().length < 5 ? "Say in a few words why you need it." : null;
   const send = async () => {
+    setTried(true);
+    if (!type || notes.trim().length < 5) return;
     setBusy(true);
     try {
       await pocketbase.collection("assets_requests").create({ requested_by: uid, asset_type: type, notes: notes.trim(), status: "pending" });
@@ -433,26 +439,28 @@ function EquipmentRequestDialog({ uid, onClose, onDone }: { uid: string; onClose
     }
   };
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md bg-white">
-        <DialogHeader>
-          <DialogTitle>Request equipment</DialogTitle>
-          <DialogDescription>Say what you need and why; the Store & Asset Officer gives you an item from the store or tells you when one is available.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <label className="block text-[13px] font-medium text-slate-700">What do you need?
-            <select className="mt-1.5 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13.5px]" value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="">Choose…</option>
-              {(types.data || []).map((c: any) => <optgroup key={c.id} label={c.name}>{c.types.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
-            </select>
-          </label>
-          <label className="block text-[13px] font-medium text-slate-700">Why
-            <textarea className="mt-1.5 block min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-[13.5px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. My laptop no longer charges; I need one for the district training next week." />
-          </label>
-        </div>
-        <DialogFooter className="gap-2"><button type="button" className={btnOutline} onClick={onClose}>Cancel</button><button type="button" className={btnPrimary} disabled={busy || !type || notes.trim().length < 5} onClick={send}>Send request</button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title="Request equipment"
+      description="The Store & Asset Officer gives you an item from the store, or tells you when one is available."
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={send} loading={busy}>Send request</Button>
+        </>
+      }
+    >
+      <Field label="What do you need?" required htmlFor="eq-type" error={typeError}>
+        <Select id="eq-type" value={type} onChange={(e) => setType(e.target.value)} invalid={Boolean(typeError)}>
+          <option value="">Choose the equipment</option>
+          {(types.data || []).map((c: any) => <optgroup key={c.id} label={c.name}>{c.types.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+        </Select>
+      </Field>
+      <Field label="Why" required htmlFor="eq-why" error={notesError}>
+        <Textarea id="eq-why" value={notes} onChange={(e) => setNotes(e.target.value)} invalid={Boolean(notesError)} placeholder="For example: my laptop no longer charges and I need one for the district training next week." />
+      </Field>
+    </Modal>
   );
 }
-

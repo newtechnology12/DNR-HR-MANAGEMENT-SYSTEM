@@ -1,16 +1,67 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { format, formatDistanceToNow, isPast } from "date-fns";
+import { isPast } from "date-fns";
 import { toast } from "sonner";
-import { AlertTriangle, Award, Ban, FileSearch, Lock, Pencil, Plus, Printer, Send, ShoppingCart, Trophy } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  CalendarClock,
+  ChevronDown,
+  Eye,
+  ExternalLink,
+  FileSearch,
+  FileText,
+  Lock,
+  Pencil,
+  Plus,
+  Printer,
+  Scale,
+  Send,
+  ShoppingCart,
+  Trophy,
+  XCircle,
+} from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { cn } from "@/utils";
-import { Badge, EmptyState, Initials, KeyValues, ListSkeleton, PageHeader, Panel, StatusBadge } from "@/components/enterprise/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Initials, StatusBadge } from "@/components/enterprise/ui";
+import { FileDrop } from "@/components/portal/kit";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  Column,
+  DataTable,
+  DatePicker,
+  DetailHeader,
+  Details,
+  DocNo,
+  EmptyState,
+  Field,
+  Input,
+  KpiBand,
+  MenuItem,
+  MoneyInput,
+  Modal,
+  MoreMenu,
+  Num,
+  Page,
+  RowAction,
+  SearchBox,
+  Select,
+  Tabs,
+  Textarea,
+  buttonClass,
+  fmtDate,
+  fmtDateTime,
+  fmtMoney,
+  fmtNumber,
+  fmtWhen,
+  overdue,
+} from "@/components/ims";
 import {
   COMPLIANCE,
   EVALUATION_CRITERIA,
@@ -23,18 +74,34 @@ import {
   purchasingApi,
   sourcingApi,
 } from "@/lib/procurement";
+import { cn } from "@/utils";
 import { Rating } from "./Suppliers";
 
-const inputCls =
-  "h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50";
-const TABS = ["overview", "quotations", "comparison", "activity"] as const;
+type TabKey = "details" | "items" | "quotations" | "evaluation" | "activity";
+const TAB_KEYS: TabKey[] = ["details", "items", "quotations", "evaluation", "activity"];
+/** Older links (?tab=overview, ?tab=comparison) still land on the right tab. */
+const LEGACY_TAB: Record<string, TabKey> = { overview: "details", comparison: "evaluation" };
+const LIST = "/dashboard/procurement/rfqs";
+
+/** Money in text: "RWF 1,250,000" (or the quotation's own currency). */
+const inCurrency = (n: number | undefined, currency?: string) => (!currency || currency === "RWF" ? fmtMoney(n) : money(n, currency));
+
+const COMPLIANCE_TONE: Record<string, string> = { compliant: "text-ims-success", partial: "text-ims-warning", non_compliant: "text-ims-danger font-semibold" };
+function Compliance({ value }: { value?: string }) {
+  if (!value) return <span className="text-ims-faint">—</span>;
+  return <span className={cn("whitespace-nowrap", COMPLIANCE_TONE[value] || "text-ims-body")}>{COMPLIANCE[value]?.label || value}</span>;
+}
+
+type SupplierRow = { supplier: any; invite?: any; quote?: any; invited: boolean };
 
 export default function RfqDetail() {
   const { rfqId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const tab = (params.get("tab") as (typeof TABS)[number]) || "overview";
+  const rawTab = params.get("tab") || "details";
+  const tab: TabKey = LEGACY_TAB[rawTab] || (TAB_KEYS.includes(rawTab as TabKey) ? (rawTab as TabKey) : "details");
+  const setTab = (t: TabKey) => setParams(t === "details" ? {} : { tab: t });
   const { canPerform } = useRoles();
   const canManage = canPerform("manage_rfqs");
   const [editing, setEditing] = React.useState(false);
@@ -56,17 +123,40 @@ export default function RfqDetail() {
     queryClient.invalidateQueries(["record-table"]);
   };
 
+  // Supplier response (viewed / declined), set from the row menu of the suppliers table.
+  const setInvite = useMutation(({ invite, status }: { invite: any; status: string; name?: string }) => pocketbase.collection("rfq_suppliers").update(invite.id, { status }), {
+    onSuccess: (_d, v) => {
+      toast.success(`${v.name || "Supplier"} marked as ${v.status === "declined" ? "declined" : "viewed"}`);
+      refresh();
+    },
+    onError: (e) => {
+      toast.error(errorMessage(e));
+    },
+  });
+
   const r: any = q.data?.rfq;
   if (q.isLoading) {
     return (
-      <div className="space-y-4 px-4 py-4 sm:px-6">
-        <Skeleton className="h-12 w-80" />
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-24 w-full" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </Page>
     );
   }
   if (!r) {
-    return <div className="px-4 py-4 sm:px-6"><Panel><EmptyState icon={FileSearch} title="RFQ not available" text="It may be outside what your role can see." /></Panel></div>;
+    return (
+      <Page>
+        <Card>
+          <EmptyState
+            icon={FileSearch}
+            text="This RFQ is not available. It may have been deleted, or your role cannot see it."
+            action={<ButtonLink to={LIST}>Back to RFQs</ButtonLink>}
+          />
+        </Card>
+      </Page>
+    );
   }
 
   const open = r.status === "sent";
@@ -74,229 +164,382 @@ export default function RfqDetail() {
   const suppliers: any[] = r.expand?.suppliers || [];
   const invites = q.data!.invites;
   const quotes = q.data!.quotes;
+  const pos: any[] = q.data!.pos;
   const winner = r.expand?.awarded_quotation;
+  const canRecord = canManage && ["sent", "closed"].includes(r.status);
+  const canAward = canPerform("award_rfqs");
+  const lowest = quotes.length ? Math.min(...quotes.map((x: any) => x.grand_total)) : null;
+  const lateCount = quotes.filter((x: any) => x.received_late).length;
+  const openQuote = (supplier: any, quote?: any) => setQuoteFor({ supplier, quote });
+
+  const rows: SupplierRow[] = [
+    ...suppliers.map((s) => ({ supplier: s, invite: invites.find((i: any) => i.supplier === s.id), quote: quotes.find((x: any) => x.supplier === s.id), invited: true })),
+    ...quotes.filter((x: any) => !suppliers.some((s) => s.id === x.supplier)).map((x: any) => ({ supplier: x.expand?.supplier || { id: x.supplier }, quote: x, invited: false })),
+  ];
+  const waiting = rows.filter((row) => row.invited && !row.quote).map((row) => row.supplier);
+
+  // The next step is the primary button; at most two secondary buttons; the rest go under "More".
+  let primary: React.ReactNode = null;
+  const secondary: React.ReactNode[] = [];
+  if (canManage && r.status === "draft") {
+    if (suppliers.length) {
+      primary = <Button variant="primary" icon={Send} onClick={() => setConfirm("send")}>Send to {suppliers.length} {suppliers.length === 1 ? "supplier" : "suppliers"}</Button>;
+      secondary.push(<Button key="edit" icon={Pencil} onClick={() => setEditing(true)}>Edit</Button>);
+    } else {
+      primary = <Button variant="primary" icon={Plus} onClick={() => setEditing(true)}>Invite suppliers</Button>;
+    }
+  } else if (canManage && open) {
+    const closeFirst = closingPassed || !waiting.length;
+    const record = waiting.length ? <RecordQuoteButton key="record" suppliers={waiting} primary={!closeFirst} onPick={(s) => openQuote(s)} /> : null;
+    const close = <Button key="close" variant={closeFirst ? "primary" : "secondary"} icon={Lock} onClick={() => setConfirm("close")}>Close quotations</Button>;
+    if (closeFirst) {
+      primary = close;
+      if (record) secondary.push(record);
+    } else {
+      primary = record;
+      secondary.push(close);
+    }
+  } else if (r.status === "closed" && (canManage || canAward) && tab !== "evaluation") {
+    primary = <Button variant="primary" icon={Scale} onClick={() => setTab("evaluation")}>{canAward ? "Compare and award" : "Compare and score"}</Button>;
+  } else if (r.status === "awarded") {
+    if (pos.length) primary = <ButtonLink variant="primary" icon={ShoppingCart} to={`/dashboard/procurement/purchase-orders/${pos[0].id}`}>Open {pos[0].number}</ButtonLink>;
+    else if (canPerform("manage_purchase_orders")) primary = <CreatePoButton rfqId={r.id} />;
+  }
+  const more: MenuItem[] = [
+    { label: "Extend closing date", icon: CalendarClock, onSelect: () => setEditing(true), hidden: !(canManage && open) },
+    { label: "Cancel RFQ", icon: Ban, danger: true, onSelect: () => setConfirm("cancel"), hidden: !(canManage && ["draft", "sent", "closed"].includes(r.status)) },
+  ];
+
+  const supplierColumns: Column<SupplierRow>[] = [
+    {
+      key: "supplier",
+      header: "Supplier",
+      className: "min-w-[220px]",
+      cell: (row) => (
+        <Link className="font-semibold text-ims-text hover:text-ims-link hover:underline" to={`/dashboard/procurement/suppliers/${row.supplier.id}`}>
+          {row.supplier.name || "Supplier"}
+        </Link>
+      ),
+      sub: (row) =>
+        row.supplier.code || row.supplier.email ? (
+          <>
+            {row.supplier.code}
+            {row.supplier.email && <span className="block break-all">{row.supplier.email}</span>}
+          </>
+        ) : null,
+    },
+    {
+      key: "response",
+      header: "Response",
+      nowrap: true,
+      cell: (row) => (row.invite ? <StatusBadge status={row.invite.status} map={INVITE_STATUS} /> : row.invited ? <StatusBadge status="invited" map={INVITE_STATUS} /> : <span className="text-ims-faint">Not invited</span>),
+    },
+    {
+      key: "quotation",
+      header: "Quotation",
+      nowrap: true,
+      cell: (row) => (row.quote ? <DocNo value={row.quote.number} /> : <span className="text-ims-faint">—</span>),
+      sub: (row) =>
+        row.quote ? (
+          <>
+            Ref {row.quote.supplier_reference || "—"}
+            {row.quote.received_late && <span className="font-semibold text-ims-warning"> · Late</span>}
+            {row.quote.attachments?.length > 0 && ` · ${row.quote.attachments.length} ${row.quote.attachments.length === 1 ? "file" : "files"}`}
+          </>
+        ) : null,
+    },
+    { key: "total", header: `Total (${r.currency || "RWF"})`, numeric: true, cell: (row) => (row.quote ? <Num value={row.quote.grand_total} /> : <span className="text-ims-faint">—</span>) },
+    { key: "delivery", header: "Delivery (days)", numeric: true, cell: (row) => (row.quote?.delivery_days ? <Num value={row.quote.delivery_days} /> : <span className="text-ims-faint">—</span>) },
+    { key: "compliance", header: "Compliance", cell: (row) => <Compliance value={row.quote?.technical_compliance} /> },
+    { key: "score", header: "Score (of 100)", numeric: true, cell: (row) => (row.quote?.total_score ? fmtNumber(row.quote.total_score, true) : <span className="text-ims-faint">—</span>) },
+    { key: "status", header: "Status", nowrap: true, cell: (row) => (row.quote ? <StatusBadge status={row.quote.status} map={QUOTE_STATUS} /> : <span className="text-ims-faint">—</span>) },
+  ];
+  const supplierActions = (row: SupplierRow): RowAction<SupplierRow>[] => [
+    ...(canRecord ? [{ label: row.quote ? "Edit quotation" : "Record quotation", icon: row.quote ? Pencil : Plus, onSelect: () => openQuote(row.supplier, row.quote) }] : []),
+    ...(row.invited ? [{ label: "Print RFQ for this supplier", icon: Printer, onSelect: () => window.open(`/print/rfq/${r.id}/${row.supplier.id}`, "_blank", "noopener") }] : []),
+    ...(canManage && row.invite && open && row.invite.status === "sent"
+      ? [
+          { label: "Mark as viewed", icon: Eye, onSelect: () => setInvite.mutate({ invite: row.invite, status: "viewed", name: row.supplier.name }) },
+          { label: "Mark as declined", icon: XCircle, onSelect: () => setInvite.mutate({ invite: row.invite, status: "declined", name: row.supplier.name }) },
+        ]
+      : []),
+    ...((row.quote?.attachments || []) as string[]).map((f) => ({ label: `Open ${f}`, icon: FileText, onSelect: () => window.open(pocketbase.files.getUrl(row.quote, f), "_blank", "noopener") })),
+    { label: "Open supplier", icon: ExternalLink, onSelect: () => navigate(`/dashboard/procurement/suppliers/${row.supplier.id}`) },
+  ];
+
+  const itemColumns: Column<any>[] = [
+    { key: "line", header: "#", width: "48px", cell: (it, i) => <span className="text-ims-muted">{it.line || i + 1}</span> },
+    { key: "description", header: "Description", clamp: true, cell: (it) => it.description, sub: (it) => it.specification },
+    { key: "quantity", header: "Quantity", numeric: true, nowrap: true, cell: (it) => `${fmtNumber(it.quantity, true)} ${it.unit || ""}`.trim() },
+  ];
+
+  const weights = r.evaluation_weights || {};
 
   return (
-    <div className="space-y-4 px-4 py-4 sm:px-6">
-      <PageHeader
-        breadcrumbs={[{ title: "Procurement", link: "/dashboard/procurement" }, { title: "RFQs", link: "/dashboard/procurement/rfqs" }, { title: r.number, link: "#" }]}
-        title={<span className="flex flex-wrap items-center gap-2">{r.number} <StatusBadge status={r.status} map={RFQ_STATUS} /></span>}
-        description={r.title}
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to RFQs", to: LIST }}
+        number={r.number}
+        type="Request for quotation"
+        status={RFQ_STATUS[r.status]?.label || r.status}
+        statusNote={RFQ_STATUS[r.status]?.note}
+        title={r.title || "Untitled RFQ"}
+        facts={[
+          r.expand?.requisition
+            ? {
+                label: "Requisition",
+                value: (
+                  <Link className="whitespace-nowrap font-mono text-[13px] text-ims-link hover:underline" to={`/dashboard/procurement/requisitions/${r.requisition}`}>
+                    {r.expand.requisition.number}
+                  </Link>
+                ),
+              }
+            : null,
+          r.expand?.department?.name,
+          { label: "Buyer", value: r.expand?.buyer?.name || "—" },
+          r.issue_date ? { label: "Issued", value: fmtDate(r.issue_date) } : "Not sent yet",
+        ]}
         actions={
-          canManage && (
+          primary || secondary.length || more.some((m) => !m.hidden) ? (
             <>
-              {r.status === "draft" && (
-                <>
-                  <Button size="sm" onClick={() => setConfirm("send")}><Send size={14} /> Send to {suppliers.length} supplier(s)</Button>
-                  <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>
-                </>
-              )}
-              {open && <Button size="sm" variant="outline" onClick={() => setConfirm("close")}><Lock size={14} /> Close quotations</Button>}
-              {open && <Button size="sm" variant="ghost" onClick={() => setEditing(true)}><Pencil size={14} /> Extend closing date</Button>}
-              {["draft", "sent", "closed"].includes(r.status) && <Button size="sm" variant="ghost" onClick={() => setConfirm("cancel")}><Ban size={14} /> Cancel RFQ</Button>}
+              <MoreMenu items={more} />
+              {secondary}
+              {primary}
             </>
-          )
+          ) : undefined
         }
       />
 
       {winner && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-900">
-          <p className="flex flex-wrap items-center gap-2 font-medium">
-            <Trophy size={15} /> Awarded to {winner.expand?.supplier?.name} — {money(winner.grand_total, winner.currency)}
-            {r.award_not_lowest && <Badge tone="warning">Not the lowest price</Badge>}
-          </p>
-          <p className="mt-1">Reason: “{r.award_reason}”</p>
-          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[12px] text-emerald-800">By {r.expand?.awarded_by?.name} on {format(new Date(r.awarded_at), "d MMM yyyy, HH:mm")}.</p>
-            {q.data!.pos.length ? (
-              <Link className="inline-flex items-center gap-1.5 text-[13px] font-medium text-emerald-900 underline" to={`/dashboard/procurement/purchase-orders/${q.data!.pos[0].id}`}><ShoppingCart size={14} /> {q.data!.pos[0].number}</Link>
-            ) : (
-              canPerform("manage_purchase_orders") && <CreatePoButton rfqId={r.id} />
-            )}
+        <div role="status" className="flex items-start gap-2 rounded-card border border-ims-success/30 bg-ims-success-bg px-4 py-3 text-t-body text-ims-success">
+          <Trophy size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <div className="min-w-0">
+            <p>
+              <span className="font-semibold">Awarded to {winner.expand?.supplier?.name}.</span>
+              {r.award_not_lowest && <span className="font-semibold text-ims-warning"> Not the lowest price.</span>}
+              {r.award_reason && <> Reason: “{r.award_reason}”</>}
+            </p>
+            <p className="mt-0.5 text-t-small">
+              By {r.expand?.awarded_by?.name || "—"}, {fmtDateTime(r.awarded_at)}.
+            </p>
           </div>
         </div>
       )}
       {open && closingPassed && (
-        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900">
-          <AlertTriangle size={15} /> The closing date has passed. Close the RFQ to start evaluation; quotations recorded now are marked late.
-        </div>
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>The closing date has passed. Close quotations to start the evaluation; quotations recorded from now on are marked late.</span>
+        </p>
+      )}
+      {r.status === "cancelled" && r.cancel_reason && (
+        <p className="rounded-card border border-ims-border bg-ims-card px-4 py-3 text-t-body text-ims-body">
+          <span className="font-semibold text-ims-text">Cancelled.</span> {r.cancel_reason}
+        </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {[
-          ["Requisition", <Link key="l" className="text-primaryDark hover:underline" to={`/dashboard/procurement/requisitions/${r.requisition}`}>{r.expand?.requisition?.number}</Link>],
-          ["Closing date", r.closing_date ? format(new Date(r.closing_date), "d MMM yyyy") : "—"],
-          ["Quotations", `${quotes.length} of ${suppliers.length}`],
-          ["Lowest offer", quotes.length ? money(Math.min(...quotes.map((x: any) => x.grand_total)), r.currency) : "—"],
-        ].map(([k, v]) => (
-          <div key={k as string} className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-card">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{k}</p>
-            <div className="mt-1 truncate text-[15px] font-semibold tabular-nums text-slate-900">{v}</div>
-          </div>
-        ))}
-      </div>
+      <KpiBand
+        items={[
+          { label: "Quotations received", value: `${quotes.length} of ${suppliers.length}`, sub: lateCount ? `${lateCount} late` : suppliers.length ? `${suppliers.length} ${suppliers.length === 1 ? "supplier" : "suppliers"} invited` : "No suppliers invited" },
+          { label: "Lowest offer", value: lowest === null ? "—" : inCurrency(lowest, r.currency) },
+          { label: "Awarded amount", value: winner ? inCurrency(winner.grand_total, winner.currency) : "—", sub: winner ? winner.expand?.supplier?.name : "Not awarded yet" },
+          {
+            label: "Closing date",
+            value: fmtDate(r.closing_date),
+            sub: open ? (closingPassed ? overdue(r.closing_date) || "Passed" : "Open for quotes") : r.status === "draft" ? "Not sent yet" : "Quotations closed",
+            tone: open && closingPassed ? "warning" : "default",
+          },
+        ]}
+      />
 
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200" role="tablist">
-        {TABS.map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setParams(t === "overview" ? {} : { tab: t })}
-            className={cn("-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-medium capitalize", tab === t ? "border-primary text-primaryDark" : "border-transparent text-slate-500 hover:text-slate-800")}>
-            {t === "comparison" ? "Compare & award" : t === "activity" ? "Activity & audit" : t}
-            {t === "quotations" && <span className="ml-1.5 text-slate-400">{quotes.length}</span>}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="RFQ sections"
+        active={tab}
+        onChange={(k) => setTab(k as TabKey)}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "items", label: "Items", count: (r.items || []).length },
+          { key: "quotations", label: "Quotations", count: quotes.length },
+          { key: "evaluation", label: "Evaluation" },
+          { key: "activity", label: "Activity" },
+        ]}
+      />
 
-      {tab === "overview" && (
+      {tab === "details" && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <div className="space-y-4 xl:col-span-2">
-            <Panel title="Items requested" subtitle="Suppliers see descriptions and quantities, never internal estimates" bodyClassName="px-0">
-              <table className="dnr-grid w-full text-[13px]">
-                <thead><tr className="border-y border-slate-100 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-4 py-2">#</th><th className="px-4 py-2">Description</th><th className="px-4 py-2 text-right">Quantity</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {(r.items || []).map((it: any) => (
-                    <tr key={it.line}><td className="px-4 py-2.5 text-slate-500">{it.line}</td><td className="px-4 py-2.5"><p>{it.description}</p>{it.specification && <p className="text-[12px] text-slate-500">{it.specification}</p>}</td><td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{it.quantity} {it.unit}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </Panel>
-            <Panel title="Invited suppliers" subtitle={r.status === "draft" ? "Edit the RFQ to change who is invited" : "Track each supplier's response"} bodyClassName="px-0">
-              {!suppliers.length ? (
-                <EmptyState icon={FileSearch} text="No suppliers invited yet." action={canManage && r.status === "draft" && <Button size="sm" onClick={() => setEditing(true)}><Plus size={14} /> Invite suppliers</Button>} />
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="dnr-grid w-full min-w-[640px] text-[13px]">
-                    <thead><tr className="border-y border-slate-100 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-4 py-2">Supplier</th><th className="px-4 py-2">Rating</th><th className="px-4 py-2">Response</th><th className="px-4 py-2">Quotation</th><th className="px-4 py-2 text-right">Actions</th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {suppliers.map((s) => {
-                        const inv = invites.find((i: any) => i.supplier === s.id);
-                        const quote = quotes.find((x: any) => x.supplier === s.id);
-                        return (
-                          <tr key={s.id}>
-                            <td className="px-4 py-2.5"><Link className="font-medium text-slate-800 hover:underline" to={`/dashboard/procurement/suppliers/${s.id}`}>{s.name}</Link><p className="text-[12px] text-slate-500">{s.code} · {s.email}</p></td>
-                            <td className="px-4 py-2.5"><Rating value={s.rating} count={s.evaluations_count} /></td>
-                            <td className="px-4 py-2.5">{inv ? <StatusBadge status={inv.status} map={INVITE_STATUS} /> : <Badge>Not sent</Badge>}</td>
-                            <td className="px-4 py-2.5 tabular-nums">{quote ? money(quote.grand_total, quote.currency) : "—"}</td>
-                            <td className="px-4 py-2.5">
-                              <div className="flex justify-end gap-1">
-                                <a href={`/print/rfq/${r.id}/${s.id}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12.5px] text-slate-600 hover:bg-slate-100" title="Supplier-specific RFQ document"><Printer size={14} /> Print</a>
-                                {canManage && ["sent", "closed"].includes(r.status) && (
-                                  <Button size="sm" variant={quote ? "ghost" : "outline"} onClick={() => setQuoteFor({ supplier: s, quote })}>{quote ? "Edit quote" : "Record quote"}</Button>
-                                )}
-                                {canManage && inv && open && ["sent"].includes(inv.status) && <InviteStatusButton invite={inv} onDone={refresh} />}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Panel>
-          </div>
-          <Panel title="Terms">
-            <KeyValues
-              columns={1}
+          <Card className="xl:col-span-2">
+            <CardHeader title="Terms" subtitle="What every invited supplier receives with the RFQ." />
+            <Details
               items={[
-                { label: "Buyer", value: r.expand?.buyer?.name },
+                {
+                  label: "Requisition",
+                  value: r.expand?.requisition ? (
+                    <Link className="whitespace-nowrap font-mono text-[13px] text-ims-link hover:underline" to={`/dashboard/procurement/requisitions/${r.requisition}`}>
+                      {r.expand.requisition.number}
+                    </Link>
+                  ) : null,
+                },
+                { label: "Requested by", value: r.expand?.requester?.name },
                 { label: "Department", value: r.expand?.department?.name },
-                { label: "Issued", value: r.issue_date ? format(new Date(r.issue_date), "d MMM yyyy") : "Not sent yet" },
+                { label: "Buyer", value: r.expand?.buyer?.name },
+                { label: "Issued", value: r.issue_date ? fmtDate(r.issue_date) : "Not sent yet" },
+                { label: "Closing date", value: r.closing_date ? fmtDate(r.closing_date) : null },
                 { label: "Currency", value: r.currency },
                 { label: "Delivery location", value: r.delivery_location },
                 { label: "Delivery terms", value: r.delivery_terms },
                 { label: "Payment terms", value: r.payment_terms },
-                { label: "Required documents", value: r.required_documents },
-                { label: "Notes", value: r.notes },
-                { label: "Cancellation reason", value: r.cancel_reason },
-              ].filter((i) => i.value !== "" || i.label !== "Cancellation reason")}
+                { label: "Required documents", value: r.required_documents, wide: true },
+                { label: "Notes", value: r.notes ? <span className="whitespace-pre-line">{r.notes}</span> : null, wide: true },
+                ...(r.cancel_reason ? [{ label: "Cancellation reason", value: r.cancel_reason, wide: true }] : []),
+              ]}
             />
-          </Panel>
+          </Card>
+          <Card>
+            <CardHeader title="Evaluation weights" subtitle="How much each criterion counts in the weighted score." />
+            <dl className="space-y-2 text-t-body">
+              {EVALUATION_CRITERIA.map((c) => (
+                <div key={c.key} className="flex items-baseline justify-between gap-3">
+                  <dt className="text-ims-muted">{c.label}</dt>
+                  <dd className="font-semibold tabular-nums text-ims-text">{fmtNumber(weights[c.key] || 0, true)}%</dd>
+                </div>
+              ))}
+              <div className="flex items-baseline justify-between gap-3 border-t border-ims-divider pt-2">
+                <dt className="font-semibold text-ims-text">Total</dt>
+                <dd className="font-bold tabular-nums text-ims-text">{fmtNumber(EVALUATION_CRITERIA.reduce((a, c) => a + (Number(weights[c.key]) || 0), 0), true)}%</dd>
+              </div>
+            </dl>
+          </Card>
         </div>
       )}
 
-      {tab === "quotations" && (
-        <Panel title="Quotations received" bodyClassName="px-0">
-          {!quotes.length ? (
-            <EmptyState icon={FileSearch} text={r.status === "draft" ? "Send the RFQ first." : "No quotations recorded yet."} />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="dnr-grid w-full min-w-[760px] text-[13px]">
-                <thead><tr className="border-y border-slate-100 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-4 py-2">Quotation</th><th className="px-4 py-2">Supplier</th><th className="px-4 py-2 text-right">Grand total</th><th className="px-4 py-2">Delivery</th><th className="px-4 py-2">Compliance</th><th className="px-4 py-2 text-right">Score</th><th className="px-4 py-2">Status</th><th /></tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {quotes.map((x: any) => (
-                    <tr key={x.id}>
-                      <td className="px-4 py-2.5"><p className="font-medium">{x.number}</p><p className="text-[12px] text-slate-500">Ref {x.supplier_reference || "—"}{x.received_late && <Badge tone="warning" className="ml-1.5">Late</Badge>}</p></td>
-                      <td className="px-4 py-2.5">{x.expand?.supplier?.name}</td>
-                      <td className="px-4 py-2.5 text-right font-medium tabular-nums">{money(x.grand_total, x.currency)}</td>
-                      <td className="px-4 py-2.5">{x.delivery_days ? `${x.delivery_days} days` : "—"}</td>
-                      <td className="px-4 py-2.5">{x.technical_compliance ? <StatusBadge status={x.technical_compliance} map={COMPLIANCE} /> : "—"}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{x.total_score ? `${x.total_score}/100` : "—"}</td>
-                      <td className="px-4 py-2.5"><StatusBadge status={x.status} map={QUOTE_STATUS} /></td>
-                      <td className="px-4 py-2.5 text-right">
-                        {x.attachments?.map((f: string) => <a key={f} className="mr-2 text-[12px] text-primaryDark hover:underline" href={pocketbase.files.getUrl(x, f)} target="_blank" rel="noreferrer">file</a>)}
-                        {canManage && ["sent", "closed"].includes(r.status) && <Button size="sm" variant="ghost" onClick={() => setQuoteFor({ supplier: x.expand?.supplier, quote: x })}>Edit</Button>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
+      {tab === "items" && (
+        <Card padded={false}>
+          <div className="px-5 pt-5">
+            <CardHeader title="Items requested" subtitle="Suppliers see the descriptions and quantities, never the internal estimates." />
+          </div>
+          <DataTable
+            columns={itemColumns}
+            rows={r.items || []}
+            rowKey={(it, i) => String(it.line ?? i)}
+            minWidth={520}
+            caption="Items requested"
+            empty={<EmptyState compact text="No items on this RFQ." />}
+          />
+        </Card>
       )}
 
-      {tab === "comparison" && <Comparison rfq={r} quotes={quotes} onChanged={refresh} canScore={canManage} canAward={canPerform("award_rfqs")} />}
+      {tab === "quotations" && (
+        <Card padded={false}>
+          <div className="px-5 pt-5">
+            <CardHeader
+              title="Suppliers and quotations"
+              subtitle={
+                r.status === "draft"
+                  ? "Who is invited. Quotations can be recorded once the RFQ is sent."
+                  : canRecord
+                    ? "Each supplier's response and quotation. Open a row to record or edit its quotation."
+                    : "Each supplier's response and quotation."
+              }
+            />
+          </div>
+          <DataTable
+            columns={supplierColumns}
+            rows={rows}
+            rowKey={(row) => row.supplier.id}
+            onRowClick={canRecord ? (row) => openQuote(row.supplier, row.quote) : (row) => navigate(`/dashboard/procurement/suppliers/${row.supplier.id}`)}
+            rowActions={supplierActions}
+            minWidth={980}
+            caption="Suppliers and quotations"
+            empty={
+              <EmptyState
+                compact
+                icon={FileSearch}
+                text="No suppliers invited yet."
+                action={canManage && r.status === "draft" ? <Button variant="primary" icon={Plus} onClick={() => setEditing(true)}>Invite suppliers</Button> : undefined}
+              />
+            }
+          />
+        </Card>
+      )}
+
+      {tab === "evaluation" && <Comparison rfq={r} quotes={quotes} onChanged={refresh} canScore={canManage} canAward={canAward} />}
       {tab === "activity" && <RfqActivity rfqId={r.id} />}
 
       {editing && <RfqEditDialog rfq={r} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh(); }} />}
       {quoteFor && <QuotationDialog rfq={r} supplier={quoteFor.supplier} quote={quoteFor.quote} onClose={() => setQuoteFor(null)} onSaved={() => { setQuoteFor(null); refresh(); }} />}
-      <ConfirmAction kind={confirm} rfq={r} onClose={() => setConfirm(null)} onDone={() => { setConfirm(null); refresh(); if (confirm === "cancel") navigate("/dashboard/procurement/rfqs"); }} />
-    </div>
+      <ConfirmAction kind={confirm} rfq={r} onClose={() => setConfirm(null)} onDone={() => { setConfirm(null); refresh(); if (confirm === "cancel") navigate(LIST); }} />
+    </Page>
   );
 }
 
-function InviteStatusButton({ invite, onDone }: { invite: any; onDone: () => void }) {
-  const set = useMutation((status: string) => pocketbase.collection("rfq_suppliers").update(invite.id, { status }), {
-    onSuccess: () => { toast.success("Response updated"); onDone(); },
-    onError: (e) => { toast.error(errorMessage(e)); },
-  });
+/** "Record quotation": straight to the form for one waiting supplier, a menu of suppliers for several. */
+function RecordQuoteButton({ suppliers, onPick, primary }: { suppliers: any[]; onPick: (s: any) => void; primary?: boolean }) {
+  const variant = primary ? "primary" : "secondary";
+  if (suppliers.length === 1) {
+    return <Button variant={variant} icon={Plus} onClick={() => onPick(suppliers[0])}>Record quotation</Button>;
+  }
   return (
-    <select aria-label="Mark supplier response" className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[12.5px]" value="" onChange={(e) => e.target.value && set.mutate(e.target.value)}>
-      <option value="">Mark as…</option>
-      <option value="viewed">Viewed</option>
-      <option value="declined">Declined</option>
-    </select>
+    <DropdownMenu>
+      <DropdownMenuTrigger className={buttonClass({ variant })}>
+        <Plus size={16} aria-hidden /> Record quotation <ChevronDown size={15} aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[240px] rounded-control border-ims-border p-1 shadow-menu">
+        <p className="px-2.5 pb-1 pt-1.5 text-t-small text-ims-muted">Waiting for a quotation from</p>
+        {suppliers.map((s) => (
+          <DropdownMenuItem key={s.id} onSelect={() => onPick(s)} className="flex min-h-[38px] cursor-pointer items-center gap-2 rounded-md px-2.5 text-[14px] text-ims-text focus:bg-ims-subtle">
+            {s.name}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
 function ConfirmAction({ kind, rfq, onClose, onDone }: { kind: "send" | "close" | "cancel" | null; rfq: any; onClose: () => void; onDone: () => void }) {
   const [reason, setReason] = React.useState("");
   React.useEffect(() => setReason(""), [kind]);
+  const n = rfq.suppliers?.length || 0;
   const run = useMutation(() => sourcingApi.rfqAction(rfq.id, kind!, kind === "cancel" ? { reason } : {}), {
-    onSuccess: () => { toast.success(kind === "send" ? `${rfq.number} sent` : kind === "close" ? `${rfq.number} closed for evaluation` : `${rfq.number} cancelled`); onDone(); },
-    onError: (e) => { toast.error(errorMessage(e)); },
+    onSuccess: () => {
+      toast.success(kind === "send" ? `${rfq.number} sent to ${n} ${n === 1 ? "supplier" : "suppliers"}` : kind === "close" ? `${rfq.number} closed for evaluation` : `${rfq.number} cancelled`);
+      onDone();
+    },
+    onError: (e) => {
+      toast.error(errorMessage(e));
+    },
   });
   const copy = {
-    send: { title: `Send ${rfq.number}?`, text: `Supplier-specific RFQs will be issued to ${rfq.suppliers?.length || 0} supplier(s). Items and suppliers are locked afterwards; you can still extend the closing date.${(rfq.suppliers?.length || 0) < 3 ? " Note: fewer than 3 suppliers are invited — check your procurement policy." : ""}` },
-    close: { title: `Close ${rfq.number}?`, text: "No further on-time quotations are expected. You can then compare offers and award." },
-    cancel: { title: `Cancel ${rfq.number}?`, text: "The requisition returns to “Approved” so it can be sourced again." },
+    send: {
+      title: `Send ${rfq.number} to ${n} ${n === 1 ? "supplier" : "suppliers"}?`,
+      text: `Each supplier gets its own RFQ. Items and suppliers are locked afterwards; you can still extend the closing date.${n < 3 ? " Fewer than 3 suppliers are invited: check what the procurement policy asks for." : ""}`,
+      verb: "Send",
+      icon: Send,
+    },
+    close: { title: `Close ${rfq.number} for quotations?`, text: "No more on-time quotations are expected. You can then compare the offers and award.", verb: "Close quotations", icon: Lock },
+    cancel: { title: `Cancel ${rfq.number}?`, text: "The requisition goes back to Approved so it can be sourced again.", verb: "Cancel RFQ", icon: Ban },
   } as const;
   const c = kind ? copy[kind] : null;
   return (
-    <Dialog open={Boolean(kind)} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md bg-white">
-        <DialogHeader><DialogTitle>{c?.title}</DialogTitle><DialogDescription>{c?.text}</DialogDescription></DialogHeader>
-        {kind === "cancel" && (
-          <label className="block text-[12.5px] font-medium text-slate-700">Reason <span className="text-red-600">*</span>
-            <textarea className={cn(inputCls, "mt-1 h-20 py-2")} value={reason} onChange={(e) => setReason(e.target.value)} />
-          </label>
-        )}
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Back</Button>
-          <Button variant={kind === "cancel" ? "danger" : "default"} disabled={run.isLoading || (kind === "cancel" && !reason.trim())} onClick={() => run.mutate()}>{run.isLoading ? "Working…" : "Confirm"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={Boolean(kind)}
+      onClose={onClose}
+      size="sm"
+      title={c?.title || ""}
+      description={c?.text}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={run.isLoading}>{kind === "cancel" ? "Keep RFQ" : "Cancel"}</Button>
+          <Button variant={kind === "cancel" ? "danger" : "primary"} icon={c?.icon} loading={run.isLoading} disabled={kind === "cancel" && !reason.trim()} onClick={() => run.mutate()}>
+            {c?.verb}
+          </Button>
+        </>
+      }
+    >
+      {kind === "cancel" && (
+        <Field label="Reason" required htmlFor="rfq-cancel-reason" hint="Kept in the audit trail and shown on the RFQ.">
+          <Textarea id="rfq-cancel-reason" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is this RFQ cancelled?" />
+        </Field>
+      )}
+    </Modal>
   );
 }
 
@@ -313,62 +556,108 @@ function RfqEditDialog({ rfq, onClose, onSaved }: { rfq: any; onClose: () => voi
   const weightTotal = EVALUATION_CRITERIA.reduce((a, c) => a + (Number(v.evaluation_weights[c.key]) || 0), 0);
   const save = useMutation(
     () => pocketbase.collection("rfqs").update(rfq.id, { ...v, closing_date: v.closing_date ? `${v.closing_date} 17:00:00.000Z` : "" }),
-    { onSuccess: () => { toast.success("RFQ updated"); onSaved(); }, onError: (e) => { toast.error(errorMessage(e)); } }
+    { onSuccess: () => { toast.success(`${rfq.number} saved`); onSaved(); }, onError: (e) => { toast.error(errorMessage(e)); } }
   );
   const set = (k: string) => (e: any) => setV((x) => ({ ...x, [k]: e.target.value }));
   const list = (sup.data || []).filter((s: any) => `${s.name} ${s.code}`.toLowerCase().includes(search.toLowerCase()));
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto bg-white">
-        <DialogHeader><DialogTitle>{draft ? `Edit ${rfq.number}` : `Extend closing date · ${rfq.number}`}</DialogTitle><DialogDescription>{draft ? "Everything can change until the RFQ is sent." : "Suppliers already have this RFQ; only the closing date and notes can change."}</DialogDescription></DialogHeader>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {draft && <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">Title<input className={cn(inputCls, "mt-1")} value={v.title} onChange={set("title")} /></label>}
-          <label className="block text-[12.5px] font-medium text-slate-700">Closing date<input type="date" className={cn(inputCls, "mt-1")} value={v.closing_date} onChange={set("closing_date")} /></label>
-          {draft && <label className="block text-[12.5px] font-medium text-slate-700">Delivery location<input className={cn(inputCls, "mt-1")} value={v.delivery_location} onChange={set("delivery_location")} /></label>}
-          {draft && <label className="block text-[12.5px] font-medium text-slate-700">Payment terms<input className={cn(inputCls, "mt-1")} value={v.payment_terms} onChange={set("payment_terms")} /></label>}
-          {draft && <label className="block text-[12.5px] font-medium text-slate-700">Delivery terms<input className={cn(inputCls, "mt-1")} value={v.delivery_terms} onChange={set("delivery_terms")} /></label>}
-          {draft && <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">Required documents<input className={cn(inputCls, "mt-1")} value={v.required_documents} onChange={set("required_documents")} /></label>}
-          <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">Notes<textarea className={cn(inputCls, "mt-1 h-16 py-2")} value={v.notes} onChange={set("notes")} /></label>
-        </div>
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={draft ? `Edit ${rfq.number}` : `Extend the closing date of ${rfq.number}`}
+      description={draft ? "Everything can change until the RFQ is sent." : "Suppliers already have this RFQ; only the closing date and the notes can change."}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={save.isLoading} disabled={draft && weightTotal !== 100} onClick={() => save.mutate()}>Save</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {draft && (
-          <>
-            <div>
-              <p className="mb-1 text-[13px] font-semibold text-slate-900">Invite suppliers ({v.suppliers.length})</p>
-              <input className={cn(inputCls, "mb-2")} placeholder="Search suppliers…" value={search} onChange={(e) => setSearch(e.target.value)} />
-              <ul className="max-h-52 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
-                {list.map((s: any) => {
-                  const on = v.suppliers.includes(s.id);
-                  const match = s.categories?.includes(reqCategory);
-                  return (
-                    <li key={s.id}>
-                      <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-[13px] hover:bg-slate-50">
-                        <input type="checkbox" checked={on} onChange={() => setV((x) => ({ ...x, suppliers: on ? x.suppliers.filter((id) => id !== s.id) : [...x.suppliers, s.id] }))} />
-                        <span className="min-w-0 flex-1"><span className="font-medium">{s.name}</span> {match && <Badge tone="info" className="ml-1">Serves this category</Badge>}<span className="block truncate text-[12px] text-slate-500">{(s.expand?.categories || []).map((c: any) => c.name).join(", ")}</span></span>
-                        <Rating value={s.rating} count={s.evaluations_count} />
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-            <div>
-              <p className="mb-1 text-[13px] font-semibold text-slate-900">Evaluation weights <span className={cn("font-normal", weightTotal === 100 ? "text-slate-500" : "text-red-600")}>({weightTotal}% of 100%)</span></p>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                {EVALUATION_CRITERIA.map((c) => (
-                  <label key={c.key} className="block text-[12px] text-slate-600">{c.label}
-                    <input type="number" min={0} max={100} className={cn(inputCls, "mt-0.5")} value={v.evaluation_weights[c.key] ?? 0} onChange={(e) => setV((x) => ({ ...x, evaluation_weights: { ...x.evaluation_weights, [c.key]: Number(e.target.value) } }))} />
-                  </label>
-                ))}
-              </div>
-            </div>
-          </>
+          <Field label="Title" htmlFor="rfq-title" className="sm:col-span-2">
+            <Input id="rfq-title" value={v.title} onChange={set("title")} />
+          </Field>
         )}
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={save.isLoading || (draft && weightTotal !== 100)} onClick={() => save.mutate()}>{save.isLoading ? "Saving…" : "Save"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <Field label="Closing date" htmlFor="rfq-edit-closing">
+          <DatePicker id="rfq-edit-closing" value={v.closing_date} onChange={(d) => setV((x) => ({ ...x, closing_date: d }))} />
+        </Field>
+        {draft && (
+          <Field label="Delivery location" htmlFor="rfq-delivery-location">
+            <Input id="rfq-delivery-location" value={v.delivery_location} onChange={set("delivery_location")} />
+          </Field>
+        )}
+        {draft && (
+          <Field label="Payment terms" htmlFor="rfq-payment-terms">
+            <Input id="rfq-payment-terms" value={v.payment_terms} onChange={set("payment_terms")} />
+          </Field>
+        )}
+        {draft && (
+          <Field label="Delivery terms" htmlFor="rfq-delivery-terms">
+            <Input id="rfq-delivery-terms" value={v.delivery_terms} onChange={set("delivery_terms")} />
+          </Field>
+        )}
+        {draft && (
+          <Field label="Required documents" htmlFor="rfq-required-documents" className="sm:col-span-2">
+            <Input id="rfq-required-documents" value={v.required_documents} onChange={set("required_documents")} />
+          </Field>
+        )}
+        <Field label="Notes" htmlFor="rfq-notes" className="sm:col-span-2">
+          <Textarea id="rfq-notes" className="min-h-[72px]" value={v.notes} onChange={set("notes")} />
+        </Field>
+      </div>
+      {draft && (
+        <>
+          <fieldset>
+            <legend className="mb-1.5 text-t-label text-ims-text">Invite suppliers ({v.suppliers.length})</legend>
+            <SearchBox value={search} onChange={setSearch} placeholder="Search supplier name or code" className="mb-2 sm:w-full" label="Search suppliers" />
+            <ul className="max-h-52 divide-y divide-ims-divider overflow-y-auto rounded-control border border-ims-border">
+              {sup.isLoading && <li className="px-3 py-2.5"><Skeleton className="h-5 w-2/3" /></li>}
+              {!sup.isLoading && !list.length && <li className="px-3 py-2.5 text-t-body text-ims-muted">No active supplier matches “{search}”.</li>}
+              {list.map((s: any) => {
+                const on = v.suppliers.includes(s.id);
+                const match = s.categories?.includes(reqCategory);
+                return (
+                  <li key={s.id}>
+                    <label className={cn("flex cursor-pointer items-center gap-3 px-3 py-2 text-t-body hover:bg-ims-hover", on && "bg-ims-info-bg hover:bg-ims-info-bg")}>
+                      <input type="checkbox" className="h-4 w-4 shrink-0 accent-ims-primary" checked={on} onChange={() => setV((x) => ({ ...x, suppliers: on ? x.suppliers.filter((id) => id !== s.id) : [...x.suppliers, s.id] }))} />
+                      <span className="min-w-0 flex-1">
+                        <span className="font-semibold text-ims-text">{s.name}</span>
+                        {match && <span className="ml-2 text-t-small font-semibold text-ims-info">Serves this category</span>}
+                        <span className="block truncate text-t-small text-ims-muted">{(s.expand?.categories || []).map((c: any) => c.name).join(", ")}</span>
+                      </span>
+                      <Rating value={s.rating} count={s.evaluations_count} />
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </fieldset>
+          <fieldset>
+            <legend className="text-t-label text-ims-text">Evaluation weights (%)</legend>
+            <p className={cn("mb-2 mt-0.5 text-t-hint", weightTotal === 100 ? "text-ims-muted" : "text-ims-danger")} role={weightTotal === 100 ? undefined : "alert"}>
+              {weightTotal === 100 ? "The weights add up to 100%." : `The weights add up to ${fmtNumber(weightTotal, true)}%. Change them so they add up to 100%.`}
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {EVALUATION_CRITERIA.map((c) => (
+                <Field key={c.key} label={c.label} htmlFor={`weight-${c.key}`}>
+                  <Input
+                    id={`weight-${c.key}`}
+                    type="number"
+                    min={0}
+                    max={100}
+                    className="text-right tabular-nums"
+                    value={v.evaluation_weights[c.key] ?? 0}
+                    onChange={(e) => setV((x) => ({ ...x, evaluation_weights: { ...x.evaluation_weights, [c.key]: Number(e.target.value) } }))}
+                  />
+                </Field>
+              ))}
+            </div>
+          </fieldset>
+        </>
+      )}
+    </Modal>
   );
 }
 
@@ -387,7 +676,9 @@ function QuotationDialog({ rfq, supplier, quote, onClose, onSaved }: { rfq: any;
   });
   const [files, setFiles] = React.useState<File[]>([]);
   const set = (k: string) => (e: any) => setV((x) => ({ ...x, [k]: e.target.value }));
+  const setValue = (k: string) => (val: any) => setV((x) => ({ ...x, [k]: val }));
   const setLine = (i: number, k: string, val: string) => setLines((l) => l.map((x, idx) => (idx === i ? { ...x, [k]: val } : x)));
+  const rwf = !rfq.currency || rfq.currency === "RWF";
 
   let subtotal = 0, discount = 0, tax = 0;
   for (const l of lines) {
@@ -407,72 +698,112 @@ function QuotationDialog({ rfq, supplier, quote, onClose, onSaved }: { rfq: any;
       files.forEach((f) => body.append("attachments", f));
       return quote ? pocketbase.collection("quotations").update(quote.id, body) : pocketbase.collection("quotations").create(body);
     },
-    { onSuccess: (x: any) => { toast.success(`${x.number} saved — ${money(x.grand_total, x.currency)}`); onSaved(); }, onError: (e) => { toast.error(errorMessage(e)); } }
+    { onSuccess: (x: any) => { toast.success(`${x.number} saved: ${inCurrency(x.grand_total, x.currency)}`); onSaved(); }, onError: (e) => { toast.error(errorMessage(e)); } }
   );
 
+  const lineColumns: Column<any>[] = [
+    { key: "item", header: "Item", clamp: true, cell: (l) => l.description, sub: (l) => `${fmtNumber(l.quantity, true)} ${l.unit || ""}`.trim() },
+    {
+      key: "unit_price",
+      header: `Unit price (${rfq.currency || "RWF"})`,
+      width: "150px",
+      cell: (l, i) => <Input type="number" min={0} step="any" className="h-9 text-right tabular-nums" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} placeholder="Not quoted" aria-label={`Line ${l.line} unit price`} />,
+    },
+    { key: "discount", header: "Discount (%)", width: "110px", cell: (l, i) => <Input type="number" min={0} max={100} className="h-9 text-right tabular-nums" value={l.discount_pct} onChange={(e) => setLine(i, "discount_pct", e.target.value)} aria-label={`Line ${l.line} discount`} /> },
+    { key: "tax", header: "Tax (%)", width: "100px", cell: (l, i) => <Input type="number" min={0} max={100} className="h-9 text-right tabular-nums" value={l.tax_rate} onChange={(e) => setLine(i, "tax_rate", e.target.value)} aria-label={`Line ${l.line} tax`} /> },
+    { key: "brand", header: "Brand or model", width: "170px", cell: (l, i) => <Input className="h-9" value={l.brand} onChange={(e) => setLine(i, "brand", e.target.value)} aria-label={`Line ${l.line} brand or model`} /> },
+    {
+      key: "total",
+      header: `Line total (${rfq.currency || "RWF"})`,
+      numeric: true,
+      cell: (l) => {
+        const gross = l.unit_price === "" ? null : l.quantity * Number(l.unit_price);
+        const net = gross === null ? null : gross - (gross * (Number(l.discount_pct) || 0)) / 100;
+        return net === null ? <span className="text-ims-faint">—</span> : <Num value={Math.round(net + (net * (Number(l.tax_rate) || 0)) / 100)} />;
+      },
+      total: <Num value={subtotal - discount + tax} />,
+    },
+  ];
+
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto bg-white">
-        <DialogHeader>
-          <DialogTitle>{quote ? `Edit ${quote.number}` : "Record quotation"} · {supplier?.name}</DialogTitle>
-          <DialogDescription>Enter prices exactly as quoted. Leave a unit price empty if the supplier did not quote that line. Totals are recalculated by the server.</DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <label className="block text-[12.5px] font-medium text-slate-700">Supplier's reference<input className={cn(inputCls, "mt-1")} value={v.supplier_reference} onChange={set("supplier_reference")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700">Quotation date<input type="date" className={cn(inputCls, "mt-1")} value={v.quotation_date} onChange={set("quotation_date")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700">Valid until<input type="date" className={cn(inputCls, "mt-1")} value={v.validity_date} onChange={set("validity_date")} /></label>
-        </div>
-        <div className="-mx-6 overflow-x-auto">
-          <table className="dnr-grid w-full min-w-[720px] text-[13px]">
-            <thead><tr className="border-y border-slate-100 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-6 py-2">Item</th><th className="px-2 py-2 text-right">Qty</th><th className="w-32 px-2 py-2">Unit price</th><th className="w-20 px-2 py-2">Disc. %</th><th className="w-20 px-2 py-2">Tax %</th><th className="w-36 px-2 py-2">Brand / model</th><th className="px-6 py-2 text-right">Line total</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">
-              {lines.map((l, i) => {
-                const gross = l.unit_price === "" ? null : l.quantity * Number(l.unit_price);
-                const net = gross === null ? null : gross - (gross * (Number(l.discount_pct) || 0)) / 100;
-                return (
-                  <tr key={l.line}>
-                    <td className="px-6 py-2">{l.description}</td>
-                    <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{l.quantity} {l.unit}</td>
-                    <td className="px-2 py-2"><input type="number" min={0} step="any" className={inputCls} value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} placeholder="Not quoted" aria-label={`Line ${l.line} unit price`} /></td>
-                    <td className="px-2 py-2"><input type="number" min={0} max={100} className={inputCls} value={l.discount_pct} onChange={(e) => setLine(i, "discount_pct", e.target.value)} aria-label={`Line ${l.line} discount`} /></td>
-                    <td className="px-2 py-2"><input type="number" min={0} max={100} className={inputCls} value={l.tax_rate} onChange={(e) => setLine(i, "tax_rate", e.target.value)} aria-label={`Line ${l.line} tax`} /></td>
-                    <td className="px-2 py-2"><input className={inputCls} value={l.brand} onChange={(e) => setLine(i, "brand", e.target.value)} aria-label={`Line ${l.line} brand`} /></td>
-                    <td className="px-6 py-2 text-right tabular-nums">{net === null ? <span className="text-slate-400">—</span> : Math.round(net + (net * (Number(l.tax_rate) || 0)) / 100).toLocaleString()}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <label className="block text-[12.5px] font-medium text-slate-700">Delivery cost<input type="number" min={0} className={cn(inputCls, "mt-1")} value={v.delivery_cost} onChange={set("delivery_cost")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700">Other charges<input type="number" min={0} className={cn(inputCls, "mt-1")} value={v.other_charges} onChange={set("other_charges")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700">Delivery time (days)<input type="number" min={0} className={cn(inputCls, "mt-1")} value={v.delivery_days} onChange={set("delivery_days")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700">Technical compliance
-            <select className={cn(inputCls, "mt-1")} value={v.technical_compliance} onChange={set("technical_compliance")}>
-              {Object.entries(COMPLIANCE).map(([k, c]) => <option key={k} value={k}>{c.label}</option>)}
-            </select>
-          </label>
-          <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">Payment terms<input className={cn(inputCls, "mt-1")} value={v.payment_terms} onChange={set("payment_terms")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">Warranty<input className={cn(inputCls, "mt-1")} value={v.warranty} onChange={set("warranty")} placeholder="e.g. 12 months" /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-3">Notes<input className={cn(inputCls, "mt-1")} value={v.notes} onChange={set("notes")} /></label>
-          <label className="block text-[12.5px] font-medium text-slate-700">Attach quotation<input type="file" multiple className="mt-1 block w-full text-[12px]" onChange={(e) => setFiles(Array.from(e.target.files || []))} /></label>
-        </div>
-        <dl className="ml-auto w-full max-w-xs space-y-1 text-[13px]">
-          <div className="flex justify-between text-slate-600"><dt>Subtotal</dt><dd className="tabular-nums">{money(subtotal)}</dd></div>
-          <div className="flex justify-between text-slate-600"><dt>Discount</dt><dd className="tabular-nums">− {money(discount)}</dd></div>
-          <div className="flex justify-between text-slate-600"><dt>Tax</dt><dd className="tabular-nums">{money(tax)}</dd></div>
-          <div className="flex justify-between text-slate-600"><dt>Delivery + other</dt><dd className="tabular-nums">{money((Number(v.delivery_cost) || 0) + (Number(v.other_charges) || 0))}</dd></div>
-          <div className="flex justify-between border-t border-slate-200 pt-1 font-semibold"><dt>Grand total</dt><dd className="tabular-nums">{money(grand)}</dd></div>
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      title={quote ? `Edit ${quote.number} from ${supplier?.name}` : `Record the quotation from ${supplier?.name}`}
+      description="Enter the prices exactly as quoted. Leave a unit price empty when the supplier did not quote that line; the server recalculates the totals."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={save.isLoading} onClick={() => save.mutate()}>Save quotation</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Field label="Supplier's reference" htmlFor="quote-reference">
+          <Input id="quote-reference" value={v.supplier_reference} onChange={set("supplier_reference")} />
+        </Field>
+        <Field label="Quotation date" htmlFor="quote-date">
+          <DatePicker id="quote-date" value={v.quotation_date} onChange={setValue("quotation_date")} />
+        </Field>
+        <Field label="Valid until" htmlFor="quote-validity">
+          <DatePicker id="quote-validity" value={v.validity_date} onChange={setValue("validity_date")} />
+        </Field>
+      </div>
+      <div className="overflow-hidden rounded-card border border-ims-border">
+        <DataTable columns={lineColumns} rows={lines} rowKey={(l) => String(l.line)} minWidth={820} caption="Quoted prices" totalLabel="Total of the lines" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <Field label="Delivery cost" htmlFor="quote-delivery-cost">
+          {rwf ? <MoneyInput id="quote-delivery-cost" value={v.delivery_cost} onChange={setValue("delivery_cost")} /> : <Input id="quote-delivery-cost" type="number" min={0} className="text-right tabular-nums" value={v.delivery_cost} onChange={set("delivery_cost")} />}
+        </Field>
+        <Field label="Other charges" htmlFor="quote-other-charges">
+          {rwf ? <MoneyInput id="quote-other-charges" value={v.other_charges} onChange={setValue("other_charges")} /> : <Input id="quote-other-charges" type="number" min={0} className="text-right tabular-nums" value={v.other_charges} onChange={set("other_charges")} />}
+        </Field>
+        <Field label="Delivery time (days)" htmlFor="quote-delivery-days">
+          <Input id="quote-delivery-days" type="number" min={0} className="text-right tabular-nums" value={v.delivery_days} onChange={set("delivery_days")} />
+        </Field>
+        <Field label="Technical compliance" htmlFor="quote-compliance">
+          <Select id="quote-compliance" value={v.technical_compliance} onChange={set("technical_compliance")}>
+            {Object.entries(COMPLIANCE).map(([k, c]) => <option key={k} value={k}>{c.label}</option>)}
+          </Select>
+        </Field>
+        <Field label="Payment terms" htmlFor="quote-payment-terms" className="sm:col-span-2">
+          <Input id="quote-payment-terms" value={v.payment_terms} onChange={set("payment_terms")} />
+        </Field>
+        <Field label="Warranty" htmlFor="quote-warranty" className="sm:col-span-2">
+          <Input id="quote-warranty" value={v.warranty} onChange={set("warranty")} placeholder="For example: 12 months" />
+        </Field>
+        <Field label="Notes" htmlFor="quote-notes" className="sm:col-span-4">
+          <Input id="quote-notes" value={v.notes} onChange={set("notes")} />
+        </Field>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_300px]">
+        <Field label="Quotation documents">
+          <FileDrop files={files} onChange={setFiles} label="Attach the quotation" />
+        </Field>
+        <dl className="h-fit space-y-1.5 rounded-card border border-ims-border bg-ims-thead px-4 py-3 text-t-body">
+          <div className="flex justify-between gap-3 text-ims-body"><dt>Subtotal</dt><dd className="tabular-nums">{inCurrency(subtotal, rfq.currency)}</dd></div>
+          <div className="flex justify-between gap-3 text-ims-body"><dt>Discount</dt><dd className="tabular-nums">− {inCurrency(discount, rfq.currency)}</dd></div>
+          <div className="flex justify-between gap-3 text-ims-body"><dt>Tax</dt><dd className="tabular-nums">{inCurrency(tax, rfq.currency)}</dd></div>
+          <div className="flex justify-between gap-3 text-ims-body"><dt>Delivery and other charges</dt><dd className="whitespace-nowrap tabular-nums">{inCurrency((Number(v.delivery_cost) || 0) + (Number(v.other_charges) || 0), rfq.currency)}</dd></div>
+          <div className="flex justify-between gap-3 border-t border-ims-border pt-1.5 font-bold text-ims-text"><dt>Grand total</dt><dd className="tabular-nums">{inCurrency(grand, rfq.currency)}</dd></div>
         </dl>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={save.isLoading} onClick={() => save.mutate()}>{save.isLoading ? "Saving…" : "Save quotation"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </Modal>
   );
 }
+
+function SupplierHead({ q }: { q: any }) {
+  return (
+    <span className="inline-block text-right leading-tight">
+      <span className="block font-semibold text-ims-text">{q.expand?.supplier?.name}</span>
+      <span className="block font-mono text-[11.5px] font-normal text-ims-muted">{q.number}</span>
+    </span>
+  );
+}
+
+type CompareRow = { key: string; label: React.ReactNode; sub?: React.ReactNode; value: (q: any, i: number) => React.ReactNode };
 
 function Comparison({ rfq, quotes, onChanged, canScore, canAward }: { rfq: any; quotes: any[]; onChanged: () => void; canScore: boolean; canAward: boolean }) {
   const locked = ["awarded", "cancelled"].includes(rfq.status);
@@ -487,11 +818,21 @@ function Comparison({ rfq, quotes, onChanged, canScore, canAward }: { rfq: any; 
     onError: (e) => { toast.error(errorMessage(e)); },
   });
   const award = useMutation(() => sourcingApi.rfqAction(rfq.id, "award", { quotation: choice, reason }), {
-    onSuccess: () => { toast.success(`${rfq.number} awarded`); onChanged(); },
+    onSuccess: () => {
+      const name = quotes.find((q) => q.id === choice)?.expand?.supplier?.name;
+      toast.success(name ? `${rfq.number} awarded to ${name}` : `${rfq.number} awarded`);
+      onChanged();
+    },
     onError: (e) => { toast.error(errorMessage(e)); },
   });
 
-  if (!quotes.length) return <Panel><EmptyState icon={FileSearch} text="Record at least one quotation to compare offers." /></Panel>;
+  if (!quotes.length) {
+    return (
+      <Card>
+        <EmptyState compact icon={Scale} text={rfq.status === "draft" ? "Send the RFQ and record the quotations to compare the offers." : "Record at least one quotation to compare the offers."} />
+      </Card>
+    );
+  }
 
   const lowestTotal = Math.min(...quotes.map((q) => q.grand_total));
   const fastest = Math.min(...quotes.filter((q) => q.delivery_days > 0).map((q) => q.delivery_days));
@@ -499,145 +840,223 @@ function Comparison({ rfq, quotes, onChanged, canScore, canAward }: { rfq: any; 
   const best = quotes.reduce((b, q) => (weighted(q.id) > weighted(b.id) ? q : b), quotes[0]);
   const chosen = quotes.find((q) => q.id === choice);
   const aboveLowest = chosen ? chosen.grand_total - lowestTotal : 0;
-  const cell = "px-3 py-2 text-right tabular-nums";
+  const several = quotes.length > 1;
 
   const suggestPriceScores = () =>
     setScores((s) => Object.fromEntries(quotes.map((q) => [q.id, { ...(s[q.id] || {}), price: Math.round((lowestTotal / q.grand_total) * 100) / 10 }])));
 
+  // Prices: one row per item, then discount and charges; the grand total is the total row.
+  const priceRows: CompareRow[] = [
+    ...(rfq.items || []).map((it: any) => {
+      const prices = quotes.map((q) => q.items?.find((x: any) => x.line === it.line)).map((x) => (x?.quoted ? x.total : null));
+      const min = Math.min(...(prices.filter((p) => p !== null) as number[]));
+      return {
+        key: `line-${it.line}`,
+        label: it.description,
+        sub: `${fmtNumber(it.quantity, true)} ${it.unit || ""}`.trim(),
+        value: (_q: any, i: number) =>
+          prices[i] === null ? <span className="text-ims-faint">Not quoted</span> : <span className={cn(prices[i] === min && several && "font-semibold text-ims-success")}><Num value={prices[i]} /></span>,
+      };
+    }),
+    { key: "discount", label: "Discount", value: (q) => (q.discount_total ? <Num value={-q.discount_total} /> : <span className="text-ims-faint">—</span>) },
+    { key: "charges", label: "Delivery and other charges", value: (q) => <Num value={q.delivery_cost + q.other_charges} /> },
+  ];
+  const priceColumns: Column<CompareRow>[] = [
+    { key: "item", header: "Item", clamp: true, className: "min-w-[220px]", cell: (row) => row.label, sub: (row) => row.sub },
+    ...quotes.map((q, i) => ({
+      key: q.id,
+      header: <SupplierHead q={q} />,
+      numeric: true,
+      cell: (row: CompareRow) => row.value(q, i),
+      total: (
+        <span className={cn(q.grand_total === lowestTotal && "text-ims-success")}>
+          <Num value={q.grand_total} />
+          {q.grand_total === lowestTotal && several && <span className="ml-1.5 text-t-small font-semibold">Lowest</span>}
+        </span>
+      ),
+    })),
+  ];
+
+  const termRows: CompareRow[] = [
+    { key: "delivery", label: "Delivery time", value: (q) => (q.delivery_days ? <span className={cn(q.delivery_days === fastest && several && "font-semibold text-ims-success")}>{fmtNumber(q.delivery_days)} days</span> : <span className="text-ims-faint">—</span>) },
+    { key: "warranty", label: "Warranty", value: (q) => q.warranty || <span className="text-ims-faint">—</span> },
+    { key: "payment", label: "Payment terms", value: (q) => q.payment_terms || <span className="text-ims-faint">—</span> },
+    { key: "validity", label: "Valid until", value: (q) => fmtDate(q.validity_date) },
+    { key: "compliance", label: "Technical compliance", value: (q) => <Compliance value={q.technical_compliance} /> },
+    { key: "rating", label: "Supplier rating", value: (q) => <Rating value={q.expand?.supplier?.rating} count={q.expand?.supplier?.evaluations_count} /> },
+    { key: "received", label: "Received", value: (q) => (q.received_late ? <span className="font-semibold text-ims-warning">Late</span> : "On time") },
+  ];
+  const termColumns: Column<CompareRow>[] = [
+    { key: "term", header: "Term", className: "min-w-[220px] text-ims-body", cell: (row) => row.label },
+    ...quotes.map((q, i) => ({ key: q.id, header: <SupplierHead q={q} />, align: "right" as const, cell: (row: CompareRow) => row.value(q, i) })),
+  ];
+
+  const scoreColumns: Column<(typeof EVALUATION_CRITERIA)[number]>[] = [
+    { key: "criterion", header: "Criterion", className: "min-w-[200px]", cell: (c) => c.label, sub: (c) => `Weight ${fmtNumber(weights[c.key] || 0, true)}%` },
+    ...quotes.map((q) => ({
+      key: q.id,
+      header: <SupplierHead q={q} />,
+      align: "right" as const,
+      cell: (c: (typeof EVALUATION_CRITERIA)[number]) =>
+        !canScore || locked ? (
+          <span className="tabular-nums">{scores[q.id]?.[c.key] === undefined ? <span className="text-ims-faint">—</span> : fmtNumber(scores[q.id]?.[c.key], true)}</span>
+        ) : (
+        <Input
+          type="number"
+          min={0}
+          max={10}
+          step={0.5}
+          disabled={!canScore || locked}
+          aria-label={`${c.label} score for ${q.expand?.supplier?.name}`}
+          className="ml-auto h-9 w-20 text-right tabular-nums"
+          value={scores[q.id]?.[c.key] ?? ""}
+          onChange={(e) => setScores((s) => ({ ...s, [q.id]: { ...(s[q.id] || {}), [c.key]: Number(e.target.value) } }))}
+        />
+        ),
+      total: (
+        <span className={cn("tabular-nums", q.id === best.id && weighted(best.id) > 0 && "text-ims-success")}>
+          {weighted(q.id).toFixed(1)}
+          {q.id === best.id && weighted(best.id) > 0 && several && <span className="ml-1.5 text-t-small font-semibold">Highest</span>}
+        </span>
+      ),
+    })),
+  ];
+
   return (
     <div className="space-y-4">
-      <Panel title="Side-by-side comparison" subtitle="Lowest price and fastest delivery are highlighted — the system never selects a supplier automatically" bodyClassName="px-0">
-        <div className="overflow-x-auto">
-          <table className="dnr-grid w-full min-w-[760px] text-[13px]">
-            <thead>
-              <tr className="border-y border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                <th className="px-4 py-2 text-left">Item</th>
-                {quotes.map((q) => <th key={q.id} className="px-3 py-2 text-right normal-case tracking-normal"><span className="text-[12.5px] font-semibold text-slate-800">{q.expand?.supplier?.name}</span><span className="block font-normal text-slate-500">{q.number}</span></th>)}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {(rfq.items || []).map((it: any) => {
-                const prices = quotes.map((q) => q.items?.find((x: any) => x.line === it.line)).map((x) => (x?.quoted ? x.total : null));
-                const min = Math.min(...(prices.filter((p) => p !== null) as number[]));
-                return (
-                  <tr key={it.line}>
-                    <td className="px-4 py-2"><p>{it.description}</p><p className="text-[12px] text-slate-500">{it.quantity} {it.unit}</p></td>
-                    {prices.map((p, i) => <td key={i} className={cn(cell, p === min && quotes.length > 1 && "font-semibold text-emerald-700")}>{p === null ? <span className="text-slate-400">not quoted</span> : Math.round(p).toLocaleString()}</td>)}
-                  </tr>
-                );
-              })}
-              {[
-                ["Discount", (q: any) => q.discount_total ? `− ${Math.round(q.discount_total).toLocaleString()}` : "—"],
-                ["Delivery + other charges", (q: any) => Math.round(q.delivery_cost + q.other_charges).toLocaleString()],
-              ].map(([label, f]: any) => (
-                <tr key={label} className="text-slate-600"><td className="px-4 py-2">{label}</td>{quotes.map((q) => <td key={q.id} className={cell}>{f(q)}</td>)}</tr>
-              ))}
-              <tr className="bg-slate-50 font-semibold">
-                <td className="px-4 py-2.5">Grand total ({rfq.currency})</td>
-                {quotes.map((q) => <td key={q.id} className={cn(cell, q.grand_total === lowestTotal && "text-emerald-700")}>{Math.round(q.grand_total).toLocaleString()}{q.grand_total === lowestTotal && quotes.length > 1 && <Badge tone="success" className="ml-1.5">Lowest</Badge>}</td>)}
-              </tr>
-              {[
-                ["Delivery time", (q: any) => q.delivery_days ? <span className={cn(q.delivery_days === fastest && "font-semibold text-emerald-700")}>{q.delivery_days} days</span> : "—"],
-                ["Warranty", (q: any) => q.warranty || "—"],
-                ["Payment terms", (q: any) => q.payment_terms || "—"],
-                ["Valid until", (q: any) => q.validity_date ? format(new Date(q.validity_date), "d MMM yyyy") : "—"],
-                ["Technical compliance", (q: any) => q.technical_compliance ? <StatusBadge status={q.technical_compliance} map={COMPLIANCE} /> : "—"],
-                ["Supplier rating", (q: any) => <Rating value={q.expand?.supplier?.rating} count={q.expand?.supplier?.evaluations_count} />],
-                ["Received", (q: any) => q.received_late ? <Badge tone="warning">Late</Badge> : "On time"],
-              ].map(([label, f]: any) => (
-                <tr key={label}><td className="px-4 py-2 text-slate-600">{label}</td>{quotes.map((q) => <td key={q.id} className={cell}>{f(q)}</td>)}</tr>
-              ))}
-            </tbody>
-          </table>
+      <Card padded={false}>
+        <div className="px-5 pt-5">
+          <CardHeader title="Price comparison" subtitle={`Amounts in ${rfq.currency || "RWF"}. The lowest price on each line and the lowest total are in green; the system never selects a supplier for you.`} />
         </div>
-      </Panel>
+        <DataTable columns={priceColumns} rows={priceRows} rowKey={(row) => row.key} minWidth={240 + quotes.length * 200} caption="Price comparison" totalLabel={`Grand total (${rfq.currency || "RWF"})`} />
+      </Card>
 
-      <Panel
-        title="Weighted evaluation"
-        subtitle={`Score each criterion 0–10. Weights: ${EVALUATION_CRITERIA.map((c) => `${c.label} ${weights[c.key] || 0}%`).join(" · ")}`}
-        action={canScore && !locked && (
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={suggestPriceScores}>Suggest price scores</Button>
-            <Button size="sm" onClick={() => saveScores.mutate()} disabled={saveScores.isLoading}>Save scores</Button>
-          </div>
-        )}
-        bodyClassName="px-0"
-      >
-        <div className="overflow-x-auto">
-          <table className="dnr-grid w-full min-w-[640px] text-[13px]">
-            <thead><tr className="border-y border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-4 py-2 text-left">Criterion</th>{quotes.map((q) => <th key={q.id} className="px-3 py-2 text-right normal-case tracking-normal text-slate-700">{q.expand?.supplier?.name}</th>)}</tr></thead>
-            <tbody className="divide-y divide-slate-100">
-              {EVALUATION_CRITERIA.map((c) => (
-                <tr key={c.key}>
-                  <td className="px-4 py-2 text-slate-600">{c.label} <span className="text-slate-400">({weights[c.key] || 0}%)</span></td>
-                  {quotes.map((q) => (
-                    <td key={q.id} className="px-3 py-1.5 text-right">
-                      <input type="number" min={0} max={10} step={0.5} disabled={!canScore || locked} aria-label={`${c.label} score for ${q.expand?.supplier?.name}`}
-                        className="h-8 w-20 rounded-md border border-slate-200 px-2 text-right text-[13px] tabular-nums disabled:bg-slate-50"
-                        value={scores[q.id]?.[c.key] ?? ""} onChange={(e) => setScores((s) => ({ ...s, [q.id]: { ...(s[q.id] || {}), [c.key]: Number(e.target.value) } }))} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              <tr className="bg-slate-50 font-semibold">
-                <td className="px-4 py-2.5">Weighted score (of 100)</td>
-                {quotes.map((q) => <td key={q.id} className={cn("px-3 py-2.5 text-right tabular-nums", q.id === best.id && weighted(best.id) > 0 && "text-emerald-700")}>{weighted(q.id).toFixed(1)}{q.id === best.id && weighted(best.id) > 0 && <Badge tone="success" className="ml-1.5">Highest</Badge>}</td>)}
-              </tr>
-            </tbody>
-          </table>
+      <Card padded={false}>
+        <div className="px-5 pt-5">
+          <CardHeader title="Terms offered" subtitle="The fastest delivery is in green." />
         </div>
-      </Panel>
+        <DataTable columns={termColumns} rows={termRows} rowKey={(row) => row.key} minWidth={240 + quotes.length * 200} caption="Terms offered" />
+      </Card>
+
+      <Card padded={false}>
+        <div className="px-5 pt-5">
+          <CardHeader
+            title="Weighted evaluation"
+            subtitle="Score each criterion from 0 to 10. Each score counts by its weight, for a weighted score out of 100."
+            action={
+              canScore && !locked ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={suggestPriceScores}>Suggest price scores</Button>
+                  <Button size="sm" variant="primary" loading={saveScores.isLoading} onClick={() => saveScores.mutate()}>Save scores</Button>
+                </div>
+              ) : undefined
+            }
+          />
+        </div>
+        <DataTable columns={scoreColumns} rows={[...EVALUATION_CRITERIA]} rowKey={(c) => c.key} minWidth={220 + quotes.length * 180} caption="Weighted evaluation" totalLabel="Weighted score (of 100)" />
+      </Card>
 
       {!locked && (
-        <Panel title={<span className="flex items-center gap-2"><Award size={15} /> Select supplier</span>} subtitle={canAward ? "Your decision and reason are recorded permanently in the audit trail" : "Only roles with “Select the winning supplier” can award"}>
+        <Card>
+          <CardHeader
+            title="Select the supplier"
+            subtitle={canAward ? "Your decision and its reason are kept permanently in the audit trail." : "Only roles allowed to select the winning supplier can award."}
+          />
           {!canAward ? (
-            <p className="text-[13px] text-slate-500">Scores are advisory. A procurement manager or director makes the award.</p>
+            <p className="text-t-body text-ims-muted">The scores are advisory. A procurement manager or the director makes the award.</p>
           ) : (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                {quotes.map((q) => (
-                  <label key={q.id} className={cn("flex cursor-pointer items-start gap-2 rounded-md border p-3 text-[13px]", choice === q.id ? "border-primary bg-primary/5" : "border-slate-200 hover:bg-slate-50", q.technical_compliance === "non_compliant" && "cursor-not-allowed opacity-50")}>
-                    <input type="radio" name="award" disabled={q.technical_compliance === "non_compliant"} checked={choice === q.id} onChange={() => setChoice(q.id)} className="mt-0.5" />
-                    <span><span className="font-medium">{q.expand?.supplier?.name}</span><span className="block tabular-nums text-slate-600">{money(q.grand_total, q.currency)} · score {weighted(q.id).toFixed(1)}</span></span>
-                  </label>
-                ))}
-              </div>
+            <div className="space-y-4">
+              <fieldset>
+                <legend className="sr-only">Supplier to award</legend>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  {quotes.map((q) => {
+                    const blocked = q.technical_compliance === "non_compliant";
+                    return (
+                      <label
+                        key={q.id}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-2.5 rounded-control border p-3 text-t-body",
+                          choice === q.id ? "border-ims-link bg-ims-info-bg" : "border-ims-border hover:bg-ims-hover",
+                          blocked && "cursor-not-allowed opacity-55 hover:bg-transparent"
+                        )}
+                      >
+                        <input type="radio" name="award" disabled={blocked} checked={choice === q.id} onChange={() => setChoice(q.id)} className="mt-1 shrink-0 accent-ims-primary" />
+                        <span className="min-w-0">
+                          <span className="block font-semibold text-ims-text">{q.expand?.supplier?.name}</span>
+                          <span className="block tabular-nums text-t-small text-ims-muted">
+                            {inCurrency(q.grand_total, q.currency)} · score {weighted(q.id).toFixed(1)}
+                          </span>
+                          {blocked && <span className="block text-t-small text-ims-danger">Non-compliant: cannot be selected</span>}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
               {chosen && aboveLowest > 0 && (
-                <p className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900"><AlertTriangle size={15} className="mt-0.5 shrink-0" /> This offer is {money(aboveLowest, rfq.currency)} above the lowest quotation. Explain why it offers better value — the award will be flagged “not lowest price”.</p>
+                <p role="status" className="flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
+                  <span>This offer is {inCurrency(aboveLowest, rfq.currency)} above the lowest quotation. Explain why it gives better value; the award will be flagged “not the lowest price”.</span>
+                </p>
               )}
-              <label className="block text-[12.5px] font-medium text-slate-700">Reason for selection <span className="text-red-600">*</span>
-                <textarea className={cn(inputCls, "mt-1 h-20 py-2")} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Selected Supplier B because delivery time and technical compliance were superior." />
-                <span className="mt-1 block text-[11.5px] text-slate-500">{reason.trim().length}/15 characters minimum</span>
-              </label>
-              <Button disabled={!choice || reason.trim().length < 15 || award.isLoading} onClick={() => award.mutate()}><Trophy size={14} /> {award.isLoading ? "Awarding…" : "Award RFQ"}</Button>
+              <Field label="Reason for selection" required htmlFor="award-reason" hint={`Write at least 15 characters (${reason.trim().length} so far).`}>
+                <Textarea id="award-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="For example: Supplier B delivers in 7 days and meets every technical requirement." />
+              </Field>
+              <div className="flex justify-end">
+                <Button variant="primary" icon={Trophy} loading={award.isLoading} disabled={!choice || reason.trim().length < 15} onClick={() => award.mutate()}>
+                  {chosen ? `Award to ${chosen.expand?.supplier?.name}` : "Award RFQ"}
+                </Button>
+              </div>
             </div>
           )}
-        </Panel>
+        </Card>
       )}
     </div>
   );
 }
 
+const ACTIVITY_LABELS: Record<string, string> = {
+  created: "created the RFQ",
+  updated: "edited the RFQ",
+  sent: "sent the RFQ to the suppliers",
+  closed: "closed quotations",
+  awarded: "awarded the RFQ",
+  cancelled: "cancelled the RFQ",
+  quotation_recorded: "recorded quotation",
+  quotation_updated: "edited quotation",
+  quotation_evaluated: "scored quotation",
+};
+
 function RfqActivity({ rfqId }: { rfqId: string }) {
   const q = useQuery(["audit", "rfqs", rfqId], () => procurementApi.audit({ collection: "rfqs", record: rfqId, perPage: 100 }));
   return (
-    <Panel title="Activity and audit trail">
-      {q.isLoading ? <ListSkeleton rows={4} /> : !q.data?.items.length ? <p className="text-[13px] text-slate-500">No activity yet.</p> : (
-        <ol className="space-y-3">
+    <Card>
+      <CardHeader title="Activity" subtitle="Changes to this RFQ, its quotations and the award. The history cannot be edited." />
+      {q.isLoading ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Loading">
+          {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-10 w-full rounded-control" />)}
+        </div>
+      ) : !q.data?.items.length ? (
+        <EmptyState compact text="No activity yet." />
+      ) : (
+        <ol className="space-y-4">
           {q.data.items.map((e) => (
-            <li key={e.id} className="flex gap-3 text-[13px]">
+            <li key={e.id} className="flex gap-3">
               <Initials name={e.actor_name} />
-              <div className="min-w-0 flex-1">
-                <p><span className="font-medium">{e.actor_name || "System"}</span> {e.action.replace(/_/g, " ")} {e.record_label !== "" && e.action.startsWith("quotation") && <span className="text-slate-500">{e.record_label}</span>}</p>
-                <p className="text-[12px] text-slate-500">{formatDistanceToNow(new Date(e.created), { addSuffix: true })}</p>
-                {e.comment && <p className="mt-1 rounded-md bg-slate-50 px-2.5 py-1.5 text-slate-700">“{e.comment}”</p>}
-                {e.action === "awarded" && e.changes?.not_lowest_price?.new === true && <Badge tone="warning" className="mt-1">Not the lowest price</Badge>}
+              <div className="min-w-0 flex-1 text-t-body">
+                <p className="text-ims-text">
+                  <span className="font-semibold">{e.actor_name || "System"}</span> {ACTIVITY_LABELS[e.action] || e.action.replace(/_/g, " ")}{" "}
+                  {e.record_label !== "" && e.action.startsWith("quotation") && <span className="whitespace-nowrap font-mono text-[12.5px] text-ims-muted">{e.record_label}</span>}
+                </p>
+                <p className="text-t-small text-ims-muted" title={fmtDateTime(e.created)}>{fmtWhen(e.created)}</p>
+                {e.comment && <p className="mt-1 rounded-control bg-ims-thead px-3 py-2 text-ims-body">“{e.comment}”</p>}
+                {e.action === "awarded" && e.changes?.not_lowest_price?.new === true && <p className="mt-1 text-t-small font-semibold text-ims-warning">Not the lowest price</p>}
               </div>
             </li>
           ))}
         </ol>
       )}
-    </Panel>
+    </Card>
   );
 }
 
@@ -645,12 +1064,12 @@ function CreatePoButton({ rfqId }: { rfqId: string }) {
   const navigate = useNavigate();
   const create = useMutation(() => purchasingApi.fromRfq(rfqId), {
     onSuccess: (po) => {
-      toast.success(`${po.number} created as a draft — review and submit it for approval`);
+      toast.success(`${po.number} created as a draft. Review it, then submit it for approval.`);
       navigate(`/dashboard/procurement/purchase-orders/${po.id}`);
     },
     onError: (e) => {
       toast.error(errorMessage(e));
     },
   });
-  return <Button size="sm" onClick={() => create.mutate()} disabled={create.isLoading}><ShoppingCart size={14} /> {create.isLoading ? "Creating…" : "Create purchase order"}</Button>;
+  return <Button variant="primary" icon={ShoppingCart} loading={create.isLoading} onClick={() => create.mutate()}>Create purchase order</Button>;
 }

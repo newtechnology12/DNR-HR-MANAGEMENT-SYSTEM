@@ -31,8 +31,11 @@ export function SearchBox({ value, onChange, placeholder, className, label = "Se
 
 export type Option = { value: string; label: string };
 
-/** A filter dropdown that reads "Status: All" until something is chosen. */
-export function FilterSelect({ label, value, onChange, options, className }: { label: string; value: string; onChange: (v: string) => void; options: Option[]; className?: string }) {
+/**
+ * A filter dropdown that reads "Status: All" until something is chosen. Pass all={false} when a
+ * value is always set (a period, a fiscal year): there is no "All" choice and it never looks unset.
+ */
+export function FilterSelect({ label, value, onChange, options, className, all = true }: { label: string; value: string; onChange: (v: string) => void; options: Option[]; className?: string; all?: boolean }) {
   return (
     <span className={cn("relative inline-block", className)}>
       <select
@@ -41,10 +44,10 @@ export function FilterSelect({ label, value, onChange, options, className }: { l
         onChange={(e) => onChange(e.target.value)}
         className={cn(
           "h-button w-[180px] appearance-none truncate rounded-control border bg-ims-card pl-3 pr-9 text-[13.5px] font-semibold outline-none focus:border-ims-focus focus:ring-2 focus:ring-ims-focus/25",
-          value ? "border-ims-link/60 text-ims-text" : "border-ims-field text-ims-muted"
+          value && all ? "border-ims-link/60 text-ims-text" : value ? "border-ims-field text-ims-text" : "border-ims-field text-ims-muted"
         )}
       >
-        <option value="">{label}: All</option>
+        {all && <option value="">{label}: All</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}

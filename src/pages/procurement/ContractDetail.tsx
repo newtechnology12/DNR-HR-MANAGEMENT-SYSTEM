@@ -3,25 +3,44 @@ import { useMutation, useQuery, useQueryClient } from "react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { differenceInCalendarDays } from "date-fns";
 import { toast } from "sonner";
-import { AlertTriangle, Ban, CalendarClock, Check, CornerUpLeft, FileSignature, Pencil, Send, ShoppingCart, Upload, Wallet, XCircle } from "lucide-react";
+import { AlertTriangle, Ban, Check, Clock, CornerUpLeft, FileSignature, Pencil, Send, ShoppingCart, Upload, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState, Panel, StatusBadge } from "@/components/enterprise/ui";
-import { ActionDialog, ActionKind, ApprovalTracker } from "@/components/enterprise/Approval";
-import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, SmartButtons, toChatter } from "@/components/enterprise/DocumentLayout";
+import { StatusBadge } from "@/components/enterprise/ui";
+import { ActionDialog, ActionKind, Activity, ApprovalTracker } from "@/components/enterprise/Approval";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  Column,
+  DataTable,
+  DetailHeader,
+  Details,
+  DocNo,
+  EmptyState,
+  Field,
+  KpiBand,
+  MenuItem,
+  Modal,
+  MoreMenu,
+  Num,
+  Page,
+  Tabs,
+  Textarea,
+  fmtDate,
+  fmtMoney,
+  overdue,
+} from "@/components/ims";
 import { CONTRACT_STATUS, CONTRACT_TYPES, PO_STATUS, errorMessage, money, phase5Api, procurementApi } from "@/lib/procurement";
-import { Attachments, Field, FileDrop, FormBlock, FormDialog, Progress, showDate, textareaCls, toFormData } from "@/components/portal/kit";
+import { Attachments, FileDrop, toFormData } from "@/components/portal/kit";
 import { ContractFormDialog } from "./Contracts";
 
-const STEPS = [
-  { key: "draft", label: "Draft" },
-  { key: "pending_approval", label: "Approval" },
-  { key: "active", label: "Active" },
-  { key: "ended", label: "Ended" },
-];
-const stepOf = (s: string) => (["expired", "terminated"].includes(s) ? "ended" : ["returned", "rejected", "cancelled"].includes(s) ? "draft" : s);
+const LIST = "/dashboard/procurement/contracts";
+type TabKey = "details" | "orders" | "approvals" | "documents" | "activity";
+/** Server alert text with its dates shown as "25 Nov 2026". */
+const alertText = (t: string) => t.replace(/\b\d{4}-\d{2}-\d{2}\b/g, (d) => fmtDate(d));
 
 export default function ContractDetail() {
   const { contractId } = useParams();
@@ -29,7 +48,7 @@ export default function ContractDetail() {
   const queryClient = useQueryClient();
   const { canPerform } = useRoles();
   const me = pocketbase.authStore.model as any;
-  const [tab, setTab] = React.useState("terms");
+  const [tab, setTab] = React.useState<TabKey>("details");
   const [decision, setDecision] = React.useState<ActionKind | null>(null);
   const [editing, setEditing] = React.useState(false);
   const [terminating, setTerminating] = React.useState(false);
@@ -53,7 +72,7 @@ export default function ContractDetail() {
   };
   const submit = useMutation(() => phase5Api.contractAction(contractId!, "submit"), {
     onSuccess: () => {
-      toast.success("Sent for approval");
+      toast.success(`${q.data?.c?.number || "Contract"} sent for approval`);
       refresh();
     },
     onError: (e) => {
@@ -61,8 +80,24 @@ export default function ContractDetail() {
     },
   });
 
-  if (q.isLoading) return <div className="space-y-4 px-4 py-4 sm:px-6"><Skeleton className="h-12 w-80" /><Skeleton className="h-96 w-full" /></div>;
-  if (!q.data) return <div className="p-4"><Panel><EmptyState icon={FileSignature} title="Contract not available" text="It may be outside what your role can see." /></Panel></div>;
+  if (q.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-64 w-full" />
+      </Page>
+    );
+  }
+  if (!q.data) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState icon={FileSignature} text="This contract is not available. It may have been deleted, or your role cannot see it." action={<ButtonLink to={LIST}>Back to contracts</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
   const { c, pos, use, actions, audit, alerts } = q.data;
   const approval = c.expand?.approval;
   const isApprover = approval?.status === "pending" && (approval.pending_approvers || "").split(",").includes(me?.id);
@@ -70,109 +105,176 @@ export default function ContractDetail() {
   const draft = ["draft", "returned", "rejected"].includes(c.status);
   const daysLeft = differenceInCalendarDays(new Date(c.end_date.replace(" ", "T")), new Date());
   const usedPct = c.value ? (use.used / c.value) * 100 : 0;
+  const stepName = approval?.status === "pending" ? approval.steps?.[approval.current_level]?.name : null;
+  const amount = (n: number) => (c.currency && c.currency !== "RWF" ? money(n, c.currency) : fmtMoney(n));
+  const late = c.status === "active" ? overdue(c.end_date) : null;
+  const statusNote = stepName ? `At “${stepName}”` : late || CONTRACT_STATUS[c.status]?.note;
+
+  // The next step is the primary button; at most two secondary buttons; the rest go under "More".
+  const primary = isApprover ? (
+    <Button variant="primary" icon={Check} onClick={() => setDecision("approve")}>Approve</Button>
+  ) : canManage && draft ? (
+    <Button variant="primary" icon={Send} loading={submit.isLoading} onClick={() => submit.mutate()}>Submit for approval</Button>
+  ) : null;
+  const secondary = isApprover ? (
+    <>
+      <Button icon={CornerUpLeft} onClick={() => setDecision("return")}>Return</Button>
+      <Button icon={XCircle} onClick={() => setDecision("reject")}>Reject</Button>
+    </>
+  ) : canManage && draft ? (
+    <>
+      <Button icon={Pencil} onClick={() => setEditing(true)}>Edit</Button>
+    </>
+  ) : null;
+  const more: MenuItem[] = [
+    { label: "Add documents", icon: Upload, onSelect: () => setUploading(true), hidden: !canManage },
+    { label: "Terminate contract", icon: Ban, danger: true, onSelect: () => setTerminating(true), hidden: !(canManage && c.status === "active") },
+    { label: "Cancel contract", icon: Ban, danger: true, onSelect: () => setDecision("cancel"), hidden: !(canManage && ["draft", "returned", "rejected", "pending_approval"].includes(c.status)) },
+  ];
+
+  const priceColumns: Column<any>[] = [
+    { key: "description", header: "Item or service", clamp: true, cell: (it) => it.description },
+    { key: "unit", header: "Unit", nowrap: true, cell: (it) => it.unit || "—" },
+    { key: "price", header: `Contract price (${c.currency || "RWF"})`, numeric: true, cell: (it) => <Num value={it.unit_price} /> },
+  ];
+  const orderColumns: Column<any>[] = [
+    { key: "number", header: "Number", nowrap: true, cell: (p) => <DocNo value={p.number} /> },
+    { key: "title", header: "Title", clamp: true, cell: (p) => p.title || "—" },
+    { key: "date", header: "Order date", nowrap: true, cell: (p) => fmtDate(p.order_date) },
+    { key: "total", header: "Total (RWF)", numeric: true, cell: (p) => <Num value={p.grand_total} />, total: <Num value={pos.reduce((a: number, p: any) => a + (Number(p.grand_total) || 0), 0)} /> },
+    { key: "status", header: "Status", cell: (p) => <StatusBadge status={p.status} map={PO_STATUS} /> },
+  ];
 
   return (
-    <DocumentPage chatter={<Chatter items={toChatter(actions, audit)} />}>
-      <ControlBar
-        breadcrumbs={[{ title: "Procurement", link: "/dashboard/procurement" }, { title: "Contracts", link: "/dashboard/procurement/contracts" }, { title: c.number }]}
-        steps={STEPS}
-        current={stepOf(c.status)}
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to contracts", to: LIST }}
+        number={c.number}
+        type={CONTRACT_TYPES[c.contract_type] || "Contract"}
+        status={CONTRACT_STATUS[c.status]?.label || c.status}
+        statusNote={statusNote}
+        title={c.title}
+        facts={[
+          { label: "Supplier", value: c.expand?.supplier?.name || "—" },
+          c.expand?.responsible?.name ? { label: "Managed by", value: c.expand.responsible.name } : null,
+          `${fmtDate(c.start_date)} – ${fmtDate(c.end_date)}`,
+        ]}
         actions={
           <>
-            {isApprover && (
-              <>
-                <Button size="sm" onClick={() => setDecision("approve")}><Check size={14} /> Approve</Button>
-                <Button size="sm" variant="outline" onClick={() => setDecision("return")}><CornerUpLeft size={14} /> Send back</Button>
-                <Button size="sm" variant="outline" className="text-red-700" onClick={() => setDecision("reject")}><XCircle size={14} /> Reject</Button>
-              </>
-            )}
-            {canManage && draft && <Button size="sm" disabled={submit.isLoading} onClick={() => submit.mutate()}><Send size={14} /> Submit for approval</Button>}
-            {canManage && draft && <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>}
-            {canManage && <Button size="sm" variant="outline" onClick={() => setUploading(true)}><Upload size={14} /> Add document</Button>}
-            {canManage && c.status === "active" && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setTerminating(true)}><Ban size={14} /> Terminate</Button>}
-            {canManage && ["draft", "returned", "rejected", "pending_approval"].includes(c.status) && <Button size="sm" variant="ghost" onClick={() => setDecision("cancel")}><Ban size={14} /> Cancel</Button>}
+            <MoreMenu items={more} />
+            {secondary}
+            {primary}
           </>
         }
       />
+
+      {isApprover && (
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+          <Clock size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Waiting for your decision{stepName ? ` at step “${stepName}”` : ""}. Approve it, return it for changes, or reject it.</span>
+        </p>
+      )}
       {alerts.length > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900">
-          {alerts.map((a, i) => <p key={i} className="flex items-center gap-2"><AlertTriangle size={14} /> {a.text}</p>)}
+        <div role="status" className="space-y-1 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+          {alerts.map((a, i) => (
+            <p key={i} className="flex items-start gap-2">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden /> {alertText(a.text)}
+            </p>
+          ))}
         </div>
       )}
-      <SmartButtons
+
+      <KpiBand
         items={[
-          { icon: Wallet, label: "Contract value", value: money(c.value, c.currency) },
-          { icon: ShoppingCart, label: `Used · ${use.orders} order${use.orders === 1 ? "" : "s"}`, value: money(use.used, c.currency), onClick: () => setTab("orders") },
-          { icon: Wallet, label: "Remaining", value: money(use.remaining, c.currency), tone: use.remaining < c.value * 0.1 ? "warning" : "default" },
-          { icon: CalendarClock, label: c.status === "active" ? "Days left" : "Status", value: c.status === "active" ? Math.max(0, daysLeft) : CONTRACT_STATUS[c.status]?.label, tone: c.status === "active" && daysLeft < 60 ? "warning" : "default" },
+          { label: "Contract value", value: amount(c.value) },
+          { label: `Used · ${use.orders} order${use.orders === 1 ? "" : "s"}`, value: amount(use.used), sub: `${Math.round(usedPct)}% of the value`, onClick: () => setTab("orders") },
+          { label: "Remaining", value: amount(use.remaining), tone: use.remaining < c.value * 0.1 ? "warning" : "default" },
+          c.status === "active"
+            ? { label: "Days left", value: Math.max(0, daysLeft), tone: daysLeft < 60 ? "warning" : "default" }
+            : { label: "Ends", value: fmtDate(c.end_date) },
         ]}
       />
-      <Sheet ribbon={c.status === "terminated" ? { label: "Terminated", tone: "danger" } : c.status === "expired" ? { label: "Expired", tone: "neutral" } : undefined}>
-        <SheetTitle kicker={CONTRACT_TYPES[c.contract_type] || "Contract"} title={c.title} badges={<StatusBadge status={c.status} map={CONTRACT_STATUS} />} />
-        <FieldGrid
-          left={[
-            { label: "Number", value: c.number },
-            { label: "Supplier", value: <Link className="font-medium text-primaryDark hover:underline" to={`/dashboard/procurement/suppliers/${c.supplier}`}>{c.expand?.supplier?.name}</Link> },
-            { label: "Department", value: c.expand?.department?.name || "Organisation-wide" },
-            { label: "Contract manager", value: c.expand?.responsible?.name },
-            { label: "Payment terms", value: c.payment_terms },
-          ]}
-          right={[
-            { label: "Period", value: `${showDate(c.start_date)} – ${showDate(c.end_date)}` },
-            { label: "Renewal decision by", value: c.renewal_date ? showDate(c.renewal_date) : "", hint: c.auto_renew ? "Renews automatically" : undefined },
-            { label: "Value used", value: <Progress value={usedPct} className="max-w-[240px]" /> },
-            { label: "Approved", value: c.approved_at ? showDate(c.approved_at) : "" },
-            { label: "Termination reason", value: c.termination_reason },
-          ]}
-        />
-        <Notebook
-          active={tab}
-          onChange={setTab}
-          tabs={[
-            { key: "terms", label: "Scope and prices" },
-            { key: "orders", label: "Purchase orders", count: pos.length },
-            { key: "documents", label: "Documents", count: (c.documents || []).length },
-            ...(approval ? [{ key: "approval", label: "Approval" }] : []),
-          ]}
-        />
-        <div className="pt-4">
-          {tab === "terms" && (
-            <div className="space-y-4">
-              <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-slate-700">{c.scope || "No scope recorded."}</p>
-              {(c.items || []).length > 0 && (
-                <div className="overflow-x-auto">
-                  <table className="dnr-grid w-full min-w-[480px] text-[13px]">
-                    <thead><tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-3 py-2">Item / service</th><th className="px-3 py-2">Unit</th><th className="px-3 py-2 text-right">Contract price</th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {(c.items || []).map((it: any, i: number) => <tr key={i}><td className="px-3 py-2">{it.description}</td><td className="px-3 py-2 text-slate-600">{it.unit}</td><td className="px-3 py-2 text-right tabular-nums">{money(it.unit_price, c.currency)}</td></tr>)}
-                    </tbody>
-                  </table>
+
+      <Tabs
+        label="Contract sections"
+        active={tab}
+        onChange={(k) => setTab(k as TabKey)}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "orders", label: "Purchase orders", count: pos.length },
+          { key: "approvals", label: "Approvals" },
+          { key: "documents", label: "Documents", count: (c.documents || []).length },
+          { key: "activity", label: "Activity" },
+        ]}
+      />
+
+      {tab === "details" && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="space-y-4 xl:col-span-2">
+            <Card>
+              <CardHeader title="Contract" />
+              <Details
+                items={[
+                  { label: "Supplier", value: c.supplier ? <Link className="font-semibold text-ims-link hover:underline" to={`/dashboard/procurement/suppliers/${c.supplier}`}>{c.expand?.supplier?.name}</Link> : null },
+                  { label: "Type", value: CONTRACT_TYPES[c.contract_type] || c.contract_type },
+                  { label: "Department", value: c.expand?.department?.name || "Organisation-wide" },
+                  { label: "Contract manager", value: c.expand?.responsible?.name },
+                  { label: "Period", value: `${fmtDate(c.start_date)} – ${fmtDate(c.end_date)}` },
+                  { label: "Renewal decision by", value: c.renewal_date ? fmtDate(c.renewal_date) : null, hint: c.auto_renew ? "Renews automatically" : undefined },
+                  { label: "Payment terms", value: c.payment_terms },
+                  { label: "Approved", value: c.approved_at ? fmtDate(c.approved_at) : null },
+                  ...(c.termination_reason ? [{ label: "Termination reason", value: c.termination_reason, wide: true }] : []),
+                ]}
+              />
+            </Card>
+            {(c.items || []).length > 0 && (
+              <Card padded={false}>
+                <div className="px-5 pt-5">
+                  <CardHeader title="Price schedule" subtitle="Unit prices agreed in the contract." />
                 </div>
-              )}
-              {c.notes && <p className="rounded-lg bg-slate-50 px-3 py-2 text-[13px] text-slate-600">{c.notes}</p>}
-            </div>
-          )}
-          {tab === "orders" && (
-            !pos.length ? <EmptyState icon={ShoppingCart} text="No purchase order has been raised against this contract yet. Link the contract when editing a draft purchase order." /> : (
-              <div className="overflow-x-auto">
-                <table className="dnr-grid w-full min-w-[560px] text-[13px]">
-                  <thead><tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-3 py-2">PO</th><th className="px-3 py-2">Title</th><th className="px-3 py-2">Order date</th><th className="px-3 py-2 text-right">Value</th><th className="px-3 py-2">Status</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {pos.map((p: any) => (
-                      <tr key={p.id} className="cursor-pointer hover:bg-slate-50" onClick={() => navigate(`/dashboard/procurement/purchase-orders/${p.id}`)}>
-                        <td className="px-3 py-2 font-medium text-primaryDark">{p.number}</td><td className="px-3 py-2">{p.title}</td><td className="px-3 py-2 text-slate-600">{showDate(p.order_date)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{money(p.grand_total)}</td><td className="px-3 py-2"><StatusBadge status={p.status} map={PO_STATUS} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
-          )}
-          {tab === "documents" && <Attachments record={c} names={c.documents || []} empty="No document attached. Attach the signed contract." />}
-          {tab === "approval" && <ApprovalTracker approval={approval} actions={actions} />}
+                <DataTable columns={priceColumns} rows={c.items || []} rowKey={(_, i) => String(i)} minWidth={480} caption="Price schedule" />
+              </Card>
+            )}
+          </div>
+          <Card>
+            <CardHeader title="Scope" />
+            <p className="whitespace-pre-line text-t-body leading-relaxed text-ims-body">{c.scope || "No scope recorded."}</p>
+            {c.notes && <p className="mt-4 rounded-control bg-ims-subtle px-3 py-2 text-t-body text-ims-body">{c.notes}</p>}
+          </Card>
         </div>
-      </Sheet>
+      )}
+
+      {tab === "orders" && (
+        <Card padded={false}>
+          <div className="px-5 pt-5">
+            <CardHeader title="Purchase orders" subtitle="Orders raised against this contract." />
+          </div>
+          <DataTable
+            columns={orderColumns}
+            rows={pos}
+            rowKey={(p) => p.id}
+            onRowClick={(p) => navigate(`/dashboard/procurement/purchase-orders/${p.id}`)}
+            minWidth={640}
+            caption="Purchase orders"
+            empty={<EmptyState compact icon={ShoppingCart} text="No purchase order has been raised against this contract yet. Link the contract when editing a draft purchase order." />}
+          />
+        </Card>
+      )}
+
+      {tab === "approvals" && <ApprovalTracker approval={approval} actions={actions} />}
+
+      {tab === "documents" && (
+        <Card>
+          <CardHeader
+            title="Documents"
+            subtitle="Signed contract, annexes, addenda and performance securities."
+            action={canManage ? <Button size="sm" icon={Upload} onClick={() => setUploading(true)}>Add documents</Button> : undefined}
+          />
+          <Attachments record={c} names={c.documents || []} empty="No document attached. Attach the signed contract." />
+        </Card>
+      )}
+
+      {tab === "activity" && <Activity actions={actions} audit={audit} loading={false} />}
 
       <ActionDialog
         kind={decision}
@@ -187,7 +289,7 @@ export default function ContractDetail() {
       {editing && <ContractFormDialog contract={c} onClose={() => { setEditing(false); refresh(); }} />}
       {terminating && <TerminateDialog contract={c} onClose={() => setTerminating(false)} onDone={() => { setTerminating(false); refresh(); }} />}
       {uploading && <UploadDialog contract={c} onClose={() => setUploading(false)} onDone={() => { setUploading(false); refresh(); }} />}
-    </DocumentPage>
+    </Page>
   );
 }
 
@@ -196,21 +298,32 @@ function TerminateDialog({ contract, onClose, onDone }: { contract: any; onClose
   const [tried, setTried] = React.useState(false);
   const run = useMutation(() => phase5Api.contractAction(contract.id, "terminate", { reason }), {
     onSuccess: () => {
-      toast.success("Contract terminated");
+      toast.success(`${contract.number} terminated`);
       onDone();
     },
     onError: (e) => {
       toast.error(errorMessage(e));
     },
   });
+  const tooShort = reason.trim().length < 10;
   return (
-    <FormDialog open onClose={onClose} icon={Ban} title={`Terminate ${contract.number}`} description="No further purchase orders can be raised against it." submitLabel="Terminate contract" busy={run.isLoading} onSubmit={() => { setTried(true); if (reason.trim().length >= 10) run.mutate(); }}>
-      <FormBlock icon={Ban} title="Reason">
-        <Field label="Why is the contract terminated?" required error={tried && reason.trim().length < 10 && "At least 10 characters."}>
-          <textarea className={textareaCls} rows={4} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Repeated late deliveries; notice given on 1 September as per clause 14." />
-        </Field>
-      </FormBlock>
-    </FormDialog>
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Terminate ${contract.number}?`}
+      description="No further purchase orders can be raised against it."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="danger" loading={run.isLoading} onClick={() => { setTried(true); if (!tooShort) run.mutate(); }}>Terminate</Button>
+        </>
+      }
+    >
+      <Field label="Why is the contract terminated?" required htmlFor="ct-term-reason" error={tried && tooShort && "Write at least 10 characters so the file shows why it ended."}>
+        <Textarea id="ct-term-reason" rows={4} autoFocus invalid={tried && tooShort} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Repeated late deliveries; notice given on 1 September as per clause 14." />
+      </Field>
+    </Modal>
   );
 }
 
@@ -218,7 +331,7 @@ function UploadDialog({ contract, onClose, onDone }: { contract: any; onClose: (
   const [files, setFiles] = React.useState<File[]>([]);
   const run = useMutation(() => pocketbase.collection("contracts").update(contract.id, toFormData({}, { documents: files })), {
     onSuccess: () => {
-      toast.success("Documents added");
+      toast.success(`${files.length} document${files.length === 1 ? "" : "s"} added to ${contract.number}`);
       onDone();
     },
     onError: (e) => {
@@ -226,8 +339,19 @@ function UploadDialog({ contract, onClose, onDone }: { contract: any; onClose: (
     },
   });
   return (
-    <FormDialog open onClose={onClose} icon={Upload} title={`Add documents to ${contract.number}`} description="Signed contract, annexes, addenda, performance securities…" submitLabel="Upload" busy={run.isLoading} onSubmit={() => files.length && run.mutate()}>
+    <Modal
+      open
+      onClose={onClose}
+      title={`Add documents to ${contract.number}`}
+      description="Signed contract, annexes, addenda, performance securities."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" icon={Upload} loading={run.isLoading} disabled={!files.length} onClick={() => files.length && run.mutate()}>Upload</Button>
+        </>
+      }
+    >
       <FileDrop files={files} onChange={setFiles} max={20} label="Choose documents" />
-    </FormDialog>
+    </Modal>
   );
 }

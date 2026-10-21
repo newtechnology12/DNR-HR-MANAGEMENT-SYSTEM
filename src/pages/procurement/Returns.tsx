@@ -2,15 +2,14 @@ import * as React from "react";
 import { useMutation, useQuery } from "react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ClipboardList, PackageX, Plus, Truck, Undo2 } from "lucide-react";
+import { ExternalLink, Plus, Undo2 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
-import RecordTable, { RecordColumn, RecordView } from "@/components/enterprise/RecordTable";
-import { PageHeader, StatusBadge } from "@/components/enterprise/ui";
-import { RETURN_STATUS, errorMessage, money, phase5Api } from "@/lib/procurement";
-import { ChoiceCards, Field, FormBlock, FormDialog, inputCls, showDate, textareaCls } from "@/components/portal/kit";
-import { cn } from "@/utils";
+import RecordTable, { RecordColumn, RecordFilter, RecordView } from "@/components/enterprise/RecordTable";
+import { StatusBadge } from "@/components/enterprise/ui";
+import { Button, Column, DataTable, DocNo, EmptyState, Field, Input, Modal, Num, Page, PageHeader, Select, Textarea, TwoLine, fmtDate, fmtMoney, fmtNumber } from "@/components/ims";
+import { RETURN_STATUS, errorMessage, phase5Api } from "@/lib/procurement";
+import { ChoiceCards } from "@/components/portal/kit";
 
 export default function Returns() {
   const navigate = useNavigate();
@@ -25,23 +24,38 @@ export default function Returns() {
     { key: "credit", label: "Awaiting credit note", filter: `status = "dispatched"` },
     { key: "credited", label: "Credited", filter: `status = "credited"` },
   ];
-  const columns: RecordColumn<any>[] = [
-    { key: "number", header: "Return", sortField: "number", cell: (r) => <span className="whitespace-nowrap font-medium">{r.number}</span> },
-    { key: "date", header: "Date", sortField: "created", cell: (r) => <span className="whitespace-nowrap text-slate-600">{showDate(r.created)}</span>, csv: (r) => r.created?.slice(0, 10) },
-    { key: "supplier", header: "Supplier", cell: (r) => r.expand?.supplier?.name, csv: (r) => r.expand?.supplier?.name },
-    { key: "po", header: "PO / receipt", cell: (r) => <span className="whitespace-nowrap text-slate-600">{r.expand?.purchase_order?.number} · {r.expand?.goods_receipt?.number}</span>, csv: (r) => r.expand?.purchase_order?.number },
-    { key: "reason", header: "Reason", className: "max-w-[280px]", cell: (r) => <span className="line-clamp-1 text-slate-600">{r.reason}</span>, csv: (r) => r.reason },
-    { key: "value", header: "Value", sortField: "total_value", align: "right", cell: (r) => <span className="whitespace-nowrap font-medium tabular-nums">{money(r.total_value)}</span>, csv: (r) => r.total_value },
-    { key: "credit", header: "Credit note", align: "right", cell: (r) => <span className="whitespace-nowrap tabular-nums text-slate-600">{r.credit_amount ? money(r.credit_amount) : "—"}</span>, csv: (r) => r.credit_amount },
-    { key: "status", header: "Status", sortField: "status", cell: (r) => <StatusBadge status={r.status} map={RETURN_STATUS} />, csv: (r) => RETURN_STATUS[r.status]?.label },
+  const filters: RecordFilter[] = [
+    { field: "status", label: "Status", options: Object.entries(RETURN_STATUS).map(([value, m]) => ({ value, label: m.note ? `${m.label} · ${m.note}` : m.label })) },
+    { field: "supplier", label: "Supplier", collection: "suppliers" },
   ];
+  const columns: RecordColumn<any>[] = [
+    { key: "number", header: "Number", sortField: "number", nowrap: true, cell: (r) => <DocNo value={r.number} />, sub: (r) => fmtDate(r.created), csv: (r) => r.number },
+    {
+      key: "supplier",
+      header: "Supplier",
+      className: "max-w-[220px]",
+      clamp: true,
+      cell: (r) => r.expand?.supplier?.name || "—",
+      sub: (r) => r.expand?.purchase_order?.number,
+      csv: (r) => r.expand?.supplier?.name || "",
+    },
+    { key: "po", header: "Purchase order", exportOnly: true, cell: (r) => r.expand?.purchase_order?.number || "—", csv: (r) => r.expand?.purchase_order?.number || "" },
+    { key: "grn", header: "Goods receipt", nowrap: true, cell: (r) => <DocNo value={r.expand?.goods_receipt?.number} />, csv: (r) => r.expand?.goods_receipt?.number || "" },
+    { key: "reason", header: "Reason", clamp: true, cell: (r) => r.reason || "—", csv: (r) => r.reason || "" },
+    { key: "value", header: "Value (RWF)", sortField: "total_value", align: "right", sum: "total_value", format: "money", cell: (r) => <Num value={r.total_value} />, csv: (r) => r.total_value },
+    { key: "credit", header: "Credit note (RWF)", align: "right", sum: "credit_amount", format: "money", cell: (r) => (r.credit_amount ? <Num value={r.credit_amount} /> : <span className="text-ims-faint">—</span>), csv: (r) => r.credit_amount },
+    { key: "status", header: "Status", sortField: "status", cell: (r) => <StatusBadge status={r.status} map={RETURN_STATUS} />, csv: (r) => RETURN_STATUS[r.status]?.label },
+    { key: "date", header: "Date", sortField: "created", exportOnly: true, cell: (r) => fmtDate(r.created), csv: (r) => r.created?.slice(0, 10) },
+  ];
+  const canCreate = canPerform("receive_goods") || canPerform("manage_purchase_orders");
+  const open = (r: any) => navigate(`/dashboard/procurement/returns/${r.id}`);
   return (
-    <div className="space-y-4 px-4 py-4 sm:px-6">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Procurement", to: "/dashboard/procurement" }, { label: "Purchase returns" }]}
         title="Purchase returns"
-        description="Goods sent back to suppliers after acceptance: approved, dispatched from the warehouse (stock reduced) and settled by a credit note or replacement."
-        breadcrumbs={[{ title: "Procurement", link: "/dashboard/procurement" }, { title: "Returns", link: "/dashboard/procurement/returns" }]}
-        actions={(canPerform("receive_goods") || canPerform("manage_purchase_orders")) && <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} /> New return</Button>}
+        subtitle="Goods sent back to suppliers, from approval to dispatch and the credit note."
+        primary={canCreate ? { label: "New return", icon: Plus, onClick: () => setCreating(true) } : undefined}
       />
       <RecordTable
         collection="purchase_returns"
@@ -50,14 +64,25 @@ export default function Returns() {
         activeView={view}
         onViewChange={(v) => setParams(v === "all" ? {} : { view: v })}
         searchFields={["number", "reason", "supplier.name", "purchase_order.number", "credit_note_number"]}
+        searchPlaceholder="Search number, reason, supplier or PO"
+        filters={filters}
+        dateField="created"
+        dateLabel="Date"
         expand="supplier,purchase_order,goods_receipt"
         defaultSort="-created"
         exportName="purchase-returns"
-        onRowClick={(r) => navigate(`/dashboard/procurement/returns/${r.id}`)}
-        empty={{ icon: Undo2, title: "No purchase returns", text: "Return defective or wrong goods from a goods receipt; the return is approved before the goods leave the warehouse." }}
+        exportTitle="Purchase returns"
+        onRowClick={open}
+        rowActions={() => [{ label: "Open", icon: ExternalLink, onSelect: open }]}
+        empty={{
+          icon: Undo2,
+          title: "No purchase returns",
+          text: "No purchase returns yet. Return defective or wrong goods from a goods receipt; the return is approved before the goods leave the warehouse.",
+          action: canCreate ? <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>New return</Button> : undefined,
+        }}
       />
       {creating && <ReturnFormDialog onClose={() => setCreating(false)} />}
-    </div>
+    </Page>
   );
 }
 
@@ -69,7 +94,19 @@ const CONDITIONS = [
   { value: "excess", label: "Excess quantity" },
 ];
 
-/** New return from a goods receipt — same form design as the leave request. */
+/** Numbered block inside a dialog: "1 · Delivery". */
+function DialogSection({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-4 border-t border-ims-divider pt-4 first:border-t-0 first:pt-0">
+      <h3 className="text-[15px] font-bold text-ims-text">
+        {n}<span className="px-1.5 text-ims-faint">·</span>{title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/** New return from a goods receipt. */
 export function ReturnFormDialog({ onClose, grnId }: { onClose: () => void; grnId?: string }) {
   const navigate = useNavigate();
   const [grn, setGrn] = React.useState(grnId || "");
@@ -88,8 +125,8 @@ export function ReturnFormDialog({ onClose, grnId }: { onClose: () => void; grnI
   const chosen = lines.filter((l) => Number(qty[l.line]) > 0);
   const total = chosen.reduce((a, l) => a + Number(qty[l.line]) * (l.unit_cost || 0), 0);
   const errors = {
-    grn: !grn && "Choose the goods receipt.",
-    lines: !chosen.length ? "Enter the quantity to return for at least one item." : chosen.some((l) => Number(qty[l.line]) > l.accepted - (done[l.line] || 0)) ? "A quantity is more than what can still be returned." : false,
+    grn: !grn && "Choose the goods receipt the goods came in.",
+    lines: !chosen.length ? "Enter the quantity to return for at least one item." : chosen.some((l) => Number(qty[l.line]) > l.accepted - (done[l.line] || 0)) ? "A quantity is more than what can still be returned. Lower it to the number under “Can return”." : false,
     reason: reason.trim().length < 10 && "Explain why the goods are returned (at least 10 characters).",
   };
   const save = useMutation(
@@ -108,61 +145,106 @@ export function ReturnFormDialog({ onClose, grnId }: { onClose: () => void; grnI
       },
     }
   );
+  const submit = () => {
+    setTried(true);
+    if (!Object.values(errors).some(Boolean)) save.mutate();
+  };
+
+  const lineColumns: Column<any>[] = [
+    { key: "item", header: "Item", cell: (l) => <TwoLine main={l.description} sub={`${l.unit || ""}${l.batch ? ` · batch ${l.batch}` : ""}`} /> },
+    { key: "accepted", header: "Accepted", numeric: true, cell: (l) => fmtNumber(l.accepted, true) },
+    { key: "can", header: "Can return", numeric: true, cell: (l) => <span className="text-ims-body">{fmtNumber(l.accepted - (done[l.line] || 0), true)}</span> },
+    {
+      key: "qty",
+      header: "Return quantity",
+      width: "130px",
+      cell: (l) => {
+        const can = l.accepted - (done[l.line] || 0);
+        const bad = Number(qty[l.line]) > can;
+        return (
+          <Input
+            type="number"
+            min={0}
+            max={can}
+            step="any"
+            inputMode="decimal"
+            className="h-9 text-right tabular-nums"
+            invalid={bad}
+            value={qty[l.line] || ""}
+            onChange={(e) => setQty((x) => ({ ...x, [l.line]: e.target.value }))}
+            disabled={can <= 0}
+            aria-label={`Return quantity for ${l.description}`}
+          />
+        );
+      },
+    },
+    {
+      key: "condition",
+      header: "Condition",
+      width: "170px",
+      cell: (l) => (
+        <Select className="h-9" value={cond[l.line] || "defective"} onChange={(e) => setCond((x) => ({ ...x, [l.line]: e.target.value }))} aria-label={`Condition of ${l.description}`}>
+          {CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </Select>
+      ),
+    },
+    {
+      key: "value",
+      header: "Value (RWF)",
+      numeric: true,
+      cell: (l) => (Number(qty[l.line]) > 0 ? <Num value={Number(qty[l.line]) * (l.unit_cost || 0)} /> : <span className="text-ims-faint">—</span>),
+      total: <Num value={total} />,
+    },
+  ];
+
   return (
-    <FormDialog
+    <Modal
       open
       onClose={onClose}
-      icon={PackageX}
+      size="xl"
       title="Return goods to a supplier"
-      description={<>Goods leave the warehouse only after approval. <span className="text-red-600">*</span> required</>}
-      submitLabel={`Send for approval${total ? ` · ${money(total)}` : ""}`}
-      busy={save.isLoading}
-      wide
-      onSubmit={() => {
-        setTried(true);
-        if (!Object.values(errors).some(Boolean)) save.mutate();
-      }}
+      description="Goods leave the warehouse only after the return is approved."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={save.isLoading} onClick={submit}>Submit for approval</Button>
+        </>
+      }
     >
-      <FormBlock icon={Truck} title="Delivery">
-        <Field label="Goods receipt" required error={tried && errors.grn}>
-          <select className={inputCls} value={grn} onChange={(e) => { setGrn(e.target.value); setQty({}); }} disabled={Boolean(grnId)}>
+      <DialogSection n={1} title="Delivery">
+        <Field label="Goods receipt" required htmlFor="ret-grn" error={tried && errors.grn}>
+          <Select id="ret-grn" invalid={Boolean(tried && errors.grn)} value={grn} onChange={(e) => { setGrn(e.target.value); setQty({}); }} disabled={Boolean(grnId)}>
             <option value="">{receipts.isLoading ? "Loading…" : "Choose the delivery the goods came in"}</option>
-            {(receipts.data || []).map((g: any) => <option key={g.id} value={g.id}>{g.number} · {g.expand?.supplier?.name} · {g.expand?.purchase_order?.number} · {showDate(g.receipt_date)}</option>)}
-          </select>
+            {(receipts.data || []).map((g: any) => <option key={g.id} value={g.id}>{g.number} · {g.expand?.supplier?.name} · {g.expand?.purchase_order?.number} · {fmtDate(g.receipt_date)}</option>)}
+          </Select>
         </Field>
-        {selected && <p className="rounded-lg bg-slate-50 px-3 py-2 text-[12.5px] text-slate-600">Supplier <span className="font-medium text-slate-800">{selected.expand?.supplier?.name}</span> · warehouse <span className="font-medium text-slate-800">{selected.expand?.warehouse?.name || "—"}</span></p>}
-      </FormBlock>
+        {selected && (
+          <p className="rounded-control bg-ims-subtle px-3 py-2 text-t-small text-ims-body">
+            Supplier <span className="font-semibold text-ims-text">{selected.expand?.supplier?.name}</span> · warehouse <span className="font-semibold text-ims-text">{selected.expand?.warehouse?.name || "—"}</span>
+          </p>
+        )}
+      </DialogSection>
 
       {selected && (
-        <FormBlock icon={ClipboardList} title="Items to return *">
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="dnr-grid w-full min-w-[620px] text-[13px]">
-              <thead><tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Accepted</th><th className="px-3 py-2 text-right">Can return</th><th className="w-28 px-3 py-2 text-right">Return qty</th><th className="w-40 px-3 py-2">Condition</th><th className="px-3 py-2 text-right">Value</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">
-                {lines.map((l) => {
-                  const can = l.accepted - (done[l.line] || 0);
-                  const bad = Number(qty[l.line]) > can;
-                  return (
-                    <tr key={l.line}>
-                      <td className="px-3 py-2">{l.description}<span className="block text-[11.5px] text-slate-500">{l.unit}{l.batch ? ` · batch ${l.batch}` : ""}</span></td>
-                      <td className="px-3 py-2 text-right tabular-nums">{l.accepted}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-600">{can}</td>
-                      <td className="px-2 py-1.5"><input type="number" min={0} max={can} step="any" inputMode="decimal" className={cn(inputCls, "h-9 text-right", bad && "border-red-400")} value={qty[l.line] || ""} onChange={(e) => setQty((x) => ({ ...x, [l.line]: e.target.value }))} disabled={can <= 0} aria-label={`Return quantity ${l.description}`} /></td>
-                      <td className="px-2 py-1.5"><select className={cn(inputCls, "h-9")} value={cond[l.line] || "defective"} onChange={(e) => setCond((x) => ({ ...x, [l.line]: e.target.value }))}>{CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select></td>
-                      <td className="px-3 py-2 text-right tabular-nums">{Number(qty[l.line]) > 0 ? money(Number(qty[l.line]) * (l.unit_cost || 0)) : "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <DialogSection n={2} title="Items to return">
+          <div className="overflow-hidden rounded-card border border-ims-border">
+            <DataTable
+              columns={lineColumns}
+              rows={lines}
+              rowKey={(l) => String(l.line)}
+              minWidth={720}
+              caption="Items to return"
+              totalLabel="Total to return"
+              empty={<EmptyState compact text="No accepted goods on this receipt can be returned." />}
+            />
           </div>
-          {tried && errors.lines && <p className="text-[12px] text-red-600">{errors.lines}</p>}
-        </FormBlock>
+          {tried && errors.lines && <p className="text-t-hint text-ims-danger" role="alert">{errors.lines}</p>}
+        </DialogSection>
       )}
 
-      <FormBlock icon={Undo2} title="Reason and settlement">
-        <Field label="Why are the goods returned?" required error={tried && errors.reason}>
-          <textarea className={textareaCls} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. 2 toner cartridges leak and do not print; confirmed by the ICT officer" />
+      <DialogSection n={selected ? 3 : 2} title="Reason and settlement">
+        <Field label="Why are the goods returned?" required htmlFor="ret-reason" error={tried && errors.reason}>
+          <Textarea id="ret-reason" rows={3} invalid={Boolean(tried && errors.reason)} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. 2 toner cartridges leak and do not print; confirmed by the ICT officer" />
         </Field>
         <Field label="What should the supplier do?">
           <ChoiceCards
@@ -176,8 +258,10 @@ export function ReturnFormDialog({ onClose, grnId }: { onClose: () => void; grnI
             ]}
           />
         </Field>
-        <Field label="Notes"><input className={inputCls} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" /></Field>
-      </FormBlock>
-    </FormDialog>
+        <Field label="Notes" htmlFor="ret-notes" hint={total ? `Value returned: ${fmtMoney(total)}` : undefined}>
+          <Input id="ret-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+        </Field>
+      </DialogSection>
+    </Modal>
   );
 }

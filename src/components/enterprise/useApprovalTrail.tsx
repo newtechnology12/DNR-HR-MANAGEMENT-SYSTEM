@@ -9,7 +9,7 @@ import pocketbase from "@/lib/pocketbase";
 import { imsApi } from "@/lib/ims";
 import { procurementApi } from "@/lib/procurement";
 import { useAuth } from "@/context/auth.context";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ims";
 import { ActionDialog, ActionKind } from "./Approval";
 
 export function useApprovalTrail(documentType: string, collection: string, id?: string) {
@@ -38,9 +38,9 @@ export function DecisionButtons({ approval, number, onDone }: { approval?: any; 
   if (!waiting) return null;
   return (
     <>
-      <Button size="sm" onClick={() => setKind("approve")}><CheckCircle2 size={14} /> Approve</Button>
-      <Button size="sm" variant="outline" onClick={() => setKind("return")}><Undo2 size={14} /> Return</Button>
-      <Button size="sm" variant="outline" className="text-red-700" onClick={() => setKind("reject")}><XCircle size={14} /> Reject</Button>
+      <Button icon={Undo2} onClick={() => setKind("return")}>Return</Button>
+      <Button icon={XCircle} onClick={() => setKind("reject")}>Reject</Button>
+      <Button variant="primary" icon={CheckCircle2} onClick={() => setKind("approve")}>Approve</Button>
       <ActionDialog
         kind={kind}
         number={number}

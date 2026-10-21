@@ -183,9 +183,9 @@ export function Chatter({ items, title = "Activity", composer }: { items: Chatte
         {!items.length && <li className="text-t-body text-ims-muted">No activity yet.</li>}
         {items.map((e) => (
           <li key={e.id} className="flex gap-3">
-            <div className="relative">
+            <div className="relative self-start">
               <Initials name={e.who} />
-              <span className={cn("absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white", dot[e.tone || "default"])} aria-hidden />
+              <span className={cn("absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-ims-card", dot[e.tone || "default"])} aria-hidden />
             </div>
             <div className="min-w-0 flex-1 text-t-body">
               <p className="text-ims-text">
