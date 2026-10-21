@@ -12,6 +12,7 @@ import pocketbase from "@/lib/pocketbase";
 import { byPeriodDesc } from "@/pages/hr/payroll/Payslip";
 import { useClock } from "@/lib/useClock";
 import { cn } from "@/utils";
+import { Card, PageHeader, Pill as ImsPill, PillTone, buttonClass } from "@/components/ims";
 
 // ------------------------------------------------------------------ design tokens
 export const W = {
@@ -27,15 +28,15 @@ export const toDate = (v?: string | Date | null) => {
 export const money = (n: number) => `RWF ${Math.round(Number(n) || 0).toLocaleString("en-US")}`;
 
 export function WCard({ className, children, flush }: { className?: string; children: React.ReactNode; flush?: boolean }) {
-  return <section className={cn("min-w-0 rounded-[14px] border border-[#E3E8EF] bg-white", !flush && "px-5 py-[18px]", className)}>{children}</section>;
+  return <Card padded={!flush} className={className}>{children}</Card>;
 }
 
 export function WHead({ title, subtitle, right, className }: { title: React.ReactNode; subtitle?: React.ReactNode; right?: React.ReactNode; className?: string }) {
   return (
     <div className={cn("flex flex-wrap items-start justify-between gap-2.5", className)}>
       <div className="min-w-0">
-        <h2 className="text-[17px] font-extrabold text-[#14213D]">{title}</h2>
-        {subtitle && <div className="text-[13px] text-[#5B6577]">{subtitle}</div>}
+        <h2 className="text-t-section text-ims-text">{title}</h2>
+        {subtitle && <div className="mt-0.5 text-t-small text-ims-muted">{subtitle}</div>}
       </div>
       {right}
     </div>
@@ -43,20 +44,18 @@ export function WHead({ title, subtitle, right, className }: { title: React.Reac
 }
 
 export function WLink({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) {
-  return <Link to={to} className={cn("text-[13px] font-bold text-[#1466C0] hover:text-[#0B3A6F] hover:underline", className)}>{children}</Link>;
+  return <Link to={to} className={cn("text-[13px] font-bold text-ims-link hover:text-ims-primary hover:underline", className)}>{children}</Link>;
 }
 
-const PILL: Record<string, string> = {
-  approved: "bg-[#E4F4EA] text-[#0F6B3A]", pending: "bg-[#FEF3D6] text-[#8A5A00]", rejected: "bg-[#FDE8E7] text-[#B42318]",
-  neutral: "bg-[#EEF2F8] text-[#36435A]", info: "bg-[#EAF2FC] text-[#0B3A6F]",
-};
+// Workspace tones → the ims pill tones (status glossary colours).
+const PILL: Record<string, PillTone> = { approved: "success", pending: "warning", rejected: "danger", neutral: "neutral", info: "info", returned: "orange", completed: "success-outline" };
 export function Pill({ tone = "neutral", children, className }: { tone?: keyof typeof PILL | string; children: React.ReactNode; className?: string }) {
-  return <span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12.5px] font-bold", PILL[tone] || PILL.neutral, className)}>{children}</span>;
+  return <ImsPill tone={PILL[tone] || "neutral"} className={className}>{children}</ImsPill>;
 }
 
-export const btnPrimary = "inline-flex h-10 items-center justify-center gap-2 rounded-[9px] bg-[#0B3A6F] px-4 text-[13.5px] font-bold text-white transition-colors hover:bg-[#0e4685] disabled:opacity-60";
-export const btnOutline = "inline-flex h-10 items-center justify-center gap-2 rounded-[9px] border border-[#DDE3EC] bg-white px-4 text-[13.5px] font-bold text-[#14213D] transition-colors hover:bg-[#F1F4F9] disabled:opacity-60";
-export const btnNavyOutline = "inline-flex h-[42px] items-center justify-center rounded-[9px] border border-[#0B3A6F] bg-white px-4 text-[14px] font-bold text-[#0B3A6F] transition-colors hover:bg-[#EAF2FC]";
+export const btnPrimary = buttonClass({ variant: "primary" });
+export const btnOutline = buttonClass({ variant: "secondary" });
+export const btnNavyOutline = buttonClass({ variant: "secondary" });
 
 // ------------------------------------------------------------------ clock-in card
 export function ClockCard() {
@@ -71,19 +70,19 @@ export function ClockCard() {
   const label = clock.state === "in" ? "Clocked in" : clock.state === "done" ? "Day completed" : clock.isWorkingDay ? "Not clocked in" : "Not a working day";
   const value = clock.state === "in" ? `Since ${hm(r?.clockin_time)}` : clock.state === "done" ? `${hm(r?.clockin_time)} – ${hm(r?.clockout_time)}` : `Today · ${format(now, "HH:mm")}`;
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-[#E3E8EF] bg-white py-2 pl-4 pr-2">
+    <div className="flex items-center gap-3 rounded-xl border border-ims-border bg-white py-2 pl-4 pr-2">
       <div>
-        <div className="text-[12px] font-semibold text-[#5B6577]">{label}</div>
-        <div className={cn("text-[15px] font-extrabold tabular-nums", clock.state === "in" ? "text-[#0F6B3A]" : "text-[#14213D]")}>{clock.loading ? "…" : value}</div>
+        <div className="text-[12px] font-semibold text-ims-muted">{label}</div>
+        <div className={cn("text-[15px] font-extrabold tabular-nums", clock.state === "in" ? "text-ims-success" : "text-ims-text")}>{clock.loading ? "…" : value}</div>
       </div>
       {clock.state === "done" ? (
-        <span className="inline-flex h-[42px] items-center rounded-[9px] bg-[#E4F4EA] px-4 text-[13.5px] font-bold text-[#0F6B3A]">Done for today</span>
+        <span className="inline-flex h-[42px] items-center rounded-[9px] bg-ims-success-bg px-4 text-[13.5px] font-bold text-ims-success">Done for today</span>
       ) : (
         <button
           type="button"
           disabled={clock.busy || clock.loading || (clock.state === "out" && !clock.isWorkingDay)}
           onClick={clock.state === "in" ? clock.clockOut : clock.clockIn}
-          className={cn("inline-flex h-[42px] items-center gap-2 rounded-[9px] px-[18px] text-[14px] font-bold text-white transition-colors disabled:opacity-60", clock.state === "in" ? "bg-[#B42318] hover:bg-[#9b1e14]" : "bg-[#0B3A6F] hover:bg-[#0e4685]")}
+          className={cn("inline-flex h-[42px] items-center gap-2 rounded-[9px] px-[18px] text-[14px] font-bold text-white transition-colors disabled:opacity-60", clock.state === "in" ? "bg-ims-danger hover:bg-[#9b1e14]" : "bg-ims-primary hover:bg-ims-primary-hover")}
         >
           {clock.state === "in" ? <LogOut size={17} aria-hidden /> : <LogIn size={17} aria-hidden />}
           {clock.busy ? "Please wait…" : clock.state === "in" ? "Clock out" : "Clock in"}
@@ -97,15 +96,15 @@ export function ClockCard() {
 const DOW = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 export type DayState = "onTime" | "late" | "leave" | "holiday" | "corrected" | "pending" | "absent" | "today" | "future";
 export const DAY_STYLE: Record<DayState, { label: string; cell: string; swatch: string }> = {
-  onTime: { label: "On time", cell: "bg-[#1466C0] text-white", swatch: "bg-[#1466C0]" },
+  onTime: { label: "On time", cell: "bg-ims-link text-white", swatch: "bg-ims-link" },
   late: { label: "Late", cell: "bg-[#E8833A] text-white", swatch: "bg-[#E8833A]" },
-  corrected: { label: "Corrected by HR", cell: "bg-[#DCEAFB] text-[#0B3A6F]", swatch: "bg-[#DCEAFB]" },
-  leave: { label: "On leave", cell: "bg-[#E4F4EA] text-[#0F6B3A]", swatch: "bg-[#E4F4EA] border border-[#BFE3CB]" },
-  holiday: { label: "Public holiday", cell: "bg-white text-[#5B6577] border border-dotted border-[#C5CDD9]", swatch: "bg-white border border-dotted border-[#C5CDD9]" },
-  pending: { label: "Correction asked", cell: "bg-[repeating-linear-gradient(45deg,#FEF3D6_0_4px,#FBE2A6_4px_8px)] text-[#8A5A00]", swatch: "bg-[repeating-linear-gradient(45deg,#FEF3D6_0_3px,#FBE2A6_3px_6px)]" },
-  absent: { label: "No clock-in", cell: "border border-[#E1E6EE] bg-[#EEF1F5] text-[#5B6577]", swatch: "border border-[#D5DBE5] bg-[#EEF1F5]" },
-  today: { label: "Today", cell: "border-[1.5px] border-dashed border-[#1466C0] bg-white text-[#1466C0]", swatch: "border-[1.5px] border-dashed border-[#1466C0]" },
-  future: { label: "", cell: "text-[#C5CDD9]", swatch: "" },
+  corrected: { label: "Corrected by HR", cell: "bg-[#DCEAFB] text-ims-primary", swatch: "bg-[#DCEAFB]" },
+  leave: { label: "On leave", cell: "bg-ims-success-bg text-ims-success", swatch: "bg-ims-success-bg border border-[#BFE3CB]" },
+  holiday: { label: "Public holiday", cell: "bg-white text-ims-muted border border-dotted border-ims-priority-low", swatch: "bg-white border border-dotted border-ims-priority-low" },
+  pending: { label: "Correction asked", cell: "bg-[repeating-linear-gradient(45deg,#FEF3D6_0_4px,#FBE2A6_4px_8px)] text-ims-warning", swatch: "bg-[repeating-linear-gradient(45deg,#FEF3D6_0_3px,#FBE2A6_3px_6px)]" },
+  absent: { label: "No clock-in", cell: "border border-[#E1E6EE] bg-ims-neutral-bg text-ims-muted", swatch: "border border-[#D5DBE5] bg-ims-neutral-bg" },
+  today: { label: "Today", cell: "border-[1.5px] border-dashed border-ims-link bg-white text-ims-link", swatch: "border-[1.5px] border-dashed border-ims-link" },
+  future: { label: "", cell: "text-ims-priority-low", swatch: "" },
 };
 
 export async function fetchMyAttendance(uid: string, days = 30) {
@@ -176,10 +175,10 @@ export function AttendanceCalendar({ cal }: { cal: ReturnType<typeof buildCalend
     <div>
       <div className="mt-3.5 grid grid-cols-[56px_repeat(5,minmax(0,1fr))] gap-1.5 text-[12px]" role="grid" aria-label="Attendance by working day">
         <span />
-        {["Mon", "Tue", "Wed", "Thu", "Fri"].map((w) => <span key={w} className="text-center font-bold text-[#5B6577]">{w}</span>)}
+        {["Mon", "Tue", "Wed", "Thu", "Fri"].map((w) => <span key={w} className="text-center font-bold text-ims-muted">{w}</span>)}
         {cal.weeks.map((wk) => (
           <React.Fragment key={wk.label}>
-            <span className="self-center font-semibold text-[#5B6577]">{wk.label}</span>
+            <span className="self-center font-semibold text-ims-muted">{wk.label}</span>
             {wk.days.map((d, i) =>
               d ? (
                 <span key={d.key} title={d.tip} aria-label={d.tip} className={cn("flex h-[34px] items-center justify-center rounded-[7px] font-bold tabular-nums", DAY_STYLE[d.state].cell)}>{format(d.date, "d")}</span>
@@ -190,7 +189,7 @@ export function AttendanceCalendar({ cal }: { cal: ReturnType<typeof buildCalend
           </React.Fragment>
         ))}
       </div>
-      <div className="mt-3.5 flex flex-wrap gap-4 border-t border-[#EDF0F5] pt-3 text-[13px] text-[#36435A]">
+      <div className="mt-3.5 flex flex-wrap gap-4 border-t border-ims-divider pt-3 text-[13px] text-ims-body">
         {shown.filter((s) => s === "onTime" || s === "late" || s === "absent" || (cal.counts[s] || 0) > 0).map((s) => (
           <span key={s} className="inline-flex items-center gap-1.5">
             <span className={cn("h-3 w-3 rounded-[3px]", DAY_STYLE[s].swatch)} aria-hidden />
@@ -221,7 +220,7 @@ export function AttendanceNotice({ cal, onAsk, withinDays = 30 }: { cal: ReturnT
   return (
     <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-[#F5DFA3] bg-[#FFF8E6] px-4 py-3">
       <AlertTriangle size={20} className="shrink-0 text-[#9A6300]" aria-hidden />
-      <div className="min-w-[240px] flex-1 text-[14px] text-[#14213D]">
+      <div className="min-w-[240px] flex-1 text-[14px] text-ims-text">
         <b>No clock-in on {absent.length} working day{absent.length === 1 ? "" : "s"}</b>{" "}
         <span className="text-[#5B4A1C]">since {format(since, "d MMMM")}. Missions or approved absences? Ask HR to correct your log.{cal.pendingDays ? ` ${cal.pendingDays} day${cal.pendingDays === 1 ? " is" : "s are"} already waiting for HR.` : ""}</span>
       </div>
@@ -300,9 +299,9 @@ export const tabOf = (r: MyRequest): ReqTab => (r.tone === "approved" ? "approve
 export function RequestTabs({ rows, tab, onTab }: { rows: MyRequest[]; tab: ReqTab; onTab: (t: ReqTab) => void }) {
   const n = (t: ReqTab) => (t === "all" ? rows.length : rows.filter((r) => tabOf(r) === t).length);
   return (
-    <div role="group" aria-label="Filter requests" className="flex rounded-[9px] bg-[#F1F4F9] p-[3px]">
+    <div role="group" aria-label="Filter requests" className="flex rounded-[9px] bg-ims-subtle p-[3px]">
       {(["all", "pending", "approved", "rejected"] as ReqTab[]).map((t) => (
-        <button key={t} type="button" aria-pressed={tab === t} onClick={() => onTab(t)} className={cn("h-[30px] rounded-[7px] px-3 text-[12.5px] font-bold", tab === t ? "bg-white text-[#0B3A6F] shadow-[0_1px_2px_rgba(20,33,61,.12)]" : "text-[#5B6577] hover:text-[#14213D]")}>
+        <button key={t} type="button" aria-pressed={tab === t} onClick={() => onTab(t)} className={cn("h-[30px] rounded-[7px] px-3 text-[12.5px] font-bold", tab === t ? "bg-white text-ims-primary shadow-[0_1px_2px_rgba(20,33,61,.12)]" : "text-ims-muted hover:text-ims-text")}>
           {t[0].toUpperCase() + t.slice(1)} <span className="opacity-70">{n(t)}</span>
         </button>
       ))}
@@ -316,22 +315,22 @@ export function RequestTable({ rows, empty = "Nothing here" }: { rows: MyRequest
   return (
     <>
       {/* phones: one card per request */}
-      <ul className="divide-y divide-[#EDF0F5] border-t border-[#EDF0F5] sm:hidden">
+      <ul className="divide-y divide-ims-divider border-t border-ims-divider sm:hidden">
         {rows.map((r) => (
           <li key={`${r.kind}-${r.id}`}>
-            <button type="button" onClick={() => navigate(r.link)} className="flex w-full flex-col gap-1 px-4 py-3 text-left hover:bg-[#F8FAFD]">
-              <span className="flex items-center justify-between gap-2"><b className="text-[14px] text-[#14213D]">{r.kind}</b><Pill tone={r.tone}>{r.status}</Pill></span>
-              <span className="text-[13.5px] text-[#14213D]">{r.details}</span>
-              <span className="flex items-center justify-between gap-2 text-[12.5px] text-[#5B6577]"><span className="min-w-0">{r.next || ago(r)}</span>{r.amount ? <b className="whitespace-nowrap tabular-nums text-[#14213D]">{money(r.amount)}</b> : null}</span>
+            <button type="button" onClick={() => navigate(r.link)} className="flex w-full flex-col gap-1 px-4 py-3 text-left hover:bg-ims-hover">
+              <span className="flex items-center justify-between gap-2"><b className="text-[14px] text-ims-text">{r.kind}</b><Pill tone={r.tone}>{r.status}</Pill></span>
+              <span className="text-[13.5px] text-ims-text">{r.details}</span>
+              <span className="flex items-center justify-between gap-2 text-[12.5px] text-ims-muted"><span className="min-w-0">{r.next || ago(r)}</span>{r.amount ? <b className="whitespace-nowrap tabular-nums text-ims-text">{money(r.amount)}</b> : null}</span>
             </button>
           </li>
         ))}
-        {!rows.length && <li className="p-7 text-center text-[#5B6577]">{empty}</li>}
+        {!rows.length && <li className="p-7 text-center text-ims-muted">{empty}</li>}
       </ul>
     <div className="hidden overflow-x-auto sm:block">
-      <table className="w-full min-w-[640px] border-collapse text-[14px] [&_td]:border-r [&_td]:border-[#EDF0F5] [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-[#EDF0F5] [&_th:last-child]:border-r-0">
+      <table className="w-full min-w-[640px] border-collapse text-[14px] [&_td]:border-r [&_td]:border-ims-divider [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-ims-divider [&_th:last-child]:border-r-0">
         <thead>
-          <tr className="bg-[#F8FAFC] text-left text-[12.5px] text-[#5B6577]">
+          <tr className="bg-ims-thead text-left text-[12.5px] text-ims-muted">
             <th scope="col" className="px-5 py-2.5 font-bold">Type</th>
             <th scope="col" className="px-3.5 py-2.5 font-bold">Details</th>
             <th scope="col" className="px-3.5 py-2.5 text-right font-bold">Amount</th>
@@ -341,15 +340,15 @@ export function RequestTable({ rows, empty = "Nothing here" }: { rows: MyRequest
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={`${r.kind}-${r.id}`} onClick={() => navigate(r.link)} className="cursor-pointer border-t border-[#EDF0F5] hover:[&>td]:bg-[#F8FAFD]">
-              <td className="px-5 py-3 font-bold text-[#14213D]">{r.kind}</td>
-              <td className="max-w-[300px] px-3.5 py-3 text-[#14213D]"><span className="line-clamp-2">{r.details}</span></td>
+            <tr key={`${r.kind}-${r.id}`} onClick={() => navigate(r.link)} className="cursor-pointer border-t border-ims-divider hover:[&>td]:bg-ims-hover">
+              <td className="px-5 py-3 font-bold text-ims-text">{r.kind}</td>
+              <td className="max-w-[300px] px-3.5 py-3 text-ims-text"><span className="line-clamp-2">{r.details}</span></td>
               <td className="whitespace-nowrap px-3.5 py-3 text-right font-bold tabular-nums">{r.amount ? money(r.amount) : "—"}</td>
-              <td className="px-3.5 py-3"><Pill tone={r.tone}>{r.status}</Pill>{r.next && <div className="mt-[3px] text-[12px] text-[#5B6577]">{r.next}</div>}</td>
-              <td className="whitespace-nowrap py-3 pl-3.5 pr-5 text-right text-[#5B6577]">{ago(r)}</td>
+              <td className="px-3.5 py-3"><Pill tone={r.tone}>{r.status}</Pill>{r.next && <div className="mt-[3px] text-[12px] text-ims-muted">{r.next}</div>}</td>
+              <td className="whitespace-nowrap py-3 pl-3.5 pr-5 text-right text-ims-muted">{ago(r)}</td>
             </tr>
           ))}
-          {!rows.length && <tr><td colSpan={5} className="p-7 text-center text-[#5B6577]">{empty}</td></tr>}
+          {!rows.length && <tr><td colSpan={5} className="p-7 text-center text-ims-muted">{empty}</td></tr>}
         </tbody>
       </table>
     </div>
@@ -361,7 +360,7 @@ export function RequestTable({ rows, empty = "Nothing here" }: { rows: MyRequest
 const round1 = (n: number) => Math.round((Number(n) || 0) * 10) / 10;
 
 export function LeaveBalance({ b }: { b: any }) {
-  if (!b) return <p className="rounded-lg bg-[#F8FAFC] px-3 py-5 text-center text-[13px] text-[#5B6577]">No leave entitlement recorded for this year yet. HR sets it up.</p>;
+  if (!b) return <p className="rounded-lg bg-ims-thead px-3 py-5 text-center text-[13px] text-ims-muted">No leave entitlement recorded for this year yet. HR sets it up.</p>;
   const ent = Math.max(Number(b.entitlement) || 0, 0);
   const taken = Number(b.taken) || 0;
   const pending = Number(b.pending) || 0;
@@ -370,36 +369,30 @@ export function LeaveBalance({ b }: { b: any }) {
   const pct = (n: number) => `${ent ? Math.max(0, Math.min(100, (n / ent) * 100)) : 0}%`;
   return (
     <>
-      <div><span className="text-[30px] font-extrabold tabular-nums">{left}</span> <span className="text-[15px] font-bold text-[#5B6577]">days left</span></div>
-      <div role="img" aria-label={`${ent} days: ${taken} taken, ${pending} pending, ${after} available after approval`} className="flex h-2.5 overflow-hidden rounded-[5px] bg-[#EEF1F5]">
-        <span style={{ width: pct(taken) }} className="bg-[#0B3A6F]" />
+      <div><span className="text-[30px] font-extrabold tabular-nums">{left}</span> <span className="text-[15px] font-bold text-ims-muted">days left</span></div>
+      <div role="img" aria-label={`${ent} days: ${taken} taken, ${pending} pending, ${after} available after approval`} className="flex h-2.5 overflow-hidden rounded-[5px] bg-ims-neutral-bg">
+        <span style={{ width: pct(taken) }} className="bg-ims-primary" />
         <span style={{ width: pct(pending) }} className="bg-[repeating-linear-gradient(45deg,#F2B544_0_4px,#F8D58E_4px_8px)]" />
-        <span style={{ width: pct(Math.max(after, 0)) }} className="bg-[#1466C0]" />
+        <span style={{ width: pct(Math.max(after, 0)) }} className="bg-ims-link" />
       </div>
       <div className="grid grid-cols-3 gap-2 text-[12.5px]">
-        <div><div className="text-[#5B6577]">Taken</div><b className="text-[15px] tabular-nums">{round1(taken)}</b></div>
-        <div><div className="text-[#8A5A00]">Pending</div><b className="text-[15px] tabular-nums text-[#8A5A00]">{round1(pending)}</b></div>
-        <div><div className="text-[#5B6577]">After approval</div><b className="text-[15px] tabular-nums">{after}</b></div>
+        <div><div className="text-ims-muted">Taken</div><b className="text-[15px] tabular-nums">{round1(taken)}</b></div>
+        <div><div className="text-ims-warning">Pending</div><b className="text-[15px] tabular-nums text-ims-warning">{round1(pending)}</b></div>
+        <div><div className="text-ims-muted">After approval</div><b className="text-[15px] tabular-nums">{after}</b></div>
       </div>
     </>
   );
 }
 
 /** Page title in the workspace style. */
+/** Page title in the workspace: the ims PageHeader with "Dashboard › My workspace › Page". */
 export function MyHeader({ title, subtitle, actions, eyebrow }: { title: string; subtitle?: React.ReactNode; actions?: React.ReactNode; eyebrow?: React.ReactNode }) {
-  return (
-    <header className="flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0">
-        {eyebrow && <div className="text-[13px] text-[#5B6577]">{eyebrow}</div>}
-        <h1 className="text-[26px] font-extrabold tracking-[-0.01em] text-[#14213D]">{title}</h1>
-        {subtitle && <p className="mt-0.5 max-w-3xl text-[13.5px] text-[#5B6577]">{subtitle}</p>}
-      </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-    </header>
-  );
+  const crumbs = typeof eyebrow === "string" && eyebrow !== title ? [{ label: eyebrow, to: "/dashboard/my" }, { label: title }] : [{ label: title }];
+  return <PageHeader breadcrumbs={crumbs} title={title} subtitle={subtitle} actions={actions} />;
 }
 
-export const myPage = "mx-auto flex w-full max-w-[1240px] flex-col gap-[18px] px-4 pb-12 pt-[22px] text-[#14213D] sm:px-8 sm:pt-[26px]";
+/** Same frame as ims Page: 28px padding (16px on phones), 16px between cards. */
+export const myPage = "mx-auto flex w-full max-w-[1480px] flex-col gap-4 px-4 pb-10 pt-4 text-ims-text sm:px-[28px] sm:pt-6";
 
 // ------------------------------------------------------------------ payslip
 export async function fetchLatestPayslip(uid: string) {

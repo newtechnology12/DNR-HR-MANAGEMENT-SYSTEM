@@ -39,7 +39,7 @@ export default function ExportMenu({
   const items: { f: ExportFormat; label: string; hint: string; icon: any; color: string }[] = [
     { f: "xlsx", label: "Excel workbook", hint: ".xlsx with header and totals", icon: FileSpreadsheet, color: "text-emerald-700" },
     { f: "pdf", label: "PDF report", hint: "printable, with RALGA header", icon: FileText, color: "text-red-600" },
-    { f: "csv", label: "CSV (open format)", hint: "for other systems", icon: Sheet, color: "text-slate-600" },
+    { f: "csv", label: "CSV (open format)", hint: "for other systems", icon: Sheet, color: "text-ims-body" },
   ];
   return (
     <DropdownMenu>
@@ -50,14 +50,14 @@ export default function ExportMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60 bg-white">
-        <DropdownMenuLabel className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Export what you see</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-[11.5px] font-semibold uppercase tracking-wider text-ims-muted">Export what you see</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.map((i) => (
           <DropdownMenuItem key={i.f} onClick={() => run(i.f)} className="cursor-pointer gap-2.5 py-2">
             <i.icon size={16} className={i.color} />
             <span className="flex flex-col">
-              <span className="text-[13px] font-medium text-slate-800">{i.label}</span>
-              <span className="text-[11.5px] text-slate-500">{i.hint}</span>
+              <span className="text-[13px] font-medium text-ims-text">{i.label}</span>
+              <span className="text-[11.5px] text-ims-muted">{i.hint}</span>
             </span>
           </DropdownMenuItem>
         ))}

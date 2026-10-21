@@ -6,7 +6,7 @@
  * ("Total (RWF)") and cells show numbers only, with a total row. Footer: "1–15 of 30" · page size · pager.
  */
 import * as React from "react";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, MoreHorizontal } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, LucideIcon, MoreHorizontal } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/utils";
@@ -37,7 +37,7 @@ export type Column<T> = {
 
 export type RowAction<T> = {
   label: string;
-  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  icon?: LucideIcon;
   onSelect: (row: T) => void;
   danger?: boolean;
   disabled?: boolean;
@@ -131,10 +131,10 @@ export function DataTable<T>({
                   scope="col"
                   style={c.width ? { width: c.width } : undefined}
                   className={cn(
-                    "h-11 whitespace-nowrap border-b border-r border-ims-divider px-4 text-[12.5px] font-semibold text-ims-muted last:border-r-0",
+                    "h-11 whitespace-nowrap border-b border-r border-ims-divider px-3.5 text-[12.5px] font-semibold text-ims-muted last:border-r-0",
                     alignOf(c) === "right" && "text-right",
                     alignOf(c) === "center" && "text-center",
-                    c.clamp && !c.width && "min-w-[240px]",
+                    c.clamp && !c.width && "min-w-[220px]",
                     c.className
                   )}
                 >
@@ -149,7 +149,7 @@ export function DataTable<T>({
               Array.from({ length: 6 }, (_, i) => (
                 <tr key={`sk-${i}`} className="border-b border-ims-divider last:border-b-0">
                   {Array.from({ length: span }, (__, j) => (
-                    <td key={j} className="h-row border-r border-ims-divider px-4 last:border-r-0">
+                    <td key={j} className="h-row border-r border-ims-divider px-3.5 last:border-r-0">
                       <Skeleton className={cn("h-4", j === 0 ? "w-3/4" : "w-1/2")} />
                     </td>
                   ))}
@@ -190,7 +190,7 @@ export function DataTable<T>({
                         <td
                           key={c.key}
                           className={cn(
-                            "h-row border-r border-ims-divider px-4 py-2 align-middle last:border-r-0",
+                            "h-row border-r border-ims-divider px-3.5 py-2 align-middle last:border-r-0",
                             align === "right" && "text-right",
                             align === "center" && "text-center",
                             c.numeric && "whitespace-nowrap tabular-nums",
@@ -222,7 +222,7 @@ export function DataTable<T>({
             <tfoot>
               <tr className="border-t-2 border-ims-border bg-ims-thead font-bold">
                 {columns.map((c, i) => (
-                  <td key={c.key} className={cn("h-12 border-r border-ims-divider px-4 last:border-r-0", (c.align || (c.numeric ? "right" : "left")) === "right" && "text-right", c.numeric && "whitespace-nowrap tabular-nums")}>
+                  <td key={c.key} className={cn("h-12 border-r border-ims-divider px-3.5 last:border-r-0", (c.align || (c.numeric ? "right" : "left")) === "right" && "text-right", c.numeric && "whitespace-nowrap tabular-nums")}>
                     {i === 0 && c.total === undefined ? totalLabel : c.total ?? ""}
                   </td>
                 ))}

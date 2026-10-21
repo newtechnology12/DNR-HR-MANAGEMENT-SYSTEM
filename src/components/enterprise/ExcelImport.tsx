@@ -388,22 +388,22 @@ export function ImportDialog({ config, onClose, onDone }: { config: ImportConfig
           <div className="space-y-3">
             <ol className="grid gap-2 sm:grid-cols-3">
               {[["1", "Download the template", "Data sheet with the right headers, an Example sheet, the allowed values (Lists) and Instructions."], ["2", "Fill it in Excel", "One record per row. Columns marked * are required."], ["3", "Upload and review", "You see every problem before importing."]].map(([n, t, d]) => (
-                <li key={n} className="rounded-lg border border-slate-200 p-3">
+                <li key={n} className="rounded-lg border border-ims-border p-3">
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ralga-navy text-[12px] font-semibold text-white">{n}</span>
-                  <p className="mt-2 text-[13px] font-semibold text-slate-900">{t}</p>
-                  <p className="text-[12px] text-slate-500">{d}</p>
+                  <p className="mt-2 text-[13px] font-semibold text-ims-text">{t}</p>
+                  <p className="text-[12px] text-ims-muted">{d}</p>
                 </li>
               ))}
             </ol>
             <Button variant="outline" onClick={() => downloadTemplate(config).catch((e) => toast.error(errorMessage(e)))}><Download size={14} /> Download the template</Button>
             <label
-              className={cn("flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 py-8 text-center text-[13px]", busy ? "border-primary/40 bg-primary/[0.03]" : "border-slate-200 bg-slate-50 hover:border-primary/40 hover:bg-primary/[0.03]")}
+              className={cn("flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 py-8 text-center text-[13px]", busy ? "border-primary/40 bg-primary/[0.03]" : "border-ims-border bg-ims-thead hover:border-primary/40 hover:bg-primary/[0.03]")}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) read(f); }}
             >
-              {busy ? <Loader2 size={20} className="animate-spin text-primary" /> : <Upload size={20} className="text-slate-400" />}
+              {busy ? <Loader2 size={20} className="animate-spin text-primary" /> : <Upload size={20} className="text-ims-faint" />}
               <span><span className="font-medium text-primaryDark">Choose the filled file</span> or drop it here</span>
-              <span className="text-[11.5px] text-slate-500">.xlsx, .xls or .csv — up to 5,000 rows</span>
+              <span className="text-[11.5px] text-ims-muted">.xlsx, .xls or .csv — up to 5,000 rows</span>
               <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) read(f); e.target.value = ""; }} />
             </label>
             {error && <p role="alert" className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800"><AlertTriangle size={14} className="mt-0.5 shrink-0" /> {error}</p>}
@@ -413,7 +413,7 @@ export function ImportDialog({ config, onClose, onDone }: { config: ImportConfig
         {stage !== "start" && (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">{fileName} · {rows.length} rows</span>
+              <span className="rounded-full bg-ims-subtle px-2.5 py-1 font-medium text-ims-body">{fileName} · {rows.length} rows</span>
               {stage === "review" && <>
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-800"><CheckCircle2 size={13} /> {valid.length} ready</span>
                 {invalid.length > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 font-medium text-red-800"><XCircle size={13} /> {invalid.length} with problems</span>}
@@ -423,21 +423,21 @@ export function ImportDialog({ config, onClose, onDone }: { config: ImportConfig
                 {failed.length > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 font-medium text-red-800"><XCircle size={13} /> {failed.length} refused by the server</span>}
                 {invalid.length > 0 && <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800">{invalid.length} skipped (problems in the file)</span>}
               </>}
-              <label className="ml-auto flex items-center gap-1.5 text-slate-600"><input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} /> Only rows with problems</label>
+              <label className="ml-auto flex items-center gap-1.5 text-ims-body"><input type="checkbox" className="h-4 w-4 rounded border-ims-field" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} /> Only rows with problems</label>
             </div>
             {stage === "importing" && (
               <div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>
-                <p className="mt-1 text-[12px] text-slate-500">Importing… {progress}%</p>
+                <div className="h-2 overflow-hidden rounded-full bg-ims-subtle"><div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>
+                <p className="mt-1 text-[12px] text-ims-muted">Importing… {progress}%</p>
               </div>
             )}
-            <div className="min-h-0 flex-1 overflow-auto rounded-md border border-slate-200">
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border border-ims-border">
               <table className="dnr-grid w-full text-[12.5px]">
                 <thead className="sticky top-0 bg-white"><tr><th className="w-14">Row</th>{preview.map((f) => <th key={f.name}>{f.label}</th>)}<th>Check</th></tr></thead>
                 <tbody>
                   {shown.map((r) => (
                     <tr key={r.row} className={cn(r.errors.length || r.result === "failed" ? "bg-red-50/50" : r.result === "ok" ? "bg-emerald-50/40" : "")}>
-                      <td className="tabular-nums text-slate-500">{r.row}</td>
+                      <td className="tabular-nums text-ims-muted">{r.row}</td>
                       {preview.map((f) => <td key={f.name} className="max-w-[200px] truncate">{r.raw[f.name] instanceof Date ? r.raw[f.name].toISOString().slice(0, 10) : String(r.raw[f.name] ?? "")}</td>)}
                       <td className="min-w-[220px]">
                         {r.errors.length ? <span className="text-red-700">{r.errors.join(" · ")}</span>
@@ -449,7 +449,7 @@ export function ImportDialog({ config, onClose, onDone }: { config: ImportConfig
                   ))}
                 </tbody>
               </table>
-              {rows.length > 300 && <p className="px-3 py-2 text-[12px] text-slate-500">Showing the first 300 rows.</p>}
+              {rows.length > 300 && <p className="px-3 py-2 text-[12px] text-ims-muted">Showing the first 300 rows.</p>}
             </div>
           </div>
         )}

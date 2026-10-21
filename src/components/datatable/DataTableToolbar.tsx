@@ -1,10 +1,7 @@
 "use client";
 
-import { Cross2Icon } from "@radix-ui/react-icons";
 import { Table } from "@tanstack/react-table";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchBox } from "@/components/ims";
 
 import { DataTableFacetedFilter } from "./DataTableFacetedFilter";
 import { DataTableViewOptions } from "./DataTableViewOptions";
@@ -16,6 +13,8 @@ interface DataTableToolbarProps<TData> {
   facets;
   onSearch;
   Action?: any;
+  /** What the search box searches, e.g. "Search name or e-mail". */
+  searchPlaceholder?: string;
 }
 
 export function DataTableToolbar<TData>({
@@ -23,6 +22,7 @@ export function DataTableToolbar<TData>({
   facets,
   onSearch,
   Action,
+  searchPlaceholder,
 }: DataTableToolbarProps<TData>) {
   const isFiltered = table.getState().columnFilters.length > 0;
 
@@ -37,15 +37,9 @@ export function DataTableToolbar<TData>({
   );
 
   return (
-    <div className="flex items-start justify-between gap-2">
+    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        <Input
-          placeholder="Search here..."
-          value={search}
-          type="search"
-          onChange={(event) => setsearch(event.target.value)}
-          className="h-8 w-[150px] lg:w-[250px]"
-        />
+        <SearchBox placeholder={searchPlaceholder || "Search"} value={search} onChange={setsearch} />
         {facets.map((e, i) => {
           return (
             <Fragment key={i}>
@@ -65,18 +59,15 @@ export function DataTableToolbar<TData>({
         })}
 
         {isFiltered && (
-          <Button
-            variant="ghost"
-            onClick={() => table.resetColumnFilters()}
-            className="h-8 px-2 text-xs text-slate-500 hover:text-slate-600 lg:px-3"
-          >
-            Reset
-            <Cross2Icon className="ml-2 h-3 w-3" />
-          </Button>
+          <button type="button" onClick={() => table.resetColumnFilters()} className="h-9 px-1.5 text-[13.5px] font-bold text-ims-link hover:underline">
+            Clear filters
+          </button>
         )}
       </div>
-      {Action && <Action />}
-      <DataTableViewOptions table={table} />
+      <div className="flex flex-wrap items-center gap-2">
+        {Action && <Action />}
+        <DataTableViewOptions table={table} />
+      </div>
     </div>
   );
 }

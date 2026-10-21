@@ -16,6 +16,7 @@ export * from "./DataTable";
 export * from "./DetailHeader";
 export * from "./Form";
 export * from "./Modal";
+export * from "./Menu";
 export * from "./Feedback";
 export * from "./format";
 export * from "./status";

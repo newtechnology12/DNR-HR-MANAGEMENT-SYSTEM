@@ -40,10 +40,10 @@ const PRIORITY = {
 } as const;
 
 /** Urgent (red), High (orange), Medium (grey), Low (light grey). */
-export function Priority({ value }: { value?: string | null }) {
+export function Priority({ value, small }: { value?: string | null; small?: boolean }) {
   const p = PRIORITY[String(value || "medium").toLowerCase() as keyof typeof PRIORITY] || PRIORITY.medium;
   return (
-    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-t-body", p.text)}>
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", small ? "text-t-small" : "text-t-body", p.text)}>
       <span className={cn("h-2 w-2 shrink-0 rounded-full", p.dot)} aria-hidden />
       {p.label}
     </span>

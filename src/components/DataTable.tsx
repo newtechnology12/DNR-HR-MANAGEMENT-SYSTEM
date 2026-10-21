@@ -65,6 +65,8 @@ interface DataTableProps<TData, TValue> {
   isFetching;
   className?: string;
   Action?: any;
+  /** What the search box searches, e.g. "Search name or e-mail". */
+  searchPlaceholder?: string;
 }
 
 function DataTable<TData, TValue>({
@@ -86,6 +88,7 @@ function DataTable<TData, TValue>({
   pageCount,
   className,
   Action,
+  searchPlaceholder,
 }: DataTableProps<TData, TValue>) {
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] =
@@ -127,29 +130,30 @@ function DataTable<TData, TValue>({
   });
 
   return (
-    <Card className={cn("relative h-full", className)}>
+    <Card className={cn("relative h-full overflow-hidden", className)}>
       {isFetching && !isLoading && (
-        <div className="progress-bar absolute top-0 h-[3px] w-full overflow-hidden rounded-t-card bg-primary/25 opacity-70">
-          <div className="progress-bar-value h-full w-full bg-primary" />
+        <div className="progress-bar absolute top-0 h-[3px] w-full overflow-hidden rounded-t-card bg-ims-link/25 opacity-70">
+          <div className="progress-bar-value h-full w-full bg-ims-link" />
         </div>
       )}
 
       {title && (
-        <CardHeader className="px-4 pb-2 pt-3">
-          <CardTitle className="mb-0">
-            <span className="text-[15px]">{title}</span>
-          </CardTitle>
+        <CardHeader className="px-5 pb-0 pt-5">
+          <CardTitle className="mb-0">{title}</CardTitle>
         </CardHeader>
       )}
-      <CardContent className="flex h-full flex-col p-4 pt-3">
-        <div className="flex h-full flex-col space-y-4">
-          <DataTableToolbar
-            Action={Action}
-            onSearch={onSearch}
-            facets={facets}
-            table={table}
-          />
-          <div className="flex-1 overflow-hidden rounded-lg border border-slate-200">
+      <CardContent className="flex h-full flex-col p-0">
+        <div className="flex h-full flex-col">
+          <div className="px-4 py-3.5 sm:px-5">
+            <DataTableToolbar
+              Action={Action}
+              onSearch={onSearch}
+              facets={facets}
+              table={table}
+              searchPlaceholder={searchPlaceholder}
+            />
+          </div>
+          <div className="flex-1 overflow-hidden border-t border-ims-divider">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
@@ -206,11 +210,9 @@ function DataTable<TData, TValue>({
                 ) : (
                   <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={columns.length} className="h-56 text-center">
-                      <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
-                        <Inbox size={28} strokeWidth={1.5} />
-                        <span className="text-[13px] font-medium text-slate-500">
-                          No results found
-                        </span>
+                      <div className="flex flex-col items-center justify-center gap-3 text-ims-faint">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-ims-subtle"><Inbox size={18} /></span>
+                        <span className="text-t-body text-ims-muted">Nothing matches. Change the search or clear the filters.</span>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -218,8 +220,8 @@ function DataTable<TData, TValue>({
               </TableBody>
             </Table>
           </div>
-          <DataTablePagination table={table} />
         </div>
+        <DataTablePagination table={table} />
       </CardContent>
     </Card>
   );
@@ -235,27 +237,24 @@ function DataTablePagination<TData>({
   table,
 }: DataTablePaginationProps<TData>) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="text-sm font-medium text-slate-500">
-        {table.getFilteredSelectedRowModel().rows.length} of{" "}
-        {table.getFilteredRowModel().rows.length} row(s) selected.
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ims-divider px-4 py-3 text-t-small text-ims-muted sm:px-5">
+      <div className="tabular-nums">
+        Page {table.getState().pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
       </div>
-      <div className="flex flex-wrap items-center gap-4 sm:gap-6 lg:gap-8">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <p className="text-[13px] text-slate-500">
-            Rows per page
-          </p>
+          <p>Rows per page</p>
           <Select
             value={`${table.getState().pagination.pageSize}`}
             onValueChange={(value) => {
               table.setPageSize(Number(value));
             }}
           >
-            <SelectTrigger className="h-8 w-[70px]">
+            <SelectTrigger className="h-9 w-[76px]">
               <SelectValue placeholder={table.getState().pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side="top" className="bg-white">
-              {[10, 20, 30, 40, 50].map((pageSize) => (
+              {[15, 30, 50].map((pageSize) => (
                 <SelectItem key={pageSize} value={`${pageSize}`}>
                   {pageSize}
                 </SelectItem>
@@ -263,14 +262,10 @@ function DataTablePagination<TData>({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex w-[100px] text-[13px] text-slate-500 items-center justify-center text-sm font-medium">
-          Page {table.getState().pagination.pageIndex + 1} of{" "}
-          {table.getPageCount()}
-        </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-1">
           <Button
             variant="outline"
-            className="hidden h-8 w-8 p-0 lg:flex"
+            className="hidden h-9 w-9 p-0 lg:flex"
             onClick={() => table.setPageIndex(0)}
             disabled={!table.getCanPreviousPage()}
           >
@@ -279,7 +274,7 @@ function DataTablePagination<TData>({
           </Button>
           <Button
             variant="outline"
-            className="h-8 w-8 p-0"
+            className="h-9 w-9 p-0"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
@@ -288,7 +283,7 @@ function DataTablePagination<TData>({
           </Button>
           <Button
             variant="outline"
-            className="h-8 w-8 p-0"
+            className="h-9 w-9 p-0"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
           >
@@ -297,7 +292,7 @@ function DataTablePagination<TData>({
           </Button>
           <Button
             variant="outline"
-            className="hidden h-8 w-8 p-0 lg:flex"
+            className="hidden h-9 w-9 p-0 lg:flex"
             onClick={() => table.setPageIndex(table.getPageCount() - 1)}
             disabled={!table.getCanNextPage()}
           >

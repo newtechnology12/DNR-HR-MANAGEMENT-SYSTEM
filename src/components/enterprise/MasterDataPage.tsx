@@ -166,7 +166,7 @@ export default function MasterDataPage<T extends { id: string }>({
   const set = (name: string, value: any) => setEditing((s) => ({ ...(s || {}), [name]: value }));
   const editColumn: RecordColumn<T>[] = canManage
     ? [{ key: "_edit", header: "", className: "w-12", cell: (r: any) => (
-        <button type="button" onClick={(e) => { e.stopPropagation(); open(r); }} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={`Edit ${r.name || r.code}`}>
+        <button type="button" onClick={(e) => { e.stopPropagation(); open(r); }} className="rounded-md p-1.5 text-ims-faint hover:bg-ims-subtle hover:text-ims-body" aria-label={`Edit ${r.name || r.code}`}>
           <Pencil size={14} />
         </button>
       ) }]
@@ -224,8 +224,8 @@ export default function MasterDataPage<T extends { id: string }>({
                   ) : f.type === "relation" ? (
                     <RelationSelect f={f} value={editing?.[f.name] || ""} onChange={(v) => set(f.name, v)} />
                   ) : f.type === "bool" ? (
-                    <label className="flex h-10 items-center gap-2.5 text-[13.5px] text-slate-700">
-                      <input type="checkbox" checked={Boolean(editing?.[f.name])} onChange={(e) => set(f.name, e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                    <label className="flex h-10 items-center gap-2.5 text-[13.5px] text-ims-body">
+                      <input type="checkbox" checked={Boolean(editing?.[f.name])} onChange={(e) => set(f.name, e.target.checked)} className="h-4 w-4 rounded border-ims-field text-primary focus:ring-primary" />
                       {f.placeholder || "Yes"}
                     </label>
                   ) : (

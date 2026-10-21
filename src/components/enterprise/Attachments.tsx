@@ -76,11 +76,11 @@ export default function Attachments({
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
           onDragLeave={() => setDrag(false)}
           onDrop={(e) => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
-          className={cn("flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-5 text-center text-[13px] transition-colors", drag ? "border-primary bg-primary/[0.05]" : "border-slate-200 bg-slate-50 hover:border-primary/40 hover:bg-primary/[0.03]")}
+          className={cn("flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-5 text-center text-[13px] transition-colors", drag ? "border-primary bg-primary/[0.05]" : "border-ims-border bg-ims-thead hover:border-primary/40 hover:bg-primary/[0.03]")}
         >
-          {busy ? <Loader2 size={18} className="animate-spin text-primary" /> : <Upload size={18} className="text-slate-400" />}
+          {busy ? <Loader2 size={18} className="animate-spin text-primary" /> : <Upload size={18} className="text-ims-faint" />}
           <span><span className="font-medium text-primaryDark">Add documents</span> — choose files or drop them here</span>
-          <span className="text-[11.5px] text-slate-500">{hint || "PDF, images, Word, Excel… up to 20 MB each"}</span>
+          <span className="text-[11.5px] text-ims-muted">{hint || "PDF, images, Word, Excel… up to 20 MB each"}</span>
           <input type="file" multiple className="hidden" disabled={busy} onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
         </label>
       )}
@@ -92,23 +92,23 @@ export default function Attachments({
             const Icon = iconFor(f);
             const url = pocketbase.files.getUrl(record, f);
             return (
-              <li key={f} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-2.5">
+              <li key={f} className="flex items-center gap-3 rounded-lg border border-ims-border bg-white p-2.5">
                 {IMAGE.test(f) ? (
                   <a href={url} target="_blank" rel="noreferrer" className="shrink-0"><img src={pocketbase.files.getUrl(record, f, { thumb: "100x100" })} alt="" className="h-11 w-11 rounded object-cover" /></a>
                 ) : (
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-slate-100 text-slate-500"><Icon size={20} /></span>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-ims-subtle text-ims-muted"><Icon size={20} /></span>
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-medium text-slate-900" title={displayName(f)}>{displayName(f)}</span>
+                  <span className="block truncate text-[13px] font-medium text-ims-text" title={displayName(f)}>{displayName(f)}</span>
                   <span className="flex items-center gap-2 text-[12px]">
                     <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primaryDark hover:underline"><ExternalLink size={12} /> Open</a>
-                    <a href={`${url}?download=1`} className="inline-flex items-center gap-1 text-slate-600 hover:underline"><Download size={12} /> Download</a>
+                    <a href={`${url}?download=1`} className="inline-flex items-center gap-1 text-ims-body hover:underline"><Download size={12} /> Download</a>
                   </span>
                 </span>
                 {canRemove ? (
-                  <button type="button" onClick={() => remove(f)} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${displayName(f)}`}><Trash2 size={14} /></button>
+                  <button type="button" onClick={() => remove(f)} className="rounded-md p-1.5 text-ims-faint hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${displayName(f)}`}><Trash2 size={14} /></button>
                 ) : (
-                  <span title="Part of the record — cannot be removed" className="p-1.5 text-slate-300"><Lock size={13} /></span>
+                  <span title="Part of the record — cannot be removed" className="p-1.5 text-ims-faint"><Lock size={13} /></span>
                 )}
               </li>
             );

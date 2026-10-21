@@ -1,28 +1,28 @@
 /**
- * Reusable server-side table for PocketBase collections.
+ * Reusable server-side table for PocketBase collections, built from the ims kit
+ * (Card → Tabs → FilterBar → DataTable → Pager):
  *
- * - saved views (tabs) that each add a filter, e.g. "My requests", "Awaiting me"
- * - debounced search across the given fields, filter-injection safe
- * - filter bar: dropdowns (static options or loaded from a collection, e.g. department, funding source,
- *   project, status) and a date range on a date field (period)
- * - column sorting, pagination, and Excel / PDF / CSV export of exactly what the user can see,
- *   with the organisation header (exports are written to the audit trail)
+ * - saved views (tabs, at most 5) that each add a filter, e.g. "My requests", "Awaiting me"
+ * - debounced search across the given fields, filter-injection safe, with a placeholder that says
+ *   what is searched
+ * - filter bar: dropdowns (static options or loaded from a collection), a date range on one field,
+ *   chips for the active filters and "Clear filters"
+ * - sortable sentence-case headers, rows that open the record, an optional "⋯" menu per row,
+ *   a total row for money columns (summed over every row that matches, not just this page)
+ * - pager with rows per page, and Excel / PDF / CSV export of exactly what the user can see
+ *   (exports are written to the audit trail)
  * Only the current page is fetched; filtering and sorting happen on the server.
  */
 import * as React from "react";
 import { useQuery } from "react-query";
 import { useDebounce } from "use-debounce";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { Inbox, LucideIcon } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { pbQuote } from "@/lib/procurement";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/utils";
-import { EmptyState } from "./ui";
+import { Card, Column, DataTable, DateRangeFilter, EmptyState, FilterBar, FilterChip, FilterSelect, Num, Pager, RowAction, Tabs, fmtDate } from "@/components/ims";
 import ExportMenu from "./ExportMenu";
 import { ImportButton, ImportConfig } from "./ExcelImport";
 import { CellFormat, exportReport } from "@/lib/exporter";
-import { Inbox, LucideIcon } from "lucide-react";
 
 export interface RecordColumn<T = any> {
   key: string;
@@ -30,6 +30,11 @@ export interface RecordColumn<T = any> {
   /** PocketBase field to sort by; omit to make the column unsortable. */
   sortField?: string;
   cell: (row: T) => React.ReactNode;
+  /** Optional second line (12.5px muted), e.g. the department under a name. */
+  sub?: (row: T) => React.ReactNode;
+  /** Long text: two lines, then "…" with the full text on hover. */
+  clamp?: boolean;
+  nowrap?: boolean;
   /** Plain value for exports; defaults to the sort field value. */
   csv?: (row: T) => string | number;
   /** How the value is formatted in Excel / PDF exports. */
@@ -38,6 +43,9 @@ export interface RecordColumn<T = any> {
   align?: "left" | "right";
   /** Export-only column: included in exports but not shown, to keep the table narrow. */
   exportOnly?: boolean;
+  /** Field to add up over every matching row for the total row (money columns). */
+  sum?: string;
+  width?: string;
 }
 
 export interface RecordView {
@@ -56,6 +64,8 @@ export interface RecordFilter {
   collection?: string;
   optionLabel?: (r: any) => string;
   optionFilter?: string;
+  /** Custom filter expression for a chosen value (e.g. "high" → "total > 5000000"); default: field = value. */
+  filterFor?: (value: string) => string;
 }
 
 interface Props<T> {
@@ -65,10 +75,14 @@ interface Props<T> {
   activeView?: string;
   onViewChange?: (key: string) => void;
   searchFields?: string[];
+  /** What the search box searches, e.g. "Search number, title or requester". */
+  searchPlaceholder?: string;
   baseFilter?: string;
   expand?: string;
   defaultSort?: string;
   onRowClick?: (row: T) => void;
+  /** Items of the "⋯" menu in the last column. */
+  rowActions?: (row: T) => RowAction<T>[];
   exportName?: string;
   /** Title of exported reports (defaults to exportName). */
   exportTitle?: string;
@@ -85,30 +99,32 @@ interface Props<T> {
   refreshKey?: unknown;
   /** Adds an Excel import (template, validation, import through the API). */
   importConfig?: ImportConfig;
+  /** Counts shown on the tabs, keyed by view (e.g. { awaiting: 3 }). */
+  viewCounts?: Record<string, number | undefined>;
 }
 
-function FilterSelect({ f, value, onChange }: { f: RecordFilter; value: string; onChange: (v: string) => void }) {
+/** "number, title, requester.name" → "Search number, title or requester". */
+function placeholderFor(fields: string[]) {
+  const words = [...new Set(fields.map((f) => f.split(".")[0].replace(/_/g, " ").replace(/\bid\b/, "").trim()).filter(Boolean))];
+  if (!words.length) return "Search";
+  return `Search ${words.length > 1 ? `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}` : words[0]}`;
+}
+
+function useFilterOptions(f: RecordFilter) {
   const opts = useQuery(
     ["record-filter-options", f.collection, f.optionFilter],
     () => pocketbase.collection(f.collection!).getFullList({ sort: "name", filter: f.optionFilter || "", batch: 500 }),
     { enabled: Boolean(f.collection), staleTime: 5 * 60_000 }
   );
-  const options = f.options || (opts.data || []).map((r: any) => ({ value: r.id, label: f.optionLabel ? f.optionLabel(r) : r.name || r.code || r.id }));
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label={f.label}
-      className={cn("h-9 max-w-[200px] rounded-md border bg-white px-2.5 text-[12.5px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20", value ? "border-primary/60 text-slate-900" : "border-slate-200 text-slate-600")}
-    >
-      <option value="">{f.label}: all</option>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
+  return f.options || (opts.data || []).map((r: any) => ({ value: r.id, label: f.optionLabel ? f.optionLabel(r) : r.name || r.code || r.id }));
+}
+
+function FilterControl({ f, value, onChange, onOptions }: { f: RecordFilter; value: string; onChange: (v: string) => void; onOptions: (field: string, o: { value: string; label: string }[]) => void }) {
+  const options = useFilterOptions(f);
+  React.useEffect(() => {
+    onOptions(f.field, options);
+  }, [options.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <FilterSelect label={f.label} value={value} onChange={onChange} options={options} />;
 }
 
 export default function RecordTable<T extends { id: string }>({
@@ -118,10 +134,12 @@ export default function RecordTable<T extends { id: string }>({
   activeView,
   onViewChange,
   searchFields = [],
+  searchPlaceholder,
   baseFilter,
   expand,
   defaultSort = "-created",
   onRowClick,
+  rowActions,
   exportName,
   exportTitle,
   exportPermission,
@@ -133,14 +151,17 @@ export default function RecordTable<T extends { id: string }>({
   pageSize = 15,
   refreshKey,
   importConfig,
+  viewCounts,
 }: Props<T>) {
   const [search, setSearch] = React.useState("");
   const [debounced] = useDebounce(search, 300);
   const [sort, setSort] = React.useState(defaultSort);
   const [page, setPage] = React.useState(1);
+  const [perPage, setPerPage] = React.useState(pageSize);
   const [values, setValues] = React.useState<Record<string, string>>({});
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
+  const optionLabels = React.useRef<Record<string, { value: string; label: string }[]>>({});
 
   const view = views.find((v) => v.key === activeView) || views[0];
   const filter = React.useMemo(() => {
@@ -149,34 +170,38 @@ export default function RecordTable<T extends { id: string }>({
       const q = pbQuote(debounced.trim());
       parts.push(`(${searchFields.map((f) => `${f} ~ ${q}`).join(" || ")})`);
     }
-    for (const f of filters) if (values[f.field]) parts.push(`${f.field} = ${pbQuote(values[f.field])}`);
+    for (const f of filters) if (values[f.field]) parts.push(f.filterFor ? f.filterFor(values[f.field]) : `${f.field} = ${pbQuote(values[f.field])}`);
     if (dateField && from) parts.push(`${dateField} >= ${pbQuote(`${from} 00:00:00.000Z`)}`);
     if (dateField && to) parts.push(`${dateField} <= ${pbQuote(`${to} 23:59:59.999Z`)}`);
     return parts.filter(Boolean).map((p) => `(${p})`).join(" && ");
-  }, [baseFilter, view?.filter, debounced, searchFields.join(), JSON.stringify(values), from, to, dateField, filters.length]);
+  }, [baseFilter, view?.filter, debounced, searchFields.join(), JSON.stringify(values), from, to, dateField, filters.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  React.useEffect(() => setPage(1), [filter, sort]);
+  React.useEffect(() => setPage(1), [filter, sort, perPage]);
 
   const query = useQuery(
-    ["record-table", collection, filter, sort, page, expand, refreshKey],
-    () => pocketbase.collection(collection).getList<T>(page, pageSize, { filter, sort, expand }),
+    ["record-table", collection, filter, sort, page, perPage, expand, refreshKey],
+    () => pocketbase.collection(collection).getList<T>(page, perPage, { filter, sort, expand }),
     { keepPreviousData: true }
   );
 
-  const toggleSort = (field?: string) => {
-    if (!field) return;
-    setSort((s) => (s === field ? `-${field}` : s === `-${field}` ? field : `-${field}`));
-  };
+  // Totals over every matching row (money columns), fetched with only the summed fields.
+  const sumFields = columns.filter((c) => c.sum && !c.exportOnly).map((c) => c.sum!) as string[];
+  const totals = useQuery(
+    ["record-table-sums", collection, filter, sumFields.join(), refreshKey],
+    async () => {
+      const rows = await pocketbase.collection(collection).getFullList({ filter, fields: ["id", ...new Set(sumFields)].join(","), batch: 1000 });
+      return Object.fromEntries(sumFields.map((f) => [f, rows.reduce((s, r: any) => s + (Number(r[f]) || 0), 0)]));
+    },
+    { enabled: sumFields.length > 0, keepPreviousData: true }
+  );
 
+  const labelFor = (f: RecordFilter, v: string) => (f.options || optionLabels.current[f.field] || []).find((o) => o.value === v)?.label || "selected";
   const activeFilterText = () => {
     const bits: string[] = [];
     if (view?.label && views.length > 1) bits.push(view.label);
     if (debounced.trim()) bits.push(`Search: “${debounced.trim()}”`);
-    for (const f of filters) if (values[f.field]) {
-      const label = f.options?.find((o) => o.value === values[f.field])?.label;
-      bits.push(`${f.label}: ${label || "selected"}`);
-    }
-    if (from || to) bits.push(`${dateLabel}: ${from || "…"} – ${to || "…"}`);
+    for (const f of filters) if (values[f.field]) bits.push(`${f.label}: ${labelFor(f, values[f.field])}`);
+    if (from || to) bits.push(`${dateLabel}: ${from ? fmtDate(from) : "…"} – ${to ? fmtDate(to) : "…"}`);
     return bits.join(" · ");
   };
 
@@ -194,153 +219,87 @@ export default function RecordTable<T extends { id: string }>({
     });
   };
 
+  const chips: FilterChip[] = [
+    ...filters.filter((f) => values[f.field]).map((f) => ({ key: f.field, label: `${f.label}: ${labelFor(f, values[f.field])}`, onRemove: () => setValues((s) => ({ ...s, [f.field]: "" })) })),
+    ...(from || to ? [{ key: "date", label: `${dateLabel}: ${from ? fmtDate(from) : "…"} – ${to ? fmtDate(to) : "…"}`, onRemove: () => { setFrom(""); setTo(""); } }] : []),
+  ];
+
   const data = query.data;
-  const shown = columns.filter((c) => !c.exportOnly);
   const EmptyIcon = empty?.icon || Inbox;
-  const anyFilter = Object.values(values).some(Boolean) || from || to;
+  const filtered = Boolean(debounced || chips.length);
+  const tableColumns: Column<T>[] = columns
+    .filter((c) => !c.exportOnly)
+    .map((c) => ({
+      key: c.key,
+      header: c.header,
+      cell: (row: T) => c.cell(row),
+      sub: c.sub,
+      sortField: c.sortField,
+      align: c.align,
+      numeric: c.align === "right",
+      clamp: c.clamp,
+      nowrap: c.nowrap,
+      width: c.width,
+      className: c.className,
+      total: c.sum ? (totals.data ? <Num value={totals.data[c.sum]} /> : "…") : undefined,
+    }));
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white shadow-card">
+    <Card padded={false} className="overflow-hidden">
       {views.length > 0 && (
-        <div className="flex gap-1 overflow-x-auto border-b border-slate-200 px-3" role="tablist">
-          {views.map((v) => (
-            <button
-              key={v.key}
-              type="button"
-              role="tab"
-              aria-selected={v.key === view?.key}
-              onClick={() => onViewChange?.(v.key)}
-              className={cn(
-                "-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors",
-                v.key === view?.key ? "border-primary text-primaryDark" : "border-transparent text-slate-500 hover:text-slate-800"
-              )}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          inset
+          active={view?.key || ""}
+          onChange={(k) => onViewChange?.(k)}
+          tabs={views.map((v) => ({ key: v.key, label: v.label, count: viewCounts?.[v.key] ?? undefined }))}
+        />
       )}
-
-      <div className="flex flex-col gap-2 p-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          {searchFields.length > 0 && (
-            <label className="relative w-full sm:w-64">
-              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search…"
-                aria-label="Search"
-                className="h-9 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </label>
-          )}
-          {filters.map((f) => (
-            <FilterSelect key={f.field} f={f} value={values[f.field] || ""} onChange={(v) => setValues((s) => ({ ...s, [f.field]: v }))} />
-          ))}
-          {dateField && (
-            <span className="flex items-center gap-1 text-[12.5px] text-slate-500">
-              <span className="hidden sm:inline">{dateLabel}</span>
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label={`${dateLabel} from`} className="h-9 rounded-md border border-slate-200 px-2 text-[12.5px] outline-none focus:border-primary" />
-              <span>–</span>
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label={`${dateLabel} to`} className="h-9 rounded-md border border-slate-200 px-2 text-[12.5px] outline-none focus:border-primary" />
-            </span>
-          )}
-          {anyFilter && (
-            <button type="button" onClick={() => { setValues({}); setFrom(""); setTo(""); }} className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12.5px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800">
-              <X size={13} /> Clear filters
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {toolbar}
-          {importConfig && <ImportButton config={{ collection, ...importConfig }} onDone={() => query.refetch()} />}
-          <ExportMenu onExport={doExport} permission={exportPermission} disabled={!data?.totalItems} />
-        </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="dnr-grid w-full min-w-[640px]">
-          <thead>
-            <tr>
-              {shown.map((c) => {
-                const active = sort === c.sortField || sort === `-${c.sortField}`;
-                return (
-                  <th key={c.key} className={cn(c.align === "right" && "text-right", c.className)}>
-                    {c.sortField ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(c.sortField)}
-                        className={cn("inline-flex items-center gap-1 uppercase hover:text-slate-800", c.align === "right" && "ml-auto", active && "text-slate-800")}
-                      >
-                        {c.header}
-                        {active && (sort.startsWith("-") ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
-                      </button>
-                    ) : (
-                      c.header
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody className={cn(query.isFetching && data && "opacity-60")}>
-            {query.isLoading &&
-              Array.from({ length: 6 }, (_, i) => (
-                <tr key={i}>
-                  {shown.map((c) => (
-                    <td key={c.key}>
-                      <Skeleton className="h-4 w-full" />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            {data?.items.map((row) => (
-              <tr
-                key={row.id}
-                onClick={() => onRowClick?.(row)}
-                className={cn(onRowClick && "cursor-pointer hover:bg-slate-50")}
-              >
-                {shown.map((c) => (
-                  <td key={c.key} className={cn(c.align === "right" && "text-right", c.className)}>
-                    {c.cell(row)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {query.isError && (
-          <EmptyState icon={EmptyIcon} title="Could not load records" text={(query.error as any)?.message || "Please try again."} />
-        )}
-        {data && data.items.length === 0 && (
+      <FilterBar
+        search={searchFields.length ? { value: search, onChange: setSearch, placeholder: searchPlaceholder || placeholderFor(searchFields) } : undefined}
+        chips={chips}
+        onClear={() => { setValues({}); setFrom(""); setTo(""); }}
+        right={
+          <>
+            {toolbar}
+            {importConfig && <ImportButton config={{ collection, ...importConfig }} onDone={() => query.refetch()} />}
+            <ExportMenu onExport={doExport} permission={exportPermission} disabled={!data?.totalItems} />
+          </>
+        }
+      >
+        {filters.map((f) => (
+          <FilterControl
+            key={f.field}
+            f={f}
+            value={values[f.field] || ""}
+            onChange={(v) => setValues((s) => ({ ...s, [f.field]: v }))}
+            onOptions={(field, o) => {
+              optionLabels.current[field] = o;
+            }}
+          />
+        ))}
+        {dateField && <DateRangeFilter label={dateLabel} from={from} to={to} onChange={(a, b) => { setFrom(a); setTo(b); }} />}
+      </FilterBar>
+      <DataTable
+        columns={tableColumns}
+        rows={data?.items || []}
+        rowKey={(r) => r.id}
+        onRowClick={onRowClick}
+        rowActions={rowActions}
+        sort={sort}
+        onSort={setSort}
+        loading={query.isLoading}
+        fetching={query.isFetching}
+        error={query.isError ? query.error : undefined}
+        onRetry={() => query.refetch()}
+        empty={
           <EmptyState
             icon={EmptyIcon}
-            title={empty?.title || "Nothing here yet"}
-            text={debounced || anyFilter ? "No results for these filters. Try a different search or clear the filters." : empty?.text || "Try another view."}
-            action={!debounced && !anyFilter ? empty?.action : undefined}
+            text={filtered ? "Nothing matches these filters. Change the search or clear the filters." : empty?.text || empty?.title || "Nothing here yet."}
+            action={!filtered ? empty?.action : undefined}
           />
-        )}
-      </div>
-
-      {data && data.totalItems > 0 && (
-        <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-[12.5px] text-slate-500">
-          <span>
-            {(data.page - 1) * data.perPage + 1}–{Math.min(data.page * data.perPage, data.totalItems)} of {data.totalItems}
-          </span>
-          <div className="flex items-center gap-1">
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">
-              <ChevronLeft size={15} />
-            </Button>
-            <span className="px-2 tabular-nums">
-              {data.page} / {data.totalPages}
-            </span>
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={page >= data.totalPages} onClick={() => setPage((p) => p + 1)} aria-label="Next page">
-              <ChevronRight size={15} />
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
+        }
+        footer={data && data.totalItems > 0 ? <Pager page={data.page} perPage={perPage} total={data.totalItems} onPage={setPage} onPerPage={setPerPage} /> : null}
+      />
+    </Card>
   );
 }

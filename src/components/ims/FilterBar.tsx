@@ -40,7 +40,7 @@ export function FilterSelect({ label, value, onChange, options, className }: { l
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={cn(
-          "h-button max-w-[240px] appearance-none rounded-control border bg-ims-card pl-3 pr-9 text-[13.5px] font-semibold outline-none focus:border-ims-focus focus:ring-2 focus:ring-ims-focus/25",
+          "h-button w-[180px] appearance-none truncate rounded-control border bg-ims-card pl-3 pr-9 text-[13.5px] font-semibold outline-none focus:border-ims-focus focus:ring-2 focus:ring-ims-focus/25",
           value ? "border-ims-link/60 text-ims-text" : "border-ims-field text-ims-muted"
         )}
       >

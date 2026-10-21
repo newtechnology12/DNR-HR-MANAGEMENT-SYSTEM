@@ -1,26 +1,29 @@
 /**
- * ERP-style document page (purchase orders, invoices, …):
- *   control bar (actions + status pipeline) → smart buttons → paper "sheet" with title,
- *   two-column field grid and notebook tabs → chatter (activity / audit) on the side.
+ * Document page building blocks (purchase orders, invoices, vouchers…) in the ims design:
+ *   ControlBar ("← Back to list", status stepper, actions) → SmartButtons (KPI band) → Sheet (card)
+ *   with SheetTitle (number · type · status, title), FieldGrid (label / value), Notebook (tabs),
+ *   Totals → Chatter (activity) on the side on wide screens.
+ * New detail pages use DetailHeader / Details / Tabs from "@/components/ims" directly.
  */
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { format, formatDistanceToNow } from "date-fns";
-import { ChevronRight, LucideIcon } from "lucide-react";
+import { ArrowLeft, Check, LucideIcon } from "lucide-react";
 import { cn } from "@/utils";
+import { Card, StatusPill, Tabs, fmtDateTime, fmtWhen, statusWord } from "@/components/ims";
 import { Initials } from "./ui";
 
 export function DocumentPage({ children, chatter }: { children: React.ReactNode; chatter?: React.ReactNode }) {
   return (
-    <div className="px-4 py-4 sm:px-6">
-      <div className={cn("grid gap-4", chatter && "min-[1760px]:grid-cols-[minmax(0,1fr)_340px]")}>
-        <div className="min-w-0 space-y-3">{children}</div>
+    <div className="mx-auto w-full max-w-[1480px] px-4 pb-10 pt-4 text-ims-text sm:px-[28px] sm:pt-6">
+      <div className={cn("grid gap-4", chatter && "min-[1600px]:grid-cols-[minmax(0,1fr)_340px]")}>
+        <div className="min-w-0 space-y-4">{children}</div>
         {chatter && <aside className="min-w-0">{chatter}</aside>}
       </div>
     </div>
   );
 }
 
+/** Back link to the list the document belongs to, the status stepper and the actions. */
 export function ControlBar({
   breadcrumbs,
   actions,
@@ -32,114 +35,105 @@ export function ControlBar({
   steps?: { key: string; label: string }[];
   current?: string;
 }) {
+  const parent = [...breadcrumbs.slice(0, -1)].reverse().find((b) => b.link);
   const idx = steps ? Math.max(steps.findIndex((s) => s.key === current), 0) : -1;
   return (
-    <div className="space-y-2">
-      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-[13px]">
-        {breadcrumbs.map((b, i) => (
-          <React.Fragment key={b.title}>
-            {i > 0 && <ChevronRight size={13} className="text-slate-400" />}
-            {b.link && i < breadcrumbs.length - 1 ? (
-              <Link to={b.link} className="text-primaryDark hover:underline">{b.title}</Link>
-            ) : (
-              <span className={cn(i === breadcrumbs.length - 1 ? "text-[17px] font-semibold text-slate-900" : "text-slate-500")}>{b.title}</span>
-            )}
-          </React.Fragment>
-        ))}
-      </nav>
-      <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-card lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-1.5">{actions}</div>
-        {steps && (
-          <ol className="flex overflow-x-auto" aria-label="Document status">
-            {steps.map((s, i) => {
-              const active = i === idx;
-              const done = i < idx;
-              return (
-                <li
-                  key={s.key}
-                  aria-current={active ? "step" : undefined}
-                  className={cn(
-                    "relative -ml-2 flex h-8 items-center whitespace-nowrap pl-5 pr-3 text-[12px] font-medium first:ml-0 first:pl-3",
-                    "[clip-path:polygon(0_0,calc(100%-10px)_0,100%_50%,calc(100%-10px)_100%,0_100%,10px_50%)] first:[clip-path:polygon(0_0,calc(100%-10px)_0,100%_50%,calc(100%-10px)_100%,0_100%)]",
-                    active ? "bg-primary text-white" : done ? "bg-primary/10 text-primaryDark" : "bg-slate-100 text-slate-500"
-                  )}
-                >
-                  {s.label}
-                </li>
-              );
-            })}
-          </ol>
-        )}
+    <div className="flex flex-col gap-3">
+      {parent && (
+        <Link to={parent.link!} className="inline-flex w-fit items-center gap-1.5 text-t-crumb font-semibold text-ims-link hover:underline">
+          <ArrowLeft size={15} aria-hidden /> Back to {parent.title.charAt(0).toLowerCase() + parent.title.slice(1)}
+        </Link>
+      )}
+      {(steps || actions) && (
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          {steps ? (
+            <ol className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-label="Document status">
+              {steps.map((s, i) => {
+                const active = i === idx;
+                const done = i < idx;
+                return (
+                  <li key={s.key} aria-current={active ? "step" : undefined} className="flex items-center gap-1">
+                    {i > 0 && <span className={cn("h-px w-5 sm:w-8", done || active ? "bg-ims-link" : "bg-ims-border")} aria-hidden />}
+                    <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold", done ? "bg-ims-link text-white" : active ? "bg-ims-primary text-white" : "border border-ims-border bg-ims-card text-ims-faint")} aria-hidden>
+                      {done ? <Check size={12} /> : i + 1}
+                    </span>
+                    <span className={cn("whitespace-nowrap text-t-small", active ? "font-bold text-ims-text" : done ? "text-ims-body" : "text-ims-muted")}>{s.label}</span>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <span />
+          )}
+          {actions && <div className="flex flex-wrap items-center gap-2 lg:justify-end">{actions}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Key figures of the document, in the KPI-band style. */
+export function SmartButtons({ items }: { items: { icon?: LucideIcon; label: string; value: React.ReactNode; onClick?: () => void; tone?: "default" | "warning" | "danger" }[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="overflow-hidden rounded-card border border-ims-border bg-ims-card">
+      <div className="-ml-px -mt-px flex flex-wrap">
+        {items.map((it) => {
+          const Comp = it.onClick ? "button" : "div";
+          return (
+            <Comp
+              key={it.label}
+              type={it.onClick ? "button" : undefined}
+              onClick={it.onClick}
+              className={cn("min-w-[150px] flex-1 border-l border-t border-ims-divider px-5 py-3 text-left", it.onClick && "hover:bg-ims-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ims-focus")}
+            >
+              <span className="block text-t-small text-ims-muted">{it.label}</span>
+              <span className={cn("block text-[19px] font-extrabold tabular-nums", it.tone === "danger" ? "text-ims-danger" : it.tone === "warning" ? "text-ims-warning" : "text-ims-text")}>{it.value}</span>
+            </Comp>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-export function SmartButtons({ items }: { items: { icon: LucideIcon; label: string; value: React.ReactNode; onClick?: () => void; tone?: "default" | "warning" | "danger" }[] }) {
-  if (!items.length) return null;
-  return (
-    <div className="flex flex-wrap justify-end gap-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-card sm:ml-auto sm:w-fit">
-      {items.map((it) => {
-        const Comp = it.onClick ? "button" : "div";
-        return (
-          <Comp
-            key={it.label}
-            type={it.onClick ? "button" : undefined}
-            onClick={it.onClick}
-            className={cn("flex min-w-[140px] items-center gap-2.5 border-r border-slate-100 px-4 py-2 text-left last:border-r-0", it.onClick && "hover:bg-slate-50")}
-          >
-            <it.icon size={20} className={cn(it.tone === "danger" ? "text-red-500" : it.tone === "warning" ? "text-amber-500" : "text-primaryDark")} />
-            <span className="leading-tight">
-              <span className="block text-[15px] font-semibold tabular-nums text-slate-900">{it.value}</span>
-              <span className="block text-[12px] text-slate-500">{it.label}</span>
-            </span>
-          </Comp>
-        );
-      })}
-    </div>
-  );
-}
-
 export function Sheet({ children, ribbon }: { children: React.ReactNode; ribbon?: { label: string; tone: "success" | "danger" | "warning" | "neutral" } }) {
-  const ribbonTone = { success: "bg-emerald-600", danger: "bg-red-600", warning: "bg-amber-500", neutral: "bg-slate-500" };
   return (
-    <section className="relative overflow-hidden rounded-lg border border-slate-200 bg-white px-5 py-6 shadow-card sm:px-8 sm:py-7">
+    <Card className="relative sm:px-7 sm:py-6">
       {ribbon && (
-        <div className="pointer-events-none absolute right-0 top-0 h-28 w-28 overflow-hidden" aria-label={ribbon.label}>
-          <span className={cn("absolute right-[-38px] top-[22px] w-[150px] rotate-45 py-1 text-center text-[11px] font-bold uppercase tracking-wider text-white shadow", ribbonTone[ribbon.tone])}>
-            {ribbon.label}
-          </span>
+        <div className="absolute right-5 top-5 sm:right-7 sm:top-6">
+          <StatusPill status={statusWord(ribbon.label) || ribbon.label} />
         </div>
       )}
       {children}
-    </section>
+    </Card>
   );
 }
 
 export function SheetTitle({ kicker, title, badges }: { kicker: string; title: React.ReactNode; badges?: React.ReactNode }) {
   return (
-    <div className="mb-6 pr-16">
-      <p className="text-[12.5px] font-medium text-slate-500">{kicker}</p>
-      <h1 className="mt-0.5 flex flex-wrap items-center gap-2 text-[26px] font-semibold leading-tight tracking-tight text-slate-900">
-        {title}
+    <div className="mb-6 pr-28">
+      <p className="flex flex-wrap items-center gap-2 text-t-small text-ims-muted">
+        <span>{kicker}</span>
         {badges}
-      </h1>
+      </p>
+      <h1 className="mt-1 text-t-title text-ims-text">{title}</h1>
     </div>
   );
 }
 
 export type DocField = { label: string; value: React.ReactNode; hint?: string };
 
-/** Two columns of label → value rows, the classic ERP header layout. */
+/** Two columns of label → value rows. */
 export function FieldGrid({ left, right }: { left: DocField[]; right: DocField[] }) {
   const col = (fields: DocField[]) => (
-    <dl className="space-y-0">
+    <dl>
       {fields.map((f) => (
-        <div key={f.label} className="grid grid-cols-[150px_minmax(0,1fr)] items-baseline gap-3 border-b border-dashed border-slate-100 py-2 last:border-b-0 sm:grid-cols-[170px_minmax(0,1fr)]">
-          <dt className="text-[13px] font-semibold text-slate-700">{f.label}</dt>
-          <dd className="min-w-0 break-words text-[13.5px] text-slate-900">
-            {f.value === null || f.value === undefined || f.value === "" ? <span className="text-slate-400">—</span> : f.value}
-            {f.hint && <span className="block text-[12px] text-slate-500">{f.hint}</span>}
+        <div key={f.label} className="grid grid-cols-[140px_minmax(0,1fr)] items-baseline gap-3 border-b border-ims-divider py-2.5 last:border-b-0 sm:grid-cols-[170px_minmax(0,1fr)]">
+          <dt className="text-t-small text-ims-muted">{f.label}</dt>
+          <dd className="min-w-0 break-words text-t-body text-ims-text">
+            {f.value === null || f.value === undefined || f.value === "" ? <span className="text-ims-faint">—</span> : f.value}
+            {f.hint && <span className="mt-0.5 block text-t-small text-ims-muted">{f.hint}</span>}
           </dd>
         </div>
       ))}
@@ -154,39 +148,20 @@ export function FieldGrid({ left, right }: { left: DocField[]; right: DocField[]
 }
 
 export function Notebook({ tabs, active, onChange }: { tabs: { key: string; label: string; count?: number }[]; active: string; onChange: (k: string) => void }) {
-  return (
-    <div className="mt-8 flex gap-0 overflow-x-auto border-b border-slate-200" role="tablist">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          type="button"
-          role="tab"
-          aria-selected={active === t.key}
-          onClick={() => onChange(t.key)}
-          className={cn(
-            "-mb-px whitespace-nowrap border px-4 py-2 text-[13px] font-medium",
-            active === t.key ? "rounded-t-md border-slate-200 border-b-white bg-white text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"
-          )}
-        >
-          {t.label}
-          {t.count !== undefined && <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 text-[11px] text-slate-600">{t.count}</span>}
-        </button>
-      ))}
-    </div>
-  );
+  return <Tabs className="mt-8" tabs={tabs} active={active} onChange={onChange} />;
 }
 
 /** Totals block aligned right under a lines table. */
 export function Totals({ rows, total }: { rows: [string, React.ReactNode][]; total: [string, React.ReactNode] }) {
   return (
-    <dl className="ml-auto mt-4 w-full max-w-sm space-y-1 text-[13.5px]">
+    <dl className="ml-auto mt-4 w-full max-w-sm space-y-1.5 text-t-body">
       {rows.map(([k, v]) => (
-        <div key={k} className="flex justify-between gap-6 text-slate-600">
+        <div key={k} className="flex justify-between gap-6 text-ims-body">
           <dt>{k}</dt>
           <dd className="tabular-nums">{v}</dd>
         </div>
       ))}
-      <div className="flex justify-between gap-6 border-t-2 border-slate-900 pt-1.5 text-[16px] font-bold text-slate-900">
+      <div className="flex justify-between gap-6 border-t-2 border-ims-text pt-2 text-[16px] font-extrabold text-ims-text">
         <dt>{total[0]}</dt>
         <dd className="tabular-nums">{total[1]}</dd>
       </div>
@@ -197,30 +172,28 @@ export function Totals({ rows, total }: { rows: [string, React.ReactNode][]; tot
 export type ChatterItem = { id: string; at: string; who?: string; text: React.ReactNode; comment?: string; tone?: "default" | "success" | "danger" | "warning" };
 
 export function Chatter({ items, title = "Activity", composer }: { items: ChatterItem[]; title?: string; composer?: React.ReactNode }) {
-  const dot = { default: "bg-slate-300", success: "bg-emerald-500", danger: "bg-red-500", warning: "bg-amber-500" };
+  const dot = { default: "bg-ims-faint", success: "bg-ims-success", danger: "bg-ims-danger", warning: "bg-ims-warning" };
   return (
-    <section className="rounded-lg border border-slate-200 bg-white shadow-card min-[1760px]:sticky min-[1760px]:top-4">
-      <header className="border-b border-slate-100 px-4 py-3">
-        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-slate-500">{title}</h3>
+    <section className="rounded-card border border-ims-border bg-ims-card min-[1600px]:sticky min-[1600px]:top-4">
+      <header className="border-b border-ims-divider px-5 py-4">
+        <h2 className="text-t-section text-ims-text">{title}</h2>
       </header>
-      {composer && <div className="border-b border-slate-100 px-4 py-3">{composer}</div>}
-      <ol className="max-h-[70vh] space-y-4 overflow-y-auto px-4 py-4">
-        {!items.length && <li className="text-[13px] text-slate-500">No activity yet.</li>}
+      {composer && <div className="border-b border-ims-divider px-5 py-3">{composer}</div>}
+      <ol className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-4">
+        {!items.length && <li className="text-t-body text-ims-muted">No activity yet.</li>}
         {items.map((e) => (
           <li key={e.id} className="flex gap-3">
             <div className="relative">
               <Initials name={e.who} />
-              <span className={cn("absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white", dot[e.tone || "default"])} />
+              <span className={cn("absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white", dot[e.tone || "default"])} aria-hidden />
             </div>
-            <div className="min-w-0 flex-1 text-[13px]">
-              <p className="text-slate-800">
-                <span className="font-semibold">{e.who || "System"}</span>{" "}
-                <span className="text-[11.5px] text-slate-400" title={format(new Date(e.at), "d MMM yyyy, HH:mm:ss")}>
-                  {formatDistanceToNow(new Date(e.at), { addSuffix: true })}
-                </span>
+            <div className="min-w-0 flex-1 text-t-body">
+              <p className="text-ims-text">
+                <span className="font-bold">{e.who || "System"}</span>{" "}
+                <span className="text-t-small text-ims-muted" title={fmtDateTime(e.at)}>{fmtWhen(e.at)}</span>
               </p>
-              <div className="text-slate-600">{e.text}</div>
-              {e.comment && <p className="mt-1 rounded-md bg-slate-50 px-2.5 py-1.5 text-slate-700">“{e.comment}”</p>}
+              <div className="text-ims-body">{e.text}</div>
+              {e.comment && <p className="mt-1 rounded-control bg-ims-subtle px-3 py-2 text-ims-text">“{e.comment}”</p>}
             </div>
           </li>
         ))}
@@ -291,7 +264,7 @@ export function toChatter(actions: any[], audit: any[]): ChatterItem[] {
               <ul className="mt-0.5 space-y-0.5">
                 {changes.slice(0, 5).map(([k, v]: any) => (
                   <li key={k}>
-                    <span className="text-slate-500">{k.replace(/_/g, " ")}:</span> <span className="line-through decoration-slate-400">{String(v?.old ?? "—") || "—"}</span> → <span className="font-medium text-slate-800">{String(v?.new ?? "—") || "—"}</span>
+                    <span className="text-ims-muted">{k.replace(/_/g, " ")}:</span> <span className="line-through decoration-ims-faint">{String(v?.old ?? "—") || "—"}</span> → <span className="font-semibold text-ims-text">{String(v?.new ?? "—") || "—"}</span>
                   </li>
                 ))}
                 {!changes.length && <li>edited lines</li>}

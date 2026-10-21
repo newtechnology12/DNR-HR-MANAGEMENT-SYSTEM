@@ -167,7 +167,7 @@ export function DataTableFacetedFilter<TData, TValue>({
             onSelect={(e) => column?.setFilterValue(e)}
           />
           <a
-            className="text-sm fill-mode-none text-slate-500 w-fit block -mt-2 cursor-pointer py-2 hover:underline px-4"
+            className="text-sm fill-mode-none text-ims-muted w-fit block -mt-2 cursor-pointer py-2 hover:underline px-4"
             onClick={() => column?.setFilterValue(undefined)}
           >
             Clear Values
@@ -211,7 +211,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                       >
                         <div
                           className={cn(
-                            "mr-2 flex h-4 w-4 text-slate-500 font-medium items-center justify-center rounded-sm border border-slate-400",
+                            "mr-2 flex h-4 w-4 text-ims-muted font-medium items-center justify-center rounded-sm border border-slate-400",
                             isSelected
                               ? "bg-primary border-primary text-white"
                               : "opacity-50 [&_svg]:invisible"
@@ -220,7 +220,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                           <CheckIcon className={cn("h-3 w-3")} />
                         </div>
                         {option.icon && (
-                          <option.icon className="mr-2 h-4 w-4 text-slate-500" />
+                          <option.icon className="mr-2 h-4 w-4 text-ims-muted" />
                         )}
                         <span className="font-medium capitalize text-[12.5px]">
                           {option.label}
@@ -237,7 +237,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                   <CommandGroup>
                     <CommandItem
                       onSelect={() => column?.setFilterValue(undefined)}
-                      className="justify-center text-slate-600 text-[13px] font-medium text-center"
+                      className="justify-center text-ims-body text-[13px] font-medium text-center"
                     >
                       Clear filters
                     </CommandItem>

@@ -4,82 +4,162 @@
  */
 import * as React from "react";
 import { useMutation, useQuery } from "react-query";
-import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { CheckCircle2, Circle, Clock, Send, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/utils";
-import { Badge, EmptyState, Initials, Panel } from "@/components/enterprise/ui";
+import { Initials } from "@/components/enterprise/ui";
+import { Button, Card, CardHeader, EmptyState, Field, Modal, SearchBox, StatusPill, Textarea, fmtDateTime, fmtWhen } from "@/components/ims";
 import { ACTION_LABELS, errorMessage, money } from "@/lib/procurement";
 
 export type ActionKind = "approve" | "reject" | "return" | "delegate" | "escalate" | "comment" | "cancel" | "submit" | "delete";
 
-export const ACTION_UI: Record<ActionKind, { title: string; verb: string; needsComment?: boolean; needsUser?: boolean; variant?: any; hint?: string }> = {
-  approve: { title: "Approve", verb: "Approve", hint: "Optional comment for the requester and the next approver." },
-  reject: { title: "Reject request", verb: "Reject", needsComment: true, variant: "danger", hint: "The request will be closed. Explain why." },
-  return: { title: "Send back for changes", verb: "Send back", needsComment: true, hint: "The requester can edit and resubmit. Say what needs to change." },
-  delegate: { title: "Delegate approval", verb: "Delegate", needsUser: true, hint: "Hand your decision to someone else. You will no longer be an approver." },
-  escalate: { title: "Escalate", verb: "Escalate", needsUser: true, hint: "Add a more senior approver. You remain an approver too." },
-  comment: { title: "Add a comment", verb: "Post comment", needsComment: true },
-  cancel: { title: "Cancel requisition", verb: "Cancel requisition", needsComment: true, variant: "danger", hint: "Cancelling stops any running approval. This cannot be undone." },
-  submit: { title: "Submit for approval", verb: "Submit" },
-  delete: { title: "Delete draft", verb: "Delete", variant: "danger", hint: "The draft will be permanently removed." },
+/**
+ * Each dialog asks a question, says in one line what happens, and names the action on its button.
+ * `done` is the toast that states the result.
+ */
+export const ACTION_UI: Record<
+  ActionKind,
+  {
+    question: (number: string) => string;
+    verb: string;
+    hint: string;
+    done: (number: string, who?: string) => string;
+    needsComment?: boolean;
+    needsUser?: boolean;
+    danger?: boolean;
+    commentLabel?: string;
+    placeholder?: string;
+  }
+> = {
+  approve: {
+    question: (n) => `Approve ${n}?`,
+    verb: "Approve",
+    hint: "It moves to the next approver, or is approved if this is the last step.",
+    done: (n) => `You approved ${n}`,
+    commentLabel: "Comment (optional)",
+    placeholder: "A note for the requester and the next approver",
+  },
+  reject: {
+    question: (n) => `Reject ${n}?`,
+    verb: "Reject",
+    hint: "The request is closed and cannot be submitted again. The requester sees your reason.",
+    done: (n) => `${n} rejected`,
+    needsComment: true,
+    danger: true,
+    placeholder: "Why it cannot go ahead",
+  },
+  return: {
+    question: (n) => `Return ${n} for changes?`,
+    verb: "Return",
+    hint: "The requester can edit it and submit it again.",
+    done: (n) => `${n} returned to the requester`,
+    needsComment: true,
+    placeholder: "What needs to change",
+  },
+  delegate: {
+    question: (n) => `Delegate your decision on ${n}?`,
+    verb: "Delegate",
+    hint: "The person you choose decides instead of you. You are no longer an approver.",
+    done: (n, who) => `Your decision on ${n} is now with ${who || "the person you chose"}`,
+    needsUser: true,
+    commentLabel: "Comment (optional)",
+  },
+  escalate: {
+    question: (n) => `Escalate ${n}?`,
+    verb: "Escalate",
+    hint: "A more senior approver is added. You stay an approver too.",
+    done: (n, who) => `${n} escalated to ${who || "the person you chose"}`,
+    needsUser: true,
+    commentLabel: "Comment (optional)",
+  },
+  comment: {
+    question: (n) => `Comment on ${n}`,
+    verb: "Post comment",
+    hint: "Everyone on the approval route can read it.",
+    done: () => "Comment posted",
+    needsComment: true,
+    commentLabel: "Comment",
+  },
+  cancel: {
+    question: (n) => `Cancel ${n}?`,
+    verb: "Cancel it",
+    hint: "Any running approval stops. This cannot be undone.",
+    done: (n) => `${n} cancelled`,
+    needsComment: true,
+    danger: true,
+    placeholder: "Why it is no longer needed",
+  },
+  submit: {
+    question: (n) => `Submit ${n} for approval?`,
+    verb: "Submit for approval",
+    hint: "It goes to the first approver. You cannot edit it while it is in approval.",
+    done: (n) => `${n} submitted for approval`,
+  },
+  delete: {
+    question: () => "Delete this draft?",
+    verb: "Delete",
+    hint: "The draft is removed for good.",
+    done: () => "Draft deleted",
+    danger: true,
+  },
+};
+
+const STEP_ICON = {
+  done: { icon: CheckCircle2, cls: "text-ims-success" },
+  stopped: { icon: XCircle, cls: "text-ims-danger" },
+  current: { icon: Clock, cls: "text-ims-warning" },
+  upcoming: { icon: Circle, cls: "text-ims-faint" },
 };
 
 export function ApprovalTracker({ approval, actions }: { approval: any; actions: any[] }) {
   if (!approval) {
     return (
-      <Panel>
-        <EmptyState icon={Send} title="Not submitted yet" text="The approval route is chosen when this document is submitted." />
-      </Panel>
+      <Card>
+        <EmptyState icon={Send} text="Not submitted yet. The approval route is chosen when this is submitted." />
+      </Card>
     );
   }
   const runActions = actions.filter((a) => a.approval === approval.id);
   const steps: any[] = approval.steps || [];
   return (
-    <Panel title={`Workflow: ${approval.workflow_name}`} subtitle={`${money(approval.amount, approval.currency)} · ${steps.length} step(s)`}>
-      <ol className="relative space-y-5 border-l border-slate-200 pl-6">
+    <Card>
+      <CardHeader
+        title="Approval route"
+        subtitle={`${approval.workflow_name} · ${money(approval.amount, approval.currency)} · ${steps.length} ${steps.length === 1 ? "step" : "steps"}`}
+        action={approval.status !== "pending" ? <StatusPill status={approval.status} /> : undefined}
+      />
+      <ol className="relative space-y-5 border-l border-ims-border pl-6">
         {steps.map((s, level) => {
           const decision = [...runActions].reverse().find((a) => a.level === level && ["approve", "reject", "return"].includes(a.action));
           const current = approval.status === "pending" && approval.current_level === level;
           const state = decision?.action === "approve" ? "done" : decision ? "stopped" : current ? "current" : "upcoming";
-          const Icon = state === "done" ? CheckCircle2 : state === "stopped" ? XCircle : state === "current" ? Clock : Circle;
+          const { icon: Icon, cls } = STEP_ICON[state];
           return (
             <li key={level} className="relative">
-              <span
-                className={cn(
-                  "absolute -left-[33px] flex h-5 w-5 items-center justify-center rounded-full bg-white",
-                  state === "done" ? "text-emerald-600" : state === "stopped" ? "text-red-600" : state === "current" ? "text-amber-600" : "text-slate-300"
-                )}
-              >
-                <Icon size={18} />
+              <span className={cn("absolute -left-[33px] flex h-5 w-5 items-center justify-center rounded-full bg-ims-card", cls)}>
+                <Icon size={18} aria-hidden />
               </span>
-              <p className="text-[13px] font-semibold text-slate-800">
-                Step {level + 1}: {s.name}{" "}
-                {state === "current" && <Badge tone="warning" className="ml-1">Waiting</Badge>}
+              <p className="text-t-body font-semibold text-ims-text">
+                Step {level + 1}: {s.name}
+                {state === "current" && <span className="ml-2 text-t-small font-semibold text-ims-warning">Waiting for a decision</span>}
               </p>
-              <p className="text-[12px] text-slate-500">Approver: {s.rule}</p>
+              <p className="text-t-small text-ims-muted">Approver: {s.rule}</p>
               {decision && (
-                <p className="mt-1 text-[12.5px] text-slate-700">
-                  <span className="font-medium">{decision.expand?.actor?.name}</span> {ACTION_LABELS[decision.action]} ·{" "}
-                  {format(new Date(decision.created), "d MMM yyyy, HH:mm")}
-                  {decision.comment && <span className="block text-slate-500">“{decision.comment}”</span>}
+                <p className="mt-1 text-t-small text-ims-body">
+                  <span className="font-semibold">{decision.expand?.actor?.name}</span> {ACTION_LABELS[decision.action]} · {fmtDateTime(decision.created)}
+                  {decision.comment && <span className="mt-0.5 block text-ims-muted">“{decision.comment}”</span>}
                 </p>
               )}
             </li>
           );
         })}
       </ol>
-      {approval.status !== "pending" && (
-        <p className="mt-4 text-[12.5px] text-slate-500">
-          Approval {approval.status}
-          {approval.completed_at ? ` on ${format(new Date(approval.completed_at), "d MMM yyyy, HH:mm")}` : ""}.
-        </p>
+      {approval.status !== "pending" && approval.completed_at && (
+        <p className="mt-4 text-t-small text-ims-muted">Finished {fmtDateTime(approval.completed_at)}.</p>
       )}
-    </Panel>
+    </Card>
   );
 }
 
@@ -109,26 +189,27 @@ export function Activity({ actions, audit, loading }: { actions: any[]; audit: a
   ].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
-    <Panel title="Activity timeline" subtitle="Workflow decisions and record changes. The audit trail cannot be edited.">
+    <Card>
+      <CardHeader title="Activity" subtitle="Approval decisions and changes to this record. The history cannot be edited." />
       {loading && !events.length ? (
         <Skeleton className="h-32 w-full" />
       ) : !events.length ? (
-        <p className="text-[13px] text-slate-500">No activity yet.</p>
+        <EmptyState compact text="No activity yet." />
       ) : (
         <ol className="space-y-4">
           {events.map((e: any) => (
             <li key={`${e.kind}-${e.id}`} className="flex gap-3">
               <Initials name={e.who} />
-              <div className="min-w-0 flex-1 text-[13px]">
-                <p className="text-slate-800">
-                  <span className="font-medium">{e.who || "System"}</span> {e.what}
+              <div className="min-w-0 flex-1 text-t-body">
+                <p className="text-ims-text">
+                  <span className="font-semibold">{e.who || "System"}</span> {e.what}
                 </p>
-                <p className="text-[12px] text-slate-500" title={format(new Date(e.at), "d MMM yyyy, HH:mm:ss")}>
-                  {formatDistanceToNow(new Date(e.at), { addSuffix: true })}
+                <p className="text-t-small text-ims-muted" title={fmtDateTime(e.at)}>
+                  {fmtWhen(e.at)}
                 </p>
-                {e.comment && <p className="mt-1 rounded-md bg-slate-50 px-2.5 py-1.5 text-slate-700">“{e.comment}”</p>}
+                {e.comment && <p className="mt-1 rounded-control bg-ims-thead px-3 py-2 text-ims-body">“{e.comment}”</p>}
                 {e.changes && e.kind === "audit" && Object.keys(e.changes).length > 0 && Object.keys(e.changes).length <= 4 && (
-                  <ul className="mt-1 space-y-0.5 text-[12px] text-slate-500">
+                  <ul className="mt-1 space-y-0.5 text-t-small text-ims-muted">
                     {Object.entries(e.changes)
                       .filter(([k]) => !["items", "attachments"].includes(k))
                       .map(([k, v]: any) => (
@@ -143,7 +224,20 @@ export function Activity({ actions, audit, loading }: { actions: any[]; audit: a
           ))}
         </ol>
       )}
-    </Panel>
+    </Card>
+  );
+}
+
+/** Document numbers never wrap: "Reject PR-2026-000005?" keeps the number on one line. */
+function noWrapNumber(text: string, number: string) {
+  const i = number ? text.indexOf(number) : -1;
+  if (i < 0) return text;
+  return (
+    <>
+      {text.slice(0, i)}
+      <span className="whitespace-nowrap">{number}</span>
+      {text.slice(i + number.length)}
+    </>
   );
 }
 
@@ -165,10 +259,12 @@ export function ActionDialog({
   const [comment, setComment] = React.useState("");
   const [user, setUser] = React.useState("");
   const [userSearch, setUserSearch] = React.useState("");
+  const [touched, setTouched] = React.useState(false);
   React.useEffect(() => {
     setComment("");
     setUser("");
     setUserSearch("");
+    setTouched(false);
   }, [kind]);
   const ui = kind ? ACTION_UI[kind] : null;
 
@@ -177,79 +273,85 @@ export function ActionDialog({
     () => pocketbase.collection("users").getFullList({ filter: `status = "Active"`, sort: "name", fields: "id,name,email" }),
     { enabled: Boolean(ui?.needsUser), staleTime: 60_000 }
   );
+  const chosen = (users.data || []).find((u: any) => u.id === user) as any;
 
   const run = useMutation(
     async () => {
       if (!kind) return;
-      return runAction(kind, { comment, user });
+      return runAction(kind, { comment: comment.trim(), user });
     },
     {
       onSuccess: () => {
-        toast.success(
-          kind === "submit" ? `${number} submitted for approval` : kind === "delete" ? "Draft deleted" : `${number}: ${ui?.verb.toLowerCase()} done`
-        );
+        toast.success(ui!.done(number, chosen?.name));
         onDone(kind!);
       },
       onError: (e) => {
-      toast.error(errorMessage(e));
-    },
+        toast.error(errorMessage(e));
+      },
     }
   );
 
   const filtered = (users.data || []).filter((u: any) => `${u.name} ${u.email}`.toLowerCase().includes(userSearch.toLowerCase())).slice(0, 50);
-  const disabled = run.isLoading || (ui?.needsComment && !comment.trim()) || (ui?.needsUser && !user);
+  const missingComment = Boolean(ui?.needsComment) && !comment.trim();
+  const missingUser = Boolean(ui?.needsUser) && !user;
+  const go = () => {
+    setTouched(true);
+    if (missingComment || missingUser) return;
+    run.mutate();
+  };
+  const showComment = kind && !["submit", "delete"].includes(kind);
 
   return (
-    <Dialog open={Boolean(kind)} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md bg-white">
-        <DialogHeader>
-          <DialogTitle>{ui?.title} · {number}</DialogTitle>
-          {ui?.hint && <DialogDescription>{ui.hint}</DialogDescription>}
-        </DialogHeader>
-        {ui?.needsUser && (
+    <Modal
+      open={Boolean(kind)}
+      onClose={run.isLoading ? () => undefined : onClose}
+      size="sm"
+      title={ui ? noWrapNumber(ui.question(number), number) : ""}
+      description={ui?.hint}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={run.isLoading}>
+            {kind === "cancel" ? "Keep it" : "Cancel"}
+          </Button>
+          <Button variant={ui?.danger ? "danger" : "primary"} onClick={go} loading={run.isLoading}>
+            {ui?.verb}
+          </Button>
+        </>
+      }
+    >
+      {ui?.needsUser && (
+        <Field label="Person" required htmlFor="action-person-search" error={touched && missingUser ? "Choose the person from the list." : null}>
           <div className="space-y-2">
-            <input
-              value={userSearch}
-              onChange={(e) => setUserSearch(e.target.value)}
-              placeholder="Search people…"
-              className="h-9 w-full rounded-md border border-slate-200 px-3 text-[13px] outline-none focus:border-primary"
-            />
-            <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
+            <SearchBox value={userSearch} onChange={setUserSearch} placeholder="Search name or email" className="sm:w-full" />
+            <ul id="action-person-search" role="listbox" aria-label="People" className="max-h-48 divide-y divide-ims-divider overflow-y-auto rounded-control border border-ims-border">
+              {users.isLoading && <li className="px-3 py-2.5 text-t-small text-ims-muted">Loading people…</li>}
               {filtered.map((u: any) => (
-                <li key={u.id}>
+                <li key={u.id} role="option" aria-selected={user === u.id}>
                   <button
                     type="button"
                     onClick={() => setUser(u.id)}
-                    className={cn("flex w-full items-center justify-between px-3 py-2 text-left text-[13px] hover:bg-slate-50", user === u.id && "bg-primary/10")}
+                    className={cn("flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-t-body hover:bg-ims-hover", user === u.id && "bg-ims-info-bg")}
                   >
-                    <span>{u.name}</span>
-                    <span className="truncate pl-2 text-[12px] text-slate-500">{u.email}</span>
+                    <span className="shrink-0 font-semibold text-ims-text">{u.name}</span>
+                    <span className="min-w-0 truncate text-t-small text-ims-muted">{u.email}</span>
                   </button>
                 </li>
               ))}
+              {!users.isLoading && !filtered.length && <li className="px-3 py-2.5 text-t-small text-ims-muted">No one matches “{userSearch}”.</li>}
             </ul>
           </div>
-        )}
-        {kind && !["submit", "delete"].includes(kind) && (
-          <label className="block">
-            <span className="mb-1 block text-[12.5px] font-medium text-slate-700">
-              {ui?.needsComment ? "Reason" : "Comment"}
-              {ui?.needsComment && <span className="text-red-600"> *</span>}
-            </span>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              className="h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </label>
-        )}
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose} disabled={run.isLoading}>Close</Button>
-          <Button variant={ui?.variant} onClick={() => run.mutate()} disabled={disabled}>
-            {run.isLoading ? "Working…" : ui?.verb}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </Field>
+      )}
+      {showComment && (
+        <Field
+          label={ui?.commentLabel || "Reason"}
+          required={ui?.needsComment}
+          htmlFor="action-comment"
+          error={touched && missingComment ? (kind === "comment" ? "Write the comment first." : "Write the reason so the requester knows what to do next.") : null}
+        >
+          <Textarea id="action-comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder={ui?.placeholder} invalid={touched && missingComment} />
+        </Field>
+      )}
+    </Modal>
   );
 }

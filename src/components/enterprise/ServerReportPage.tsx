@@ -35,7 +35,7 @@ const cellText = (type: string, v: any) => {
   if (type === "status") return String(v).replace(/_/g, " ");
   return String(v);
 };
-const selectCls = "h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px] text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
+const selectCls = "h-9 w-full rounded-md border border-ims-border bg-white px-2.5 text-[13px] text-ims-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
 
 export default function ServerReportPage({
   title, description, breadcrumbs, groups, run, filters, exportPermission, defaultFrom,
@@ -92,7 +92,7 @@ export default function ServerReportPage({
       <PageHeader title={title} description={description} breadcrumbs={breadcrumbs} />
       <div className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)]">
         <nav aria-label="Reports" className="space-y-4">
-          <label className="block text-[12.5px] font-medium text-slate-700 lg:hidden">
+          <label className="block text-[12.5px] font-medium text-ims-body lg:hidden">
             Report
             <select className={cn(selectCls, "mt-1")} value={key} onChange={(e) => setParams({ r: e.target.value })}>
               {groups.map((g) => <optgroup key={g.title} label={g.title}>{g.items.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</optgroup>)}
@@ -101,11 +101,11 @@ export default function ServerReportPage({
           <div className="hidden space-y-4 lg:block">
             {groups.map((g) => (
               <div key={g.title}>
-                <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">{g.title}</p>
+                <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-widest text-ims-faint">{g.title}</p>
                 {g.items.map(([k, l]) => (
                   <button key={k} type="button" onClick={() => { setParams({ r: k }); setSort(null); }}
-                    className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px]", k === key ? "bg-ralga-navy/[0.07] font-semibold text-ralga-navy" : "text-slate-600 hover:bg-slate-100")}>
-                    <FileText size={14} className="shrink-0 text-slate-400" /> {l}
+                    className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px]", k === key ? "bg-ralga-navy/[0.07] font-semibold text-ralga-navy" : "text-ims-body hover:bg-ims-subtle")}>
+                    <FileText size={14} className="shrink-0 text-ims-faint" /> {l}
                   </button>
                 ))}
               </div>
@@ -114,37 +114,37 @@ export default function ServerReportPage({
         </nav>
 
         <div className="min-w-0 space-y-3">
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-card sm:grid-cols-3 xl:grid-cols-5">
-            {filters.includes("from") && <label className="text-[12px] font-medium text-slate-600">From<input type="date" className={cn(selectCls, "mt-1")} value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>}
-            {filters.includes("to") && <label className="text-[12px] font-medium text-slate-600">To / as of<input type="date" className={cn(selectCls, "mt-1")} value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>}
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-ims-border bg-white p-3 shadow-card sm:grid-cols-3 xl:grid-cols-5">
+            {filters.includes("from") && <label className="text-[12px] font-medium text-ims-body">From<input type="date" className={cn(selectCls, "mt-1")} value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>}
+            {filters.includes("to") && <label className="text-[12px] font-medium text-ims-body">To / as of<input type="date" className={cn(selectCls, "mt-1")} value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>}
             {filters.includes("supplier") && (
-              <label className="text-[12px] font-medium text-slate-600">Supplier
+              <label className="text-[12px] font-medium text-ims-body">Supplier
                 <select className={cn(selectCls, "mt-1")} value={f.supplier} onChange={(e) => setF({ ...f, supplier: e.target.value })}><option value="">All</option>{(ref.data?.suppliers || []).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
               </label>
             )}
             {filters.includes("department") && (
-              <label className="text-[12px] font-medium text-slate-600">Department
+              <label className="text-[12px] font-medium text-ims-body">Department
                 <select className={cn(selectCls, "mt-1")} value={f.department} onChange={(e) => setF({ ...f, department: e.target.value })}><option value="">All</option>{(ref.data?.departments || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
               </label>
             )}
             {filters.includes("account") && (
-              <label className="text-[12px] font-medium text-slate-600">Account
+              <label className="text-[12px] font-medium text-ims-body">Account
                 <select className={cn(selectCls, "mt-1")} value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })}><option value="">All</option>{(ref.data?.accounts || []).map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
               </label>
             )}
-            <label className="col-span-2 text-[12px] font-medium text-slate-600 sm:col-span-1">Search in results
+            <label className="col-span-2 text-[12px] font-medium text-ims-body sm:col-span-1">Search in results
               <span className="relative mt-1 block">
-                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ims-faint" />
                 <input className={cn(selectCls, "pl-8")} value={search} onChange={(e) => setSearch(e.target.value)} />
               </span>
             </label>
           </div>
 
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-card">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+          <section className="overflow-hidden rounded-lg border border-ims-border bg-white shadow-card">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ims-divider px-4 py-3">
               <div>
-                <h2 className="text-[15px] font-semibold text-slate-900">{label}</h2>
-                <p className="text-[12px] text-slate-500">{subtitle || "All records"} · {rows.length} row{rows.length === 1 ? "" : "s"}{r ? ` · generated ${new Date(r.generated_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : ""}</p>
+                <h2 className="text-[15px] font-semibold text-ims-text">{label}</h2>
+                <p className="text-[12px] text-ims-muted">{subtitle || "All records"} · {rows.length} row{rows.length === 1 ? "" : "s"}{r ? ` · generated ${new Date(r.generated_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : ""}</p>
               </div>
               <ExportMenu onExport={doExport} permission={exportPermission} disabled={!rows.length} />
             </div>
@@ -187,7 +187,7 @@ export default function ServerReportPage({
                   </tbody>
                   {Object.keys(r!.totals || {}).length > 0 && (
                     <tfoot>
-                      <tr className="border-t-2 border-slate-200 font-semibold">
+                      <tr className="border-t-2 border-ims-border font-semibold">
                         {r!.columns.map((c, ci) => (
                           <td key={c.key} className={cn(["money", "number", "pct"].includes(c.type) && "whitespace-nowrap text-right tabular-nums")}>{ci === 0 ? "Total" : r!.totals[c.key] !== undefined ? cellText(c.type, r!.totals[c.key]) : ""}</td>
                         ))}
@@ -197,7 +197,7 @@ export default function ServerReportPage({
                 </table>
               </div>
             )}
-            {r?.note && <p className="border-t border-slate-100 px-4 py-2.5 text-[12px] text-slate-500">{r.note}</p>}
+            {r?.note && <p className="border-t border-ims-divider px-4 py-2.5 text-[12px] text-ims-muted">{r.note}</p>}
           </section>
         </div>
       </div>

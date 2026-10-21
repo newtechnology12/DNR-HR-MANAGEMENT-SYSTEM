@@ -1,23 +1,28 @@
+/**
+ * One KPI: label (12.5px muted), value (22px/800), one short line. Pages that show several should use
+ * KpiBand from "@/components/ims" (one card split by dividers); this card keeps the same look for the
+ * pages that still lay out separate cards. No icons in circles (the icon prop is kept for compatibility).
+ */
 import * as React from "react";
-import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
+import { LucideIcon, TrendingDown, TrendingUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/utils";
 
-const toneStyles = {
-  default: "bg-primary/10 text-primaryDark",
-  info: "bg-blue-50 text-blue-600",
-  success: "bg-emerald-50 text-emerald-600",
-  warning: "bg-amber-50 text-amber-700",
-  danger: "bg-red-50 text-red-600",
-  neutral: "bg-slate-100 text-slate-600",
+const VALUE_TONE = {
+  default: "text-ims-text",
+  info: "text-ims-text",
+  success: "text-ims-text",
+  warning: "text-ims-warning",
+  danger: "text-ims-danger",
+  neutral: "text-ims-text",
 } as const;
 
 export interface StatCardProps {
   title: string;
   value?: React.ReactNode;
   description?: React.ReactNode;
-  icon: LucideIcon;
-  tone?: keyof typeof toneStyles;
+  icon?: LucideIcon;
+  tone?: keyof typeof VALUE_TONE;
   loading?: boolean;
   className?: string;
   /** Only pass a trend that is computed from real data. */
@@ -25,65 +30,33 @@ export interface StatCardProps {
   onClick?: () => void;
 }
 
-export default function StatCard({
-  title,
-  value,
-  description,
-  icon: Icon,
-  tone = "default",
-  loading = false,
-  className,
-  trend,
-  onClick,
-}: StatCardProps) {
+export default function StatCard({ title, value, description, tone = "default", loading = false, className, trend, onClick }: StatCardProps) {
   const Comp = onClick ? "button" : "div";
   return (
     <Comp
       type={onClick ? "button" : undefined}
       onClick={onClick}
       className={cn(
-        "flex h-full w-full flex-col rounded-lg border border-slate-200 bg-white px-4 py-3.5 text-left shadow-card",
-        onClick &&
-          "transition-colors hover:border-slate-300 hover:bg-slate-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "flex h-full w-full flex-col rounded-card border border-ims-border bg-ims-card px-5 py-4 text-left",
+        onClick && "transition-colors hover:bg-ims-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus",
         className
       )}
     >
-      <div className="flex items-center justify-between gap-3">
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-          {title}
-        </span>
-        <span
-          className={cn(
-            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-            toneStyles[tone]
-          )}
-        >
-          <Icon size={15} strokeWidth={2.25} />
-        </span>
-      </div>
+      <span className="truncate text-t-small text-ims-muted">{title}</span>
       {loading ? (
-        <Skeleton className="mt-2 h-7 w-20" />
+        <Skeleton className="mt-1.5 h-7 w-20" />
       ) : (
-        <div className="mt-1.5 flex items-baseline gap-2">
-          <span className="text-[22px] font-semibold leading-tight tracking-tight tabular-nums text-slate-900">
-            {value ?? 0}
-          </span>
+        <span className="mt-1 flex flex-wrap items-baseline gap-2">
+          <span className={cn("break-words text-t-kpi tabular-nums", VALUE_TONE[tone])}>{value ?? 0}</span>
           {trend && (
-            <span
-              className={cn(
-                "flex items-center gap-0.5 text-[11px] font-medium",
-                trend.isUp ? "text-emerald-600" : "text-red-600"
-              )}
-            >
-              {trend.isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+            <span className={cn("flex items-center gap-0.5 text-t-small font-semibold", trend.isUp ? "text-ims-success" : "text-ims-danger")}>
+              {trend.isUp ? <TrendingUp size={13} aria-hidden /> : <TrendingDown size={13} aria-hidden />}
               {trend.value}%{trend.label ? ` ${trend.label}` : ""}
             </span>
           )}
-        </div>
+        </span>
       )}
-      {description && (
-        <p className="mt-1 truncate text-[12px] text-slate-500">{description}</p>
-      )}
+      {description && <span className="mt-0.5 truncate text-t-small text-ims-muted">{description}</span>}
     </Comp>
   );
 }

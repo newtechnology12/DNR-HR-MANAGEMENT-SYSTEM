@@ -205,8 +205,11 @@ export type FormError = { field?: string; message: string };
 /** Shown at the top after Submit: what to fix, with links that jump to each field. */
 export function ErrorSummary({ errors, title = "Check these fields before you submit" }: { errors: FormError[]; title?: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
+  const had = React.useRef(false);
+  // Move focus here when errors first appear, not each time one is fixed.
   React.useEffect(() => {
-    if (errors.length) ref.current?.focus();
+    if (errors.length && !had.current) ref.current?.focus();
+    had.current = errors.length > 0;
   }, [errors.length]);
   if (!errors.length) return null;
   return (

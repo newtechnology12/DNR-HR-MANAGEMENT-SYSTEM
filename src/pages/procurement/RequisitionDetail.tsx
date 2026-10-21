@@ -1,40 +1,48 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { format } from "date-fns";
-import {
-  ArrowUpRight,
-  Ban,
-  Check,
-  Clock,
-  CornerUpLeft,
-  FileSearch,
-  FileText,
-  MessageSquare,
-  Pencil,
-  Send,
-  Trash2,
-  UserPlus,
-  XCircle,
-} from "lucide-react";
+import { ArrowUpRight, Ban, Check, Clock, CornerUpLeft, FileSearch, FileText, MessageSquare, Pencil, Send, ShoppingCart, Trash2, UserPlus, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
 import { PickRequisition } from "./Rfqs";
 import { DirectPoDialog } from "./PurchaseOrders";
 import { ActionDialog, ActionKind, Activity, ApprovalTracker } from "@/components/enterprise/Approval";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/utils";
-import { Badge, EmptyState, KeyValues, PageHeader, Panel, StatusBadge } from "@/components/enterprise/ui";
-import { DOC_STATUS, PO_STATUS, PRIORITY, REQUEST_TYPES, RFQ_STATUS, money, procurementApi } from "@/lib/procurement";
+import { StatusBadge } from "@/components/enterprise/ui";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  Column,
+  DataTable,
+  DetailHeader,
+  Details,
+  EmptyState,
+  MenuItem,
+  MoreMenu,
+  Num,
+  Page,
+  Priority,
+  Tabs,
+  TwoLine,
+  fmtDate,
+  fmtDateTime,
+  fmtMoney,
+  fmtNumber,
+} from "@/components/ims";
+import { DOC_STATUS, PO_STATUS, REQUEST_TYPES, RFQ_STATUS, money, procurementApi } from "@/lib/procurement";
 import { BudgetPanel } from "@/components/budget/BudgetKit";
+
+type TabKey = "details" | "items" | "approvals" | "documents" | "activity";
+const LIST = "/dashboard/procurement/requisitions";
 
 export default function RequisitionDetail() {
   const { requisitionId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const me = pocketbase.authStore.model as any;
-  const [tab, setTab] = React.useState<"overview" | "approval" | "activity">("overview");
+  const [tab, setTab] = React.useState<TabKey>("details");
   const [dialog, setDialog] = React.useState<ActionKind | null>(null);
   const [sourcing, setSourcing] = React.useState(false);
   const [directPo, setDirectPo] = React.useState(false);
@@ -86,25 +94,24 @@ export default function RequisitionDetail() {
 
   if (doc.isLoading) {
     return (
-      <div className="space-y-4 px-4 py-4 sm:px-6">
-        <Skeleton className="h-12 w-80" />
-        <Skeleton className="h-40 w-full" />
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </Page>
     );
   }
   if (doc.isError || !r) {
     return (
-      <div className="px-4 py-4 sm:px-6">
-        <Panel>
+      <Page>
+        <Card>
           <EmptyState
             icon={FileText}
-            title="Requisition not available"
-            text="It may have been deleted, or it is outside what your role can see."
-            action={<Button variant="outline" onClick={() => navigate("/dashboard/procurement/requisitions")}>Back to requisitions</Button>}
+            text="This requisition is not available. It may have been deleted, or your role cannot see it."
+            action={<ButtonLink to={LIST}>Back to requisitions</ButtonLink>}
           />
-        </Panel>
-      </div>
+        </Card>
+      </Page>
     );
   }
 
@@ -112,151 +119,130 @@ export default function RequisitionDetail() {
   const isApprover = approval?.status === "pending" && (approval.pending_approvers || "").split(",").includes(me?.id);
   const editable = ["draft", "returned"].includes(r.status);
   const typeLabel = REQUEST_TYPES.find((t) => t.value === r.request_type)?.label;
+  const stepName = approval?.status === "pending" ? approval.steps?.[approval.current_level]?.name : null;
+  const returnNote = [...(actions.data || [])].reverse().find((a: any) => a.action === "return")?.comment;
+  const items: any[] = r.items || [];
+  const sourcingRfqs: any[] = rfqs.data || [];
+  const sourcingPos: any[] = (rfqs.data as any)?.pos || [];
+  const canSource = r.status === "approved" && canPerform("manage_rfqs");
+  const canDirect = r.status === "approved" && canPerform("manage_purchase_orders");
+
+  // The next step is the primary button; at most two secondary buttons; the rest go under "More".
+  const primary = isApprover ? (
+    <Button variant="primary" icon={Check} onClick={() => setDialog("approve")}>Approve</Button>
+  ) : isRequester && editable ? (
+    <Button variant="primary" icon={Send} onClick={() => setDialog("submit")}>Submit for approval</Button>
+  ) : canSource ? (
+    <Button variant="primary" icon={FileSearch} onClick={() => setSourcing(true)}>Create RFQ</Button>
+  ) : canDirect ? (
+    <Button variant="primary" icon={ShoppingCart} onClick={() => setDirectPo(true)}>Direct purchase</Button>
+  ) : null;
+  const secondary = isApprover ? (
+    <>
+      <Button icon={CornerUpLeft} onClick={() => setDialog("return")}>Return</Button>
+      <Button icon={XCircle} onClick={() => setDialog("reject")}>Reject</Button>
+    </>
+  ) : isRequester && editable ? (
+    <ButtonLink to={`${LIST}/${r.id}/edit`} icon={Pencil}>Edit</ButtonLink>
+  ) : canSource && canDirect ? (
+    <Button icon={ShoppingCart} onClick={() => setDirectPo(true)}>Direct purchase</Button>
+  ) : null;
+  const more: MenuItem[] = [
+    { label: "Delegate", icon: UserPlus, onSelect: () => setDialog("delegate"), hidden: !isApprover },
+    { label: "Escalate", icon: ArrowUpRight, onSelect: () => setDialog("escalate"), hidden: !isApprover },
+    { label: "Comment", icon: MessageSquare, onSelect: () => setDialog("comment"), hidden: !approval },
+    { label: "Cancel requisition", icon: Ban, danger: true, onSelect: () => setDialog("cancel"), hidden: !(isRequester && ["pending_approval", "returned", "approved"].includes(r.status)) },
+    { label: "Delete draft", icon: Trash2, danger: true, onSelect: () => setDialog("delete"), hidden: !(isRequester && r.status === "draft") },
+  ];
+
+  const itemColumns: Column<any>[] = [
+    { key: "line", header: "#", width: "48px", cell: (it, i) => <span className="text-ims-muted">{it.line || i + 1}</span> },
+    { key: "description", header: "Description", clamp: true, cell: (it) => it.description, sub: (it) => it.specification },
+    { key: "quantity", header: "Quantity", numeric: true, nowrap: true, cell: (it) => `${fmtNumber(it.quantity, true)} ${it.unit || ""}`.trim() },
+    { key: "unit_cost", header: "Unit cost (RWF)", numeric: true, nowrap: true, cell: (it) => <Num value={it.unit_cost} /> },
+    { key: "tax", header: "Tax (%)", numeric: true, nowrap: true, cell: (it) => fmtNumber(it.tax_rate, true) },
+    { key: "total", header: "Total (RWF)", numeric: true, nowrap: true, cell: (it) => <Num value={it.total} />, total: <Num value={r.total} /> },
+  ];
 
   return (
-    <div className="space-y-4 px-4 py-4 sm:px-6">
-      <PageHeader
-        breadcrumbs={[
-          { title: "Procurement", link: "/dashboard/procurement" },
-          { title: "Requisitions", link: "/dashboard/procurement/requisitions" },
-          { title: r.number, link: "#" },
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to requisitions", to: LIST }}
+        number={r.number}
+        type="Purchase requisition"
+        status={DOC_STATUS[r.status]?.label || r.status}
+        statusNote={stepName ? `At “${stepName}”` : DOC_STATUS[r.status]?.note}
+        title={r.title || "Untitled draft"}
+        facts={[
+          { label: "Requested by", value: r.expand?.requester?.name || "—" },
+          r.expand?.department?.name,
+          r.required_date ? { label: "Needed by", value: fmtDate(r.required_date) } : null,
+          <strong key="total" className="font-bold text-ims-text">{fmtMoney(r.total)}</strong>,
+          r.priority ? <Priority key="priority" value={r.priority} /> : null,
         ]}
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            {r.number}
-            <StatusBadge status={r.status} map={DOC_STATUS} />
-            {r.priority && <Badge tone={PRIORITY[r.priority]?.tone}>{PRIORITY[r.priority]?.label} priority</Badge>}
-          </span>
-        }
-        description={r.title}
         actions={
           <>
-            {isApprover && (
-              <>
-                <Button size="sm" onClick={() => setDialog("approve")}><Check size={14} /> Approve</Button>
-                <Button size="sm" variant="outline" onClick={() => setDialog("return")}><CornerUpLeft size={14} /> Send back</Button>
-                <Button size="sm" variant="outline" className="text-red-700" onClick={() => setDialog("reject")}><XCircle size={14} /> Reject</Button>
-                <Button size="sm" variant="ghost" onClick={() => setDialog("delegate")}><UserPlus size={14} /> Delegate</Button>
-                <Button size="sm" variant="ghost" onClick={() => setDialog("escalate")}><ArrowUpRight size={14} /> Escalate</Button>
-              </>
-            )}
-            {isRequester && editable && (
-              <>
-                <Button size="sm" onClick={() => setDialog("submit")}><Send size={14} /> Submit</Button>
-                <Button size="sm" variant="outline" onClick={() => navigate(`/dashboard/procurement/requisitions/${r.id}/edit`)}><Pencil size={14} /> Edit</Button>
-              </>
-            )}
-            {isRequester && r.status === "draft" && (
-              <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setDialog("delete")}><Trash2 size={14} /> Delete</Button>
-            )}
-            {isRequester && ["pending_approval", "returned", "approved"].includes(r.status) && (
-              <Button size="sm" variant="ghost" onClick={() => setDialog("cancel")}><Ban size={14} /> Cancel</Button>
-            )}
-            {r.status === "approved" && canPerform("manage_rfqs") && (
-              <Button size="sm" onClick={() => setSourcing(true)}><FileSearch size={14} /> Create RFQ</Button>
-            )}
-            {r.status === "approved" && canPerform("manage_purchase_orders") && (
-              <Button size="sm" variant="outline" onClick={() => setDirectPo(true)}>Direct purchase</Button>
-            )}
-            {approval && <Button size="sm" variant="ghost" onClick={() => setDialog("comment")}><MessageSquare size={14} /> Comment</Button>}
+            <MoreMenu items={more} />
+            {secondary}
+            {primary}
           </>
         }
       />
 
       {isApprover && (
-        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900">
-          <Clock size={15} /> This requisition is waiting for your decision at step “{approval.steps?.[approval.current_level]?.name}”.
-        </div>
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+          <Clock size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Waiting for your decision{stepName ? ` at step “${stepName}”` : ""}. Approve it, return it for changes, or reject it.</span>
+        </p>
       )}
       {r.status === "returned" && isRequester && (
-        <div className="flex items-center gap-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2.5 text-[13px] text-violet-900">
-          <CornerUpLeft size={15} /> Sent back for changes: “{[...(actions.data || [])].reverse().find((a: any) => a.action === "return")?.comment}”. Edit and submit again.
-        </div>
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-orange/30 bg-ims-orange-bg px-4 py-3 text-t-body text-ims-orange">
+          <CornerUpLeft size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Returned for changes{returnNote ? `: “${returnNote}”` : ""}. Edit it and submit it again.</span>
+        </p>
+      )}
+      {r.cancel_reason && (
+        <p className="rounded-card border border-ims-border bg-ims-card px-4 py-3 text-t-body text-ims-body">
+          <span className="font-semibold text-ims-text">Cancelled.</span> {r.cancel_reason}
+        </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {[
-          ["Estimated total", money(r.total, r.currency)],
-          ["Requester", r.expand?.requester?.name],
-          ["Department", r.expand?.department?.name],
-          ["Required by", r.required_date ? format(new Date(r.required_date), "d MMM yyyy") : "—"],
-        ].map(([k, v]) => (
-          <div key={k} className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-card">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{k}</p>
-            <p className="mt-1 truncate text-[15px] font-semibold tabular-nums text-slate-900">{v || "—"}</p>
-          </div>
-        ))}
-      </div>
+      <Tabs
+        label="Requisition sections"
+        active={tab}
+        onChange={(k) => setTab(k as TabKey)}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "items", label: "Items", count: items.length },
+          { key: "approvals", label: "Approvals" },
+          { key: "documents", label: "Documents", count: r.attachments?.length || 0 },
+          { key: "activity", label: "Activity" },
+        ]}
+      />
 
-      <div className="flex gap-1 border-b border-slate-200" role="tablist">
-        {(["overview", "approval", "activity"] as const).map((t) => (
-          <button
-            key={t}
-            role="tab"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-            className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-[13px] font-medium capitalize",
-              tab === t ? "border-primary text-primaryDark" : "border-transparent text-slate-500 hover:text-slate-800"
-            )}
-          >
-            {t === "approval" ? "Approval" : t === "activity" ? "Activity & audit" : "Overview"}
-          </button>
-        ))}
-      </div>
-
-      {tab === "overview" && (
+      {tab === "details" && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <div className="space-y-4 xl:col-span-2">
-            <Panel title="Items and services" bodyClassName="px-0">
-              <div className="overflow-x-auto">
-                <table className="dnr-grid w-full min-w-[600px] text-[13px]">
-                  <thead>
-                    <tr className="border-y border-slate-100 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      <th className="px-4 py-2">#</th>
-                      <th className="px-4 py-2">Description</th>
-                      <th className="px-4 py-2 text-right">Qty</th>
-                      <th className="px-4 py-2 text-right">Unit cost</th>
-                      <th className="px-4 py-2 text-right">Tax</th>
-                      <th className="px-4 py-2 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(r.items || []).map((it: any) => (
-                      <tr key={it.line}>
-                        <td className="px-4 py-2.5 text-slate-500">{it.line}</td>
-                        <td className="px-4 py-2.5">
-                          <p className="text-slate-800">{it.description}</p>
-                          {it.specification && <p className="text-[12px] text-slate-500">{it.specification}</p>}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{it.quantity} {it.unit}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{Math.round(it.unit_cost).toLocaleString()}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{it.tax_rate}%</td>
-                        <td className="px-4 py-2.5 text-right font-medium tabular-nums">{Math.round(it.total).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="text-[13px]">
-                    <tr className="border-t border-slate-200"><td colSpan={5} className="px-4 pt-2.5 text-right text-slate-500">Subtotal</td><td className="px-4 pt-2.5 text-right tabular-nums">{money(r.subtotal, r.currency)}</td></tr>
-                    <tr><td colSpan={5} className="px-4 text-right text-slate-500">Tax</td><td className="px-4 text-right tabular-nums">{money(r.tax_total, r.currency)}</td></tr>
-                    <tr><td colSpan={5} className="px-4 pb-3 text-right font-semibold">Total</td><td className="px-4 pb-3 text-right font-semibold tabular-nums">{money(r.total, r.currency)}</td></tr>
-                  </tfoot>
-                </table>
-              </div>
-            </Panel>
-            <Panel title="Justification">
-              <p className="whitespace-pre-line text-[13px] text-slate-700">{r.justification || "—"}</p>
-              {r.notes && (
-                <>
-                  <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Notes for procurement</p>
-                  <p className="mt-1 whitespace-pre-line text-[13px] text-slate-700">{r.notes}</p>
-                </>
-              )}
-              {r.cancel_reason && (
-                <p className="mt-4 rounded-md bg-slate-50 px-3 py-2 text-[13px] text-slate-700">Cancelled: {r.cancel_reason}</p>
-              )}
-            </Panel>
-          </div>
+          <Card className="xl:col-span-2">
+            <CardHeader title="Request" />
+            <Details
+              items={[
+                { label: "Request type", value: typeLabel },
+                { label: "Category", value: r.expand?.category?.name },
+                { label: "Department", value: r.expand?.department?.name },
+                { label: "Branch", value: r.expand?.branch?.name },
+                { label: "Delivery location", value: r.delivery_location },
+                { label: "Needed by", value: r.required_date ? fmtDate(r.required_date) : null },
+                { label: "Cost centre", value: r.cost_center },
+                { label: "Project", value: r.project },
+                { label: "Action plan", value: r.expand?.action_plan?.title },
+                { label: "Preferred supplier", value: r.preferred_supplier },
+                { label: "Created", value: fmtDateTime(r.created) },
+                { label: "Submitted", value: r.submitted_at ? fmtDateTime(r.submitted_at) : null },
+                { label: "Justification", value: r.justification ? <span className="whitespace-pre-line">{r.justification}</span> : null, wide: true },
+                ...(r.notes ? [{ label: "Notes for procurement", value: <span className="whitespace-pre-line">{r.notes}</span>, wide: true }] : []),
+              ]}
+            />
+          </Card>
           <div className="space-y-4">
             {r.status !== "cancelled" && (
               <BudgetPanel
@@ -265,67 +251,71 @@ export default function RequisitionDetail() {
                 allowOverride={["draft", "returned"].includes(r.status)} onDone={refresh} stacked
               />
             )}
-            <Panel title="Details">
-              <KeyValues
-                columns={1}
-                items={[
-                  { label: "Request type", value: typeLabel },
-                  { label: "Category", value: r.expand?.category?.name },
-                  { label: "Branch", value: r.expand?.branch?.name },
-                  { label: "Delivery location", value: r.delivery_location },
-                  { label: "Cost center", value: r.cost_center },
-                  { label: "Project", value: r.project },
-                  { label: "Action plan", value: r.expand?.action_plan?.title },
-                  { label: "Preferred supplier", value: r.preferred_supplier },
-                  { label: "Created", value: format(new Date(r.created), "d MMM yyyy, HH:mm") },
-                  { label: "Submitted", value: r.submitted_at ? format(new Date(r.submitted_at), "d MMM yyyy, HH:mm") : null },
-                ]}
-              />
-            </Panel>
-            {!!(rfqs.data?.length || (rfqs.data as any)?.pos?.length) && (
-              <Panel title="Sourcing">
-                <ul className="space-y-2">
-                  {rfqs.data.map((x: any) => (
-                    <li key={x.id} className="text-[13px]">
-                      <Link className="font-medium text-primaryDark hover:underline" to={`/dashboard/procurement/rfqs/${x.id}`}>{x.number}</Link>{" "}
-                      <StatusBadge status={x.status} map={RFQ_STATUS} />
-                      {x.expand?.awarded_quotation && (
-                        <p className="text-[12px] text-slate-600">
-                          Awarded to {x.expand.awarded_quotation.expand?.supplier?.name} · {money(x.expand.awarded_quotation.grand_total, x.expand.awarded_quotation.currency)}
-                        </p>
-                      )}
+            {(sourcingRfqs.length > 0 || sourcingPos.length > 0) && (
+              <Card>
+                <CardHeader title="Sourcing" subtitle="Quotations and orders raised from this requisition." />
+                <ul className="divide-y divide-ims-divider">
+                  {sourcingRfqs.map((x: any) => (
+                    <li key={x.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <TwoLine clamp={false}
+                        main={<Link className="whitespace-nowrap font-mono font-semibold text-ims-link hover:underline" to={`/dashboard/procurement/rfqs/${x.id}`}>{x.number}</Link>}
+                        sub={x.expand?.awarded_quotation ? `Awarded to ${x.expand.awarded_quotation.expand?.supplier?.name} · ${money(x.expand.awarded_quotation.grand_total, x.expand.awarded_quotation.currency)}` : "Request for quotation"}
+                      />
+                      <StatusBadge status={x.status} map={RFQ_STATUS} hideNote />
                     </li>
                   ))}
-                  {((rfqs.data as any)?.pos || []).map((po: any) => (
-                    <li key={po.id} className="text-[13px]">
-                      <Link className="font-medium text-primaryDark hover:underline" to={`/dashboard/procurement/purchase-orders/${po.id}`}>{po.number}</Link>{" "}
-                      <StatusBadge status={po.status} map={PO_STATUS} />
-                      <p className="text-[12px] text-slate-600">{po.expand?.supplier?.name} · {money(po.grand_total, po.currency)}{po.source === "direct" ? " · direct purchase" : ""}</p>
+                  {sourcingPos.map((po: any) => (
+                    <li key={po.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <TwoLine clamp={false}
+                        main={<Link className="whitespace-nowrap font-mono font-semibold text-ims-link hover:underline" to={`/dashboard/procurement/purchase-orders/${po.id}`}>{po.number}</Link>}
+                        sub={`${po.expand?.supplier?.name || "Supplier"} · ${money(po.grand_total, po.currency)}${po.source === "direct" ? " · direct purchase" : ""}`}
+                      />
+                      <StatusBadge status={po.status} map={PO_STATUS} hideNote />
                     </li>
                   ))}
                 </ul>
-              </Panel>
+              </Card>
             )}
-            <Panel title="Documents">
-              {!r.attachments?.length ? (
-                <p className="text-[13px] text-slate-500">No attachments.</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {r.attachments.map((f: string) => (
-                    <li key={f}>
-                      <a className="flex items-center gap-2 truncate text-[13px] text-primaryDark hover:underline" href={pocketbase.files.getUrl(r, f)} target="_blank" rel="noreferrer">
-                        <FileText size={14} className="shrink-0" /> {f}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Panel>
           </div>
         </div>
       )}
 
-      {tab === "approval" && <ApprovalTracker approval={approval} actions={actions.data || []} />}
+      {tab === "items" && (
+        <Card padded={false}>
+          <div className="px-5 pt-5">
+            <CardHeader title="Items and services" subtitle={`Subtotal ${fmtMoney(r.subtotal)} · tax ${fmtMoney(r.tax_total)} · total ${fmtMoney(r.total)}`} />
+          </div>
+          <DataTable
+            columns={itemColumns}
+            rows={items}
+            rowKey={(it, i) => String(it.line ?? i)}
+            minWidth={640}
+            caption="Items and services"
+            empty={<EmptyState compact text="No items on this requisition yet." />}
+          />
+        </Card>
+      )}
+
+      {tab === "approvals" && <ApprovalTracker approval={approval} actions={actions.data || []} />}
+
+      {tab === "documents" && (
+        <Card>
+          <CardHeader title="Documents" subtitle="Quotes, specifications and other files attached by the requester." />
+          {!r.attachments?.length ? (
+            <EmptyState compact icon={FileText} text="No documents attached." action={isRequester && editable ? <ButtonLink to={`${LIST}/${r.id}/edit`} icon={Pencil}>Add documents</ButtonLink> : undefined} />
+          ) : (
+            <ul className="divide-y divide-ims-divider">
+              {r.attachments.map((f: string) => (
+                <li key={f} className="py-2.5 first:pt-0 last:pb-0">
+                  <a className="flex min-w-0 items-center gap-2 text-t-body font-semibold text-ims-link hover:underline" href={pocketbase.files.getUrl(r, f)} target="_blank" rel="noreferrer">
+                    <FileText size={16} className="shrink-0" aria-hidden /> <span className="truncate">{f}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       {tab === "activity" && <Activity actions={actions.data || []} audit={history.data?.items || []} loading={history.isLoading} />}
 
@@ -346,10 +336,10 @@ export default function RequisitionDetail() {
           setDialog(null);
           if (kind === "delete") {
             queryClient.invalidateQueries(["record-table"]);
-            navigate("/dashboard/procurement/requisitions");
+            navigate(LIST);
           } else refresh();
         }}
       />
-    </div>
+    </Page>
   );
 }

@@ -1,17 +1,23 @@
 import pocketbase from "@/lib/pocketbase";
 
 export type Tone = "neutral" | "info" | "warning" | "success" | "danger" | "violet";
+/**
+ * A stored status shown in the system glossary: `label` is the glossary word (Draft, Pending approval,
+ * Approved, In progress, Converted to PO, Completed, Closed, Returned, Rejected, Cancelled, Active,
+ * Inactive) and `note` the detail shown under it ("Sent to supplier").
+ */
+export type StatusMeta = { label: string; tone: Tone; note?: string };
 
 /** One status vocabulary for every workflow document (see AUDIT.md §34). */
-export const DOC_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const DOC_STATUS: Record<string, StatusMeta> = {
   draft: { label: "Draft", tone: "neutral" },
   pending_approval: { label: "Pending approval", tone: "warning" },
-  pending: { label: "Pending", tone: "warning" },
+  pending: { label: "Pending approval", tone: "warning" },
   approved: { label: "Approved", tone: "success" },
   rejected: { label: "Rejected", tone: "danger" },
   returned: { label: "Returned", tone: "violet" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
-  converted_to_rfq: { label: "Converted to RFQ", tone: "info" },
+  cancelled: { label: "Cancelled", tone: "danger" },
+  converted_to_rfq: { label: "In progress", tone: "info", note: "Sent for quotation" },
   converted_to_po: { label: "Converted to PO", tone: "info" },
   completed: { label: "Completed", tone: "success" },
 };
@@ -44,7 +50,7 @@ export const ACTION_LABELS: Record<string, string> = {
   submit: "submitted for approval",
   approve: "approved",
   reject: "rejected",
-  return: "sent back for changes",
+  return: "returned for changes",
   delegate: "delegated",
   escalate: "escalated",
   comment: "commented",
@@ -156,35 +162,35 @@ export function errorMessage(e: any, fallback = "The request could not be comple
 }
 
 // ------------------------------------------------------------------ sourcing (Phase 2)
-export const RFQ_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const RFQ_STATUS: Record<string, StatusMeta> = {
   draft: { label: "Draft", tone: "neutral" },
-  sent: { label: "Open for quotes", tone: "info" },
-  closed: { label: "Closed — evaluating", tone: "warning" },
-  awarded: { label: "Awarded", tone: "success" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  sent: { label: "In progress", tone: "info", note: "Open for quotes" },
+  closed: { label: "In progress", tone: "info", note: "Evaluating quotes" },
+  awarded: { label: "Completed", tone: "success", note: "Awarded" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
 
-export const INVITE_STATUS: Record<string, { label: string; tone: Tone }> = {
-  invited: { label: "Invited", tone: "neutral" },
-  sent: { label: "Sent", tone: "info" },
-  viewed: { label: "Viewed", tone: "info" },
-  quoted: { label: "Quoted", tone: "success" },
-  late: { label: "Quoted late", tone: "warning" },
-  declined: { label: "Declined", tone: "danger" },
+export const INVITE_STATUS: Record<string, StatusMeta> = {
+  invited: { label: "Draft", tone: "neutral", note: "Not sent yet" },
+  sent: { label: "In progress", tone: "info", note: "Sent" },
+  viewed: { label: "In progress", tone: "info", note: "Viewed" },
+  quoted: { label: "Completed", tone: "success", note: "Quoted" },
+  late: { label: "Completed", tone: "success", note: "Quoted late" },
+  declined: { label: "Rejected", tone: "danger", note: "Declined" },
 };
 
-export const QUOTE_STATUS: Record<string, { label: string; tone: Tone }> = {
-  received: { label: "Received", tone: "info" },
-  accepted: { label: "Selected", tone: "success" },
-  rejected: { label: "Not selected", tone: "neutral" },
+export const QUOTE_STATUS: Record<string, StatusMeta> = {
+  received: { label: "In progress", tone: "info", note: "Being evaluated" },
+  accepted: { label: "Approved", tone: "success", note: "Selected" },
+  rejected: { label: "Rejected", tone: "danger", note: "Not selected" },
 };
 
-export const SUPPLIER_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const SUPPLIER_STATUS: Record<string, StatusMeta> = {
   active: { label: "Active", tone: "success" },
   inactive: { label: "Inactive", tone: "neutral" },
-  blacklisted: { label: "Blacklisted", tone: "danger" },
-  draft: { label: "Draft — not submitted", tone: "neutral" },
-  under_review: { label: "Under review", tone: "warning" },
+  blacklisted: { label: "Inactive", tone: "neutral", note: "Blacklisted" },
+  draft: { label: "Draft", tone: "neutral", note: "Not submitted" },
+  under_review: { label: "Pending approval", tone: "warning", note: "Under review" },
   rejected: { label: "Rejected", tone: "danger" },
 };
 
@@ -239,20 +245,20 @@ export const sourcingApi = {
 };
 
 // ------------------------------------------------------------------ purchase orders & inventory (Phase 3)
-export const PO_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const PO_STATUS: Record<string, StatusMeta> = {
   draft: { label: "Draft", tone: "neutral" },
   pending_approval: { label: "Pending approval", tone: "warning" },
   returned: { label: "Returned", tone: "violet" },
   rejected: { label: "Rejected", tone: "danger" },
-  approved: { label: "Approved — not sent", tone: "info" },
-  sent: { label: "Sent to supplier", tone: "info" },
-  acknowledged: { label: "Acknowledged", tone: "info" },
-  partially_received: { label: "Partially received", tone: "warning" },
-  fully_received: { label: "Fully received", tone: "success" },
-  partially_invoiced: { label: "Partially billed", tone: "info" },
-  fully_invoiced: { label: "Fully billed", tone: "success" },
+  approved: { label: "Approved", tone: "success", note: "Not sent yet" },
+  sent: { label: "In progress", tone: "info", note: "Sent to supplier" },
+  acknowledged: { label: "In progress", tone: "info", note: "Acknowledged by supplier" },
+  partially_received: { label: "In progress", tone: "info", note: "Partly received" },
+  fully_received: { label: "In progress", tone: "info", note: "Received, to bill" },
+  partially_invoiced: { label: "In progress", tone: "info", note: "Partly billed" },
+  fully_invoiced: { label: "In progress", tone: "info", note: "Billed" },
   completed: { label: "Completed", tone: "success" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "danger" },
   closed: { label: "Closed", tone: "neutral" },
 };
 
@@ -287,17 +293,17 @@ export const purchasingApi = {
 };
 
 // ------------------------------------------------------------------ finance (Phase 4)
-export const INVOICE_STATUS: Record<string, { label: string; tone: Tone }> = {
-  received: { label: "Received", tone: "neutral" },
-  exception: { label: "Match exception", tone: "danger" },
-  matched: { label: "Matched", tone: "info" },
+export const INVOICE_STATUS: Record<string, StatusMeta> = {
+  received: { label: "In progress", tone: "info", note: "Received, to match" },
+  exception: { label: "Returned", tone: "violet", note: "Match exception" },
+  matched: { label: "In progress", tone: "info", note: "Matched" },
   pending_approval: { label: "Pending approval", tone: "warning" },
-  approved: { label: "Approved — to pay", tone: "info" },
+  approved: { label: "Approved", tone: "success", note: "To pay" },
   returned: { label: "Returned", tone: "violet" },
   rejected: { label: "Rejected", tone: "danger" },
-  partially_paid: { label: "Partially paid", tone: "warning" },
-  paid: { label: "Paid", tone: "success" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  partially_paid: { label: "In progress", tone: "info", note: "Partly paid" },
+  paid: { label: "Completed", tone: "success", note: "Paid" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
 
 export const PAYMENT_METHODS: Record<string, string> = {
@@ -335,25 +341,25 @@ export const financeApi = {
 };
 
 // ------------------------------------------------------------------ phase 5: returns, contracts, plans, onboarding, reports
-export const RETURN_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const RETURN_STATUS: Record<string, StatusMeta> = {
   draft: { label: "Draft", tone: "neutral" },
   pending_approval: { label: "Pending approval", tone: "warning" },
-  returned_for_changes: { label: "Sent back", tone: "violet" },
+  returned_for_changes: { label: "Returned", tone: "violet" },
   rejected: { label: "Rejected", tone: "danger" },
-  approved: { label: "Approved — to dispatch", tone: "info" },
-  dispatched: { label: "Returned to supplier", tone: "info" },
-  credited: { label: "Credited", tone: "success" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  approved: { label: "Approved", tone: "success", note: "To dispatch" },
+  dispatched: { label: "In progress", tone: "info", note: "Sent back to supplier" },
+  credited: { label: "Completed", tone: "success", note: "Credited" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
-export const CONTRACT_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const CONTRACT_STATUS: Record<string, StatusMeta> = {
   draft: { label: "Draft", tone: "neutral" },
   pending_approval: { label: "Pending approval", tone: "warning" },
-  returned: { label: "Sent back", tone: "violet" },
+  returned: { label: "Returned", tone: "violet" },
   rejected: { label: "Rejected", tone: "danger" },
-  active: { label: "Active", tone: "success" },
-  expired: { label: "Expired", tone: "neutral" },
-  terminated: { label: "Terminated", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  active: { label: "Active", tone: "success", note: "In force" },
+  expired: { label: "Closed", tone: "neutral", note: "Expired" },
+  terminated: { label: "Closed", tone: "neutral", note: "Terminated" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
 export const CONTRACT_TYPES: Record<string, string> = {
   framework: "Framework agreement",
@@ -364,19 +370,19 @@ export const CONTRACT_TYPES: Record<string, string> = {
   consultancy: "Consultancy",
   other: "Other",
 };
-export const PLAN_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const PLAN_STATUS: Record<string, StatusMeta> = {
   draft: { label: "Draft", tone: "neutral" },
   pending_approval: { label: "Pending approval", tone: "warning" },
-  returned: { label: "Sent back", tone: "violet" },
+  returned: { label: "Returned", tone: "violet" },
   rejected: { label: "Rejected", tone: "danger" },
   approved: { label: "Approved", tone: "success" },
   closed: { label: "Closed", tone: "neutral" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
 export const PLAN_METHODS: Record<string, string> = { rfq: "Request for quotation", direct: "Direct purchase", open_tender: "Open tender", framework: "Framework / call-off" };
-export const SUPPLIER_ONBOARDING: Record<string, { label: string; tone: Tone }> = {
-  draft: { label: "Draft — not yet submitted", tone: "neutral" },
-  under_review: { label: "Under review", tone: "warning" },
+export const SUPPLIER_ONBOARDING: Record<string, StatusMeta> = {
+  draft: { label: "Draft", tone: "neutral", note: "Not submitted" },
+  under_review: { label: "Pending approval", tone: "warning", note: "Under review" },
   rejected: { label: "Rejected", tone: "danger" },
 };
 

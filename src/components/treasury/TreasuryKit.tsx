@@ -8,9 +8,8 @@ import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Clock3, Landmark, Wallet } f
 import { activeAccounts } from "@/lib/treasury";
 import { rwf, showDay } from "@/lib/ims";
 import { inputCls } from "@/components/portal/kit";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/utils";
+import { ConfirmDialog } from "@/components/ims";
 
 /** Whole-RWF amount input: digits only, shown with thousands separators. */
 export function MoneyInput({ value, onChange, id, invalid, placeholder = "0", className, disabled }: {
@@ -25,7 +24,7 @@ export function MoneyInput({ value, onChange, id, invalid, placeholder = "0", cl
   const shown = value === "" ? "" : Number(value).toLocaleString("en-US");
   return (
     <div className="relative">
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] font-medium text-slate-400">RWF</span>
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] font-medium text-ims-faint">RWF</span>
       <input
         id={id}
         inputMode="numeric"
@@ -87,8 +86,8 @@ export function AccountSelect({ value, onChange, kind, exclude, id, invalid, pla
 export function Flow({ direction, amount, className, bold }: { direction: string; amount: number; className?: string; bold?: boolean }) {
   const inn = direction === "in";
   return (
-    <span className={cn("inline-flex items-center justify-end gap-1 whitespace-nowrap tabular-nums", bold && "font-semibold", inn ? "text-emerald-700" : "text-slate-800", className)}>
-      {inn ? <ArrowDownLeft size={13} aria-hidden /> : <ArrowUpRight size={13} className="text-slate-400" aria-hidden />}
+    <span className={cn("inline-flex items-center justify-end gap-1 whitespace-nowrap tabular-nums", bold && "font-semibold", inn ? "text-emerald-700" : "text-ims-text", className)}>
+      {inn ? <ArrowDownLeft size={13} aria-hidden /> : <ArrowUpRight size={13} className="text-ims-faint" aria-hidden />}
       {inn ? "+" : "−"}{Math.round(amount).toLocaleString("en-US")}
     </span>
   );
@@ -112,7 +111,7 @@ export function lastMonthEnd(today = new Date()) {
   return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0)).toISOString().slice(0, 10);
 }
 
-/** Confirmation with a mandatory reason (cancel, reverse). */
+/** Confirmation with a mandatory reason (cancel, reverse): the ims ConfirmDialog. */
 export function ReasonDialog({ open, title, description, confirmLabel, min = 3, danger = true, onConfirm, onClose }: {
   open: boolean;
   title: string;
@@ -123,51 +122,27 @@ export function ReasonDialog({ open, title, description, confirmLabel, min = 3, 
   onConfirm: (reason: string) => Promise<unknown>;
   onClose: () => void;
 }) {
-  const [reason, setReason] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  React.useEffect(() => {
-    if (open) setReason("");
-  }, [open]);
-  const short = reason.trim().length < min;
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md bg-white">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <label className="block text-[12.5px] font-medium text-slate-700">
-          Reason{min > 3 && <span className="font-normal text-slate-500"> (at least {min} characters)</span>}
-          <textarea value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-        </label>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Back</Button>
-          <Button
-            variant={danger ? "danger" : "default"}
-            disabled={short || busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await onConfirm(reason.trim());
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {busy ? "Working…" : confirmLabel}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ConfirmDialog
+      open={open}
+      onClose={onClose}
+      title={title}
+      description={description}
+      confirmLabel={confirmLabel}
+      danger={danger}
+      reason={{ label: "Reason", min, required: true }}
+      onConfirm={onConfirm}
+    />
   );
 }
 
+/** One key figure (KPI-band style). */
 export function Stat({ label, value, sub, tone = "default" }: { label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "default" | "warning" | "success" }) {
   return (
-    <div className="min-w-0 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-card">
-      <p className="truncate text-[12px] text-slate-500">{label}</p>
-      <p className={cn("mt-0.5 truncate text-[19px] font-semibold leading-tight tabular-nums", tone === "warning" ? "text-amber-700" : tone === "success" ? "text-emerald-700" : "text-slate-900")}>{value}</p>
-      {sub && <p className="mt-0.5 truncate text-[11.5px] text-slate-400">{sub}</p>}
+    <div className="min-w-0 rounded-card border border-ims-border bg-ims-card px-5 py-4">
+      <p className="truncate text-t-small text-ims-muted">{label}</p>
+      <p className={cn("mt-1 break-words text-t-kpi tabular-nums", tone === "warning" ? "text-ims-warning" : tone === "success" ? "text-ims-success" : "text-ims-text")}>{value}</p>
+      {sub && <p className="mt-0.5 truncate text-t-small text-ims-muted">{sub}</p>}
     </div>
   );
 }

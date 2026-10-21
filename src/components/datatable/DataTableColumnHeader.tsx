@@ -1,22 +1,6 @@
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  CaretSortIcon,
-  EyeNoneIcon,
-} from "@radix-ui/react-icons";
-
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+import { ArrowDownIcon, ArrowUpIcon, CaretSortIcon } from "@radix-ui/react-icons";
 import { Column } from "@tanstack/react-table";
-
-import { DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-
 import { cn } from "@/utils";
-import { Button } from "../ui/button";
 interface DataTableColumnHeaderProps<TData, TValue>
   extends React.HTMLAttributes<HTMLDivElement> {
   column: Column<TData, TValue>;
@@ -32,42 +16,18 @@ function DataTableColumnHeader<TData, TValue>({
     return <div className={cn(className)}>{title}</div>;
   }
 
+  // Same as the ims DataTable: click to sort (largest / newest first), click again to reverse.
+  const sorted = column.getIsSorted();
   return (
-    <div className={cn("flex items-center space-x-2", className)}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 truncate px-3 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-800 data-[state=open]:bg-slate-100"
-          >
-            <span className="truncate">{title}</span>
-            {column.getIsSorted() === "desc" ? (
-              <ArrowDownIcon className="ml-2 h-4 w-4" />
-            ) : column.getIsSorted() === "asc" ? (
-              <ArrowUpIcon className="ml-2 h-4 w-4" />
-            ) : (
-              <CaretSortIcon className="ml-2 h-4 w-4" />
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuItem onClick={() => column.toggleSorting(false)}>
-            <ArrowUpIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground/70" />
-            Asc
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => column.toggleSorting(true)}>
-            <ArrowDownIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground/70" />
-            Desc
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => column.toggleVisibility(false)}>
-            <EyeNoneIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground/70" />
-            Hide
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+    <button
+      type="button"
+      onClick={() => column.toggleSorting(sorted === "desc" ? false : true)}
+      className={cn("inline-flex items-center gap-1 rounded-sm text-[12.5px] font-semibold text-ims-muted hover:text-ims-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus", sorted && "text-ims-text", className)}
+      aria-label={`Sort by ${title}`}
+    >
+      <span className="truncate">{title}</span>
+      {sorted === "desc" ? <ArrowDownIcon className="h-3.5 w-3.5" /> : sorted === "asc" ? <ArrowUpIcon className="h-3.5 w-3.5" /> : <CaretSortIcon className="h-3.5 w-3.5 text-ims-faint" />}
+    </button>
   );
 }
 

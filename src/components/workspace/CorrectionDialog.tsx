@@ -82,14 +82,14 @@ export default function CorrectionDialog({ open, onClose, days, uid }: { open: b
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days to correct">
             {days.map((d) => (
               <button key={d.key} type="button" aria-pressed={picked.has(d.key)} onClick={() => toggle(d.key)}
-                className={cn("rounded-lg border px-2.5 py-1.5 text-[12.5px] font-semibold", picked.has(d.key) ? "border-[#1466C0] bg-[#EAF2FC] text-[#0B3A6F]" : "border-[#DDE3EC] bg-white text-[#5B6577] hover:bg-[#F8FAFC]")}>
+                className={cn("rounded-lg border px-2.5 py-1.5 text-[12.5px] font-semibold", picked.has(d.key) ? "border-ims-link bg-ims-info-bg text-ims-primary" : "border-ims-field bg-white text-ims-muted hover:bg-ims-thead")}>
                 {format(d.date, "EEE d MMM")}
               </button>
             ))}
           </div>
-        ) : <p className="text-[13px] text-slate-500">No working day without a clock-in in the last 30 days.</p>}
+        ) : <p className="text-[13px] text-ims-muted">No working day without a clock-in in the last 30 days.</p>}
         {tried && errors.days && <p className="text-[12px] text-red-600">{errors.days}</p>}
-        <p className="text-[12px] text-slate-500">Days within the last 90 days only. Days on approved leave or public holidays are not needed.</p>
+        <p className="text-[12px] text-ims-muted">Days within the last 90 days only. Days on approved leave or public holidays are not needed.</p>
       </FormBlock>
       <FormBlock icon={FileText} title="Why">
         <div className="grid gap-4">

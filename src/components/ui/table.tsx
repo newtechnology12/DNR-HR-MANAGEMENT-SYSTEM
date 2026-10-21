@@ -22,7 +22,7 @@ const TableHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <thead
     ref={ref}
-    className={cn("sticky top-0 z-10 border-slate-200 bg-slate-50 [&_tr]:border-b", className)}
+    className={cn("sticky top-0 z-10 bg-ims-thead [&_tr]:border-b [&_tr]:border-ims-divider", className)}
     {...props}
   />
 ));
@@ -34,7 +34,7 @@ const TableBody = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <tbody
     ref={ref}
-    className={cn("[&_tr:last-child]:border-0 [&_tr:nth-child(even)]:bg-slate-50/70", className)}
+    className={cn("[&_tr:last-child]:border-0", className)}
     {...props}
   />
 ));
@@ -47,7 +47,7 @@ const TableFooter = React.forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      "border-t bg-slate-100/50 font-medium [&>tr]:last:border-b-0 dark:bg-slate-800/50",
+      "border-t-2 border-ims-border bg-ims-thead font-bold [&>tr]:last:border-b-0",
       className
     )}
     {...props}
@@ -62,7 +62,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "border-b transition-colors hover:bg-slate-100/50 data-[state=selected]:bg-slate-100 dark:hover:bg-slate-800/50 dark:data-[state=selected]:bg-slate-800",
+      "border-b border-ims-divider transition-colors hover:bg-ims-hover data-[state=selected]:bg-ims-info-bg",
       className
     )}
     {...props}
@@ -77,7 +77,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-10 whitespace-nowrap px-3 text-left align-middle text-[11.5px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 border-r border-slate-200 last:border-r-0 [&:has([role=checkbox])]:pr-0 dark:text-slate-400",
+      "h-11 whitespace-nowrap border-r border-ims-divider bg-ims-thead px-4 text-left align-middle text-[12.5px] font-semibold text-ims-muted last:border-r-0 [&:has([role=checkbox])]:pr-0",
       className
     )}
     {...props}
@@ -92,9 +92,9 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={cn(
-      "align-middle text-[13px] font-medium text-slate-700 border-r border-slate-100 last:border-r-0 [&:has([role=checkbox])]:pr-0 ",
+      "h-row border-r border-ims-divider align-middle text-[14px] text-ims-text last:border-r-0 [&:has([role=checkbox])]:pr-0",
       className,
-      " !py-2 !px-3"
+      " !py-2 !px-4"
     )}
     {...props}
   />
@@ -107,7 +107,7 @@ const TableCaption = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <caption
     ref={ref}
-    className={cn("mt-4 text-sm text-slate-500 dark:text-slate-400", className)}
+    className={cn("mt-4 text-t-small text-ims-muted", className)}
     {...props}
   />
 ));

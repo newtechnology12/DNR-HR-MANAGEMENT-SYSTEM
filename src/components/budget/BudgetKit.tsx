@@ -18,16 +18,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ListSkeleton } from "@/components/enterprise/ui";
 import { usePermissions } from "@/context/auth.context";
 import { cn } from "@/utils";
+import { Select } from "@/components/ims";
 
 const STATUS_ICON = { green: CheckCircle2, amber: AlertTriangle, red: AlertOctagon };
 
 export function UseBadge({ status, pct }: { status: UseStatus; pct?: number }) {
   const Icon = STATUS_ICON[status];
   return (
-    <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12px] font-medium text-slate-700">
+    <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12px] font-medium text-ims-body">
       <Icon size={13} style={{ color: STATUS_COLOR[status] }} aria-hidden />
       {pct !== undefined && <span className="tabular-nums">{pct.toFixed(pct >= 100 ? 0 : 1)}%</span>}
-      <span className="text-slate-500">{STATUS_LABEL[status]}</span>
+      <span className="text-ims-muted">{STATUS_LABEL[status]}</span>
     </span>
   );
 }
@@ -51,14 +52,14 @@ export function UseBar({ line, compact }: { line: Pick<BudgetLineUsage, "budget"
 export function UseLegend({ thresholds }: { thresholds?: { amber: number; red: number } }) {
   const t = thresholds || { amber: 75, red: 90 };
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-slate-600">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ims-body">
       <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SERIES.actual }} /> Actual</span>
       <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SERIES.committed }} /> Committed</span>
       <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SERIES.track }} /> Available</span>
-      <span className="mx-1 hidden h-3 w-px bg-slate-200 sm:inline-block" />
-      <UseBadge status="green" /> <span className="-ml-3 text-slate-400">&lt; {t.amber}%</span>
-      <UseBadge status="amber" /> <span className="-ml-3 text-slate-400">{t.amber}–{t.red}%</span>
-      <UseBadge status="red" /> <span className="-ml-3 text-slate-400">&gt; {t.red}%</span>
+      <span className="mx-1 hidden h-3 w-px bg-ims-divider sm:inline-block" />
+      <UseBadge status="green" /> <span className="-ml-3 text-ims-faint">&lt; {t.amber}%</span>
+      <UseBadge status="amber" /> <span className="-ml-3 text-ims-faint">{t.amber}–{t.red}%</span>
+      <UseBadge status="red" /> <span className="-ml-3 text-ims-faint">&gt; {t.red}%</span>
     </div>
   );
 }
@@ -67,16 +68,16 @@ function ChartTip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] shadow-card-hover">
-      <p className="mb-1 font-semibold text-slate-900">{label}</p>
+    <div className="rounded-md border border-ims-border bg-ims-card px-3 py-2 text-[12px] shadow-card-hover">
+      <p className="mb-1 font-semibold text-ims-text">{label}</p>
       {[["Actual", row.actual, SERIES.actual], ["Committed", row.committed, SERIES.committed], ["Available", row.available, SERIES.track]].map(([n, v, c]) => (
-        <p key={n as string} className="flex items-center gap-2 text-slate-600">
+        <p key={n as string} className="flex items-center gap-2 text-ims-body">
           <span className="h-2 w-2 rounded-full" style={{ background: c as string }} />
           {n}
-          <span className="ml-auto pl-4 font-semibold tabular-nums text-slate-900">{rwf(v as number)}</span>
+          <span className="ml-auto pl-4 font-semibold tabular-nums text-ims-text">{rwf(v as number)}</span>
         </p>
       ))}
-      <p className="mt-1 flex justify-between border-t border-slate-100 pt-1 text-slate-600">Budget <span className="font-semibold tabular-nums text-slate-900">{rwf(row.budget)}</span></p>
+      <p className="mt-1 flex justify-between border-t border-ims-divider pt-1 text-ims-body">Budget <span className="font-semibold tabular-nums text-ims-text">{rwf(row.budget)}</span></p>
       <p className="mt-1"><UseBadge status={row.status} pct={row.used_pct} /></p>
     </div>
   );
@@ -126,8 +127,8 @@ export function groupUsage(items: BudgetLineUsage[], key: (i: BudgetLineUsage) =
 
 // ------------------------------------------------------------------ line picker (requisitions, POs, vouchers)
 export function BudgetLinePicker({
-  value, onChange, department, amount, disabled, anyDepartment,
-}: { value: string; onChange: (id: string) => void; department?: string; amount?: number; disabled?: boolean; anyDepartment?: boolean }) {
+  value, onChange, department, amount, disabled, anyDepartment, id, invalid,
+}: { value: string; onChange: (id: string) => void; department?: string; amount?: number; disabled?: boolean; anyDepartment?: boolean; id?: string; invalid?: boolean }) {
   const lines = useQuery(["budget-line-options", department, anyDepartment], async () => {
     const fy = await pocketbase.collection("fiscal_years").getFirstListItem("is_current = true").catch(() => null);
     const filter = [`status = "active"`, `kind != "revenue"`, fy ? `fiscal_year = "${fy.id}"` : "", department && !anyDepartment ? `department = "${department}"` : ""].filter(Boolean).join(" && ");
@@ -137,11 +138,12 @@ export function BudgetLinePicker({
   const a = avail.data;
   return (
     <div className="space-y-1.5">
-      <select
+      <Select
+        id={id}
+        invalid={invalid}
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="block h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-[14px] text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 sm:h-10 sm:text-[13.5px]"
         aria-label="Budget line"
       >
         <option value="">Choose the budget line…</option>
@@ -150,14 +152,14 @@ export function BudgetLinePicker({
             {l.code} — {l.expand?.gl_account?.name || l.name} · {l.expand?.funding_source?.code || ""}{l.expand?.project ? ` · ${l.expand.project.code}` : ""}
           </option>
         ))}
-      </select>
+      </Select>
       {value && a && (
-        <p className={cn("flex items-center gap-1.5 text-[12.5px]", a.sufficient ? "text-emerald-700" : "text-red-700")}>
+        <p className={cn("flex items-center gap-1.5 text-[12.5px]", a.sufficient ? "text-ims-success" : "text-ims-danger")}>
           {a.sufficient ? <CheckCircle2 size={13} /> : <AlertOctagon size={13} />}
           {rwf(a.available)} available{amount ? (a.sufficient ? " — enough for this request" : ` — ${rwf(amount - a.available)} short; submission will be blocked unless the DAF overrides`) : ""}
         </p>
       )}
-      {!lines.isLoading && !(lines.data || []).length && <p className="text-[12.5px] text-amber-700">No active budget line for your department. Ask the Budget Officer.</p>}
+      {!lines.isLoading && !(lines.data || []).length && <p className="text-[12.5px] text-ims-warning">No active budget line for your department. Ask the Budget Officer.</p>}
     </div>
   );
 }
@@ -183,18 +185,18 @@ export function OverrideButton({ documentType, documentId, number, onDone, size 
   };
   return (
     <>
-      <Button size={size} variant="outline" onClick={() => setOpen(true)} className="border-amber-300 text-amber-800 hover:bg-amber-50">
+      <Button size={size} variant="outline" onClick={() => setOpen(true)} className="border-ims-warning/30 text-ims-warning hover:bg-ims-warning-bg">
         <ShieldAlert size={14} /> Override budget
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md bg-white">
+        <DialogContent className="max-w-md bg-ims-card">
           <DialogHeader>
             <DialogTitle>Override budget control · {number}</DialogTitle>
             <DialogDescription>Allows this document to exceed its budget line. Your name and reason are recorded and the override is flagged in the budget reports for the Internal Auditor.</DialogDescription>
           </DialogHeader>
           <label className="block">
-            <span className="mb-1 block text-[12.5px] font-medium text-slate-700">Reason <span className="text-red-600">*</span></span>
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why may this spend exceed the budget, and how will it be covered?" className="h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <span className="mb-1 block text-[12.5px] font-medium text-ims-body">Reason <span className="text-ims-danger">*</span></span>
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why may this spend exceed the budget, and how will it be covered?" className="h-24 w-full rounded-md border border-ims-border px-3 py-2 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
           </label>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -239,8 +241,8 @@ export function BudgetPanel({
   };
   if (changing || (!lineId && editable)) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-card">
-        <p className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-slate-800"><Wallet size={15} className="text-slate-400" /> Budget line</p>
+      <div className="rounded-card border border-ims-border bg-ims-card px-4 py-3">
+        <p className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-ims-text"><Wallet size={15} className="text-ims-faint" /> Budget line</p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
           <div className="min-w-0 flex-1"><BudgetLinePicker value={pick} onChange={setPick} department={department} amount={need || undefined} anyDepartment={!department} /></div>
           <Button size="sm" onClick={save} disabled={!pick || pick === lineId}>Save line</Button>
@@ -251,35 +253,35 @@ export function BudgetPanel({
   }
   if (!lineId) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-900">
+      <div className="flex items-center gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
         <AlertTriangle size={15} /> No budget line yet — it must be chosen before {number} can be submitted.
       </div>
     );
   }
   return (
-    <div className={cn("flex flex-col gap-2 rounded-lg border bg-white px-4 py-3 shadow-card", !stacked && "lg:flex-row lg:items-center lg:justify-between", short && !overrideId ? "border-red-200" : "border-slate-200")}>
+    <div className={cn("flex flex-col gap-2 rounded-card border bg-ims-card px-4 py-3", !stacked && "lg:flex-row lg:items-center lg:justify-between", short && !overrideId ? "border-ims-danger/30" : "border-ims-border")}>
       <div className="flex min-w-0 items-start gap-3">
-        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500"><Wallet size={16} /></span>
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-ims-subtle text-ims-muted"><Wallet size={16} /></span>
         <div className="min-w-0">
-          <p className="text-[12px] text-slate-500">Charged to budget line</p>
-          <p className={cn("text-[13.5px] font-semibold text-slate-900", !stacked && "truncate")}><span className="font-mono">{a?.line.code || "…"}</span>{a?.line.name ? <span className="font-normal text-slate-600"> — {a.line.name}</span> : null}</p>
+          <p className="text-[12px] text-ims-muted">Charged to budget line</p>
+          <p className={cn("text-[13.5px] font-semibold text-ims-text", !stacked && "truncate")}><span className="font-mono">{a?.line.code || "…"}</span>{a?.line.name ? <span className="font-normal text-ims-body"> — {a.line.name}</span> : null}</p>
         </div>
         {a && <span className="mt-1 hidden sm:block"><UseBadge status={a.status} pct={a.used_pct} /></span>}
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12.5px]">
         {a && (
           <>
-            <span><span className="text-slate-500">Available </span><strong className={cn("tabular-nums", a.available < 0 ? "text-red-700" : "text-slate-900")}>{rwf(a.available)}</strong></span>
-            {need > 0 && <span><span className="text-slate-500">{committed ? "Still to commit " : "This document "}</span><strong className="tabular-nums text-slate-900">{rwf(need)}</strong></span>}
-            {committed > 0 && <span><span className="text-slate-500">Committed </span><strong className="tabular-nums text-slate-900">{rwf(committed)}</strong></span>}
+            <span><span className="text-ims-muted">Available </span><strong className={cn("tabular-nums", a.available < 0 ? "text-ims-danger" : "text-ims-text")}>{rwf(a.available)}</strong></span>
+            {need > 0 && <span><span className="text-ims-muted">{committed ? "Still to commit " : "This document "}</span><strong className="tabular-nums text-ims-text">{rwf(need)}</strong></span>}
+            {committed > 0 && <span><span className="text-ims-muted">Committed </span><strong className="tabular-nums text-ims-text">{rwf(committed)}</strong></span>}
             {need > 0 && (a.sufficient
-              ? <span className="flex items-center gap-1 text-emerald-700"><CheckCircle2 size={13} /> Enough budget</span>
+              ? <span className="flex items-center gap-1 text-ims-success"><CheckCircle2 size={13} /> Enough budget</span>
               : overrideId
-                ? <span className="flex items-center gap-1 font-medium text-amber-800"><ShieldAlert size={13} /> {rwf(need - a.available)} above the line — allowed by DAF override</span>
-                : <span className="flex items-center gap-1 font-medium text-red-700"><AlertOctagon size={13} /> {rwf(need - a.available)} short{a.control === "block" ? " — submission is blocked" : ""}</span>)}
+                ? <span className="flex items-center gap-1 font-medium text-ims-warning"><ShieldAlert size={13} /> {rwf(need - a.available)} above the line — allowed by DAF override</span>
+                : <span className="flex items-center gap-1 font-medium text-ims-danger"><AlertOctagon size={13} /> {rwf(need - a.available)} short{a.control === "block" ? " — submission is blocked" : ""}</span>)}
           </>
         )}
-        {overrideId && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800" title="The DAF allowed this document past budget control">OVERRIDE GRANTED</span>}
+        {overrideId && <span className="rounded bg-ims-warning-bg px-1.5 py-0.5 text-[11px] font-semibold text-ims-warning" title="The DAF allowed this document past budget control">Override granted</span>}
         {editable && <Button size="sm" variant="ghost" onClick={() => setChanging(true)}><Pencil size={13} /> Change</Button>}
         {short && allowOverride && !overrideId && can("override_budget") && <OverrideButton documentType={documentType} documentId={documentId} number={number} onDone={onDone} />}
       </div>
@@ -292,17 +294,17 @@ export function LineLedgerDialog({ line, onClose }: { line: BudgetLineUsage | nu
   const q = useQuery(["budget-line-ledger", line?.id], () => budgetApi.ledger(line!.id), { enabled: Boolean(line) });
   return (
     <Dialog open={Boolean(line)} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col bg-white">
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col bg-ims-card">
         <DialogHeader>
           <DialogTitle>{line?.code} — {line?.name}</DialogTitle>
           <DialogDescription>{line?.department_name} · {line?.funding_code}{line?.project_code ? ` · ${line.project_code}` : ""} · {line?.account}</DialogDescription>
         </DialogHeader>
         {line && (
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-100 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-ims-subtle sm:grid-cols-4">
             {[["Budget", line.budget], ["Committed", line.committed], ["Actual", line.actual], ["Available", line.available]].map(([k, v]) => (
-              <div key={k as string} className="bg-white px-3 py-2">
-                <p className="text-[11.5px] text-slate-500">{k}</p>
-                <p className={cn("text-[15px] font-semibold tabular-nums", k === "Available" && (v as number) < 0 ? "text-red-600" : "text-slate-900")}>{rwf(v as number)}</p>
+              <div key={k as string} className="bg-ims-card px-3 py-2">
+                <p className="text-[11.5px] text-ims-muted">{k}</p>
+                <p className={cn("text-[15px] font-semibold tabular-nums", k === "Available" && (v as number) < 0 ? "text-ims-danger" : "text-ims-text")}>{rwf(v as number)}</p>
               </div>
             ))}
           </div>
@@ -311,7 +313,7 @@ export function LineLedgerDialog({ line, onClose }: { line: BudgetLineUsage | nu
           {q.isLoading ? (
             <ListSkeleton rows={4} />
           ) : !q.data?.entries.length ? (
-            <p className="py-6 text-center text-[13px] text-slate-500">No commitments or actuals yet.</p>
+            <p className="py-6 text-center text-[13px] text-ims-muted">No commitments or actuals yet.</p>
           ) : (
             <table className="dnr-grid w-full text-[12.5px]">
               <thead><tr><th>Date</th><th>Movement</th><th>Document</th><th className="text-right">Amount</th></tr></thead>
@@ -321,14 +323,14 @@ export function LineLedgerDialog({ line, onClose }: { line: BudgetLineUsage | nu
                   const negative = e.type === "commitment_release" || e.type === "actual_reversal";
                   return (
                     <tr key={e.id}>
-                      <td className="whitespace-nowrap text-slate-600">{showDay(e.date)}</td>
+                      <td className="whitespace-nowrap text-ims-body">{showDay(e.date)}</td>
                       <td>
                         {LEDGER_TYPE[e.type] || e.type}
-                        {e.override && <span className="ml-1.5 rounded bg-amber-100 px-1 text-[10.5px] font-semibold text-amber-800">OVERRIDE</span>}
-                        <span className="block text-[11.5px] text-slate-500">{e.description}</span>
+                        {e.override && <span className="ml-1.5 rounded bg-ims-warning-bg px-1 text-[10.5px] font-semibold text-ims-warning">Override</span>}
+                        <span className="block text-[11.5px] text-ims-muted">{e.description}</span>
                       </td>
-                      <td>{link ? <Link to={link} className="font-mono text-primaryDark hover:underline" onClick={onClose}>{e.source_number}</Link> : <span className="font-mono">{e.source_number}</span>}</td>
-                      <td className={cn("text-right tabular-nums", negative ? "text-slate-500" : "text-slate-900")}>{negative ? "−" : ""}{rwf(e.amount)}</td>
+                      <td>{link ? <Link to={link} className="font-mono text-ims-link hover:underline" onClick={onClose}>{e.source_number}</Link> : <span className="font-mono">{e.source_number}</span>}</td>
+                      <td className={cn("text-right tabular-nums", negative ? "text-ims-muted" : "text-ims-text")}>{negative ? "−" : ""}{rwf(e.amount)}</td>
                     </tr>
                   );
                 })}
