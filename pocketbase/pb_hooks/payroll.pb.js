@@ -17,6 +17,12 @@ routerAdd("POST", "/api/dnr/payroll", (c) => {
 }, $apis.requireRecordAuth());
 
 // POST /api/dnr/payroll/preview  salary structure → full breakdown
+// POST /api/dnr/payroll/preview-run   { year, month, branch? } — the whole payroll before it is created
+routerAdd("POST", "/api/dnr/payroll/preview-run", (c) => {
+  const info = $apis.requestInfo(c);
+  return c.json(200, require(`${__hooks}/lib/payroll.js`).previewRun($app.dao(), info.authRecord, info.data || {}));
+}, $apis.requireRecordAuth("users"));
+
 routerAdd("POST", "/api/dnr/payroll/preview", (c) => {
   const payroll = require(`${__hooks}/lib/payroll.js`);
   const info = $apis.requestInfo(c);

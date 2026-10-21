@@ -175,37 +175,9 @@ function sendEmail(dao, userId, n) {
   } catch (_) {
     return;
   }
-  const msg = new Record(dao.findCollectionByNameOrId("outbound_messages"));
-  msg.set("channel", "email");
-  msg.set("to", user.getString("email"));
-  msg.set("subject", n.title);
-  msg.set("body", n.body || "");
-  msg.set("user", user.id);
-  msg.set("link", n.link || "");
-  const settings = $app.settings();
-  if (!settings.smtp || !settings.smtp.enabled) {
-    msg.set("status", "skipped");
-    msg.set("error", "SMTP is not configured (Admin UI → Settings → Mail settings).");
-    dao.saveRecord(msg);
-    return;
-  }
-  try {
-    const appUrl = (settings.meta.appUrl || "").replace(/\/$/, "");
-    $app.newMailClient().send(
-      new MailerMessage({
-        from: { address: settings.meta.senderAddress, name: settings.meta.senderName },
-        to: [{ address: user.getString("email") }],
-        subject: n.title,
-        html: `<p>${escapeHtml(n.body || "")}</p>${n.link ? `<p><a href="${appUrl}${n.link}">Open in RALGA IMS</a></p>` : ""}`,
-      })
-    );
-    msg.set("status", "sent");
-    msg.set("sent_at", new Date().toISOString());
-  } catch (e) {
-    msg.set("status", "failed");
-    msg.set("error", String(e).slice(0, 500));
-  }
-  dao.saveRecord(msg);
+  if (!user.getString("email")) return;
+  // Template, delivery and the outbound_messages log live in lib/mail.js.
+  require("./mail.js").send(dao, { to: user.getString("email"), subject: n.title, body: n.body || "", link: n.link || "", userId: user.id });
 }
 
 function escapeHtml(s) {

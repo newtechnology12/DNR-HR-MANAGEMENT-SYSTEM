@@ -1,17 +1,15 @@
 import * as React from "react";
-import { useMutation, useQuery } from "react-query";
+import { useQuery } from "react-query";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import { Banknote, Plus, Settings2, Users, Wallet } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import RecordTable, { RecordColumn } from "@/components/enterprise/RecordTable";
 import { MetricGroup, PageHeader, StatusBadge } from "@/components/enterprise/ui";
-import { compactMoney, errorMessage } from "@/lib/procurement";
-import { MONTHS, PAYROLL_STATUS, payrollApi, rwf } from "@/lib/hr";
-import { Field, inputCls } from "@/components/portal/kit";
+import { compactMoney } from "@/lib/procurement";
+import { MONTHS, PAYROLL_STATUS, rwf } from "@/lib/hr";
+import PayrollPreviewDialog from "./PayrollPreview";
 
 export default function PayrollRuns() {
   const navigate = useNavigate();
@@ -73,65 +71,7 @@ export default function PayrollRuns() {
         onRowClick={(r) => navigate(`/dashboard/hr/payroll/${r.id}`)}
         empty={{ icon: Banknote, title: "No payroll yet", text: "Create the first payroll for a month; it is calculated from the salary structures and the tax settings." }}
       />
-      {creating && <NewPayrollDialog onClose={() => setCreating(false)} />}
+      {creating && <PayrollPreviewDialog onClose={() => setCreating(false)} />}
     </div>
-  );
-}
-
-function NewPayrollDialog({ onClose }: { onClose: () => void }) {
-  const navigate = useNavigate();
-  const now = new Date();
-  const [v, setV] = React.useState({ year: now.getFullYear(), month: now.getMonth() + 1, branch: "", notes: "" });
-  const branches = useQuery(["branches-simple"], () => pocketbase.collection("branches").getFullList({ sort: "name", fields: "id,name" }));
-  const create = useMutation(
-    async () => {
-      const p = await payrollApi.create(v);
-      await payrollApi.action(p.id, "compute");
-      return p;
-    },
-    {
-      onSuccess: (p) => {
-        toast.success(`${p.number} created and calculated`);
-        navigate(`/dashboard/hr/payroll/${p.id}`);
-      },
-      onError: (e) => {
-        toast.error(errorMessage(e));
-      },
-    }
-  );
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg bg-white">
-        <DialogHeader>
-          <DialogTitle>New payroll</DialogTitle>
-          <DialogDescription>Every active employee with a salary is included. The payroll is calculated immediately; you can review it before sending it for approval.</DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Month" required>
-            <select className={inputCls} value={v.month} onChange={(e) => setV((x) => ({ ...x, month: Number(e.target.value) }))}>
-              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-            </select>
-          </Field>
-          <Field label="Year" required>
-            <select className={inputCls} value={v.year} onChange={(e) => setV((x) => ({ ...x, year: Number(e.target.value) }))}>
-              {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </Field>
-          <Field label="Office" hint="Leave on “All offices” for one payroll for the whole organisation." className="col-span-2">
-            <select className={inputCls} value={v.branch} onChange={(e) => setV((x) => ({ ...x, branch: e.target.value }))}>
-              <option value="">All offices</option>
-              {(branches.data || []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Notes" className="col-span-2">
-            <input className={inputCls} value={v.notes} onChange={(e) => setV((x) => ({ ...x, notes: e.target.value }))} placeholder="Optional" />
-          </Field>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={create.isLoading} onClick={() => create.mutate()}>{create.isLoading ? "Calculating…" : "Create and calculate"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

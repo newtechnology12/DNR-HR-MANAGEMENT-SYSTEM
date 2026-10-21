@@ -19,22 +19,30 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 const r0 = (n) => Math.round(Number(n) || 0);
 const pad = (n) => String(n).padStart(2, "0");
 
-function config(dao) {
+/** Rates in force on `at` (default today): PAYE bands and statutory contributions are dated tables. */
+function config(dao, at) {
+  const d = (at ? new Date(at) : new Date()).toISOString().replace("T", " ");
+  const dated = "active = true && (effective_from = '' || effective_from <= {:d}) && (effective_to = '' || effective_to >= {:d})";
   const bands = { regular: [], casual: [] };
-  for (const b of dao.findRecordsByFilter("paye_bands", "active = true", "min_amount", 100, 0) || []) {
+  let unconfirmed = 0;
+  for (const b of dao.findRecordsByFilter("paye_bands", dated, "min_amount", 100, 0, { d }) || []) {
+    if (!b.getBool("confirmed_by_finance")) unconfirmed++;
     (bands[b.getString("employment_type") || "regular"] = bands[b.getString("employment_type") || "regular"] || []).push({ min: b.getFloat("min_amount"), max: b.getFloat("max_amount"), rate: b.getFloat("rate") });
   }
-  const contributions = (dao.findRecordsByFilter("statutory_contributions", "active = true", "sort", 100, 0) || []).map((c) => ({
-    code: c.getString("code"), name: c.getString("name"), ee: c.getFloat("employee_rate"), er: c.getFloat("employer_rate"),
-    base: c.getString("base") || "gross", cap: c.getFloat("cap_amount"), remit_to: c.getString("remit_to"),
-  }));
+  const contributions = (dao.findRecordsByFilter("statutory_contributions", dated, "sort", 100, 0, { d }) || []).map((c) => {
+    if (!c.getBool("confirmed_by_finance")) unconfirmed++;
+    return {
+      code: c.getString("code"), name: c.getString("name"), ee: c.getFloat("employee_rate"), er: c.getFloat("employer_rate"),
+      base: c.getString("base") || "gross", cap: c.getFloat("cap_amount"), remit_to: c.getString("remit_to"),
+    };
+  });
   let pensionDeductible = false;
   try {
     const s = (dao.findRecordsByFilter("settings", "id != ''", "", 1, 0) || [])[0];
     if (s) pensionDeductible = s.getBool("payroll_pension_deductible");
   } catch (_) {}
-  if (!bands.regular.length) throw new BadRequestError("No PAYE tax bands are configured. Set them in Settings → Payroll & taxes.");
-  return { bands, contributions, pensionDeductible };
+  if (!bands.regular.length) throw new BadRequestError("No PAYE tax bands are in force on this date. Set them in Settings → Payroll & taxes.");
+  return { bands, contributions, pensionDeductible, unconfirmed, at: d.slice(0, 10) };
 }
 
 /** Progressive PAYE with the calculation per band (shown on the payslip). */
@@ -166,24 +174,17 @@ function create(dao, auth, input, meta) {
   return p;
 }
 
-function compute(dao, auth, id, meta) {
-  core.requirePermission(dao, auth, "create_payroll", "compute payrolls");
-  const p = load(dao, id);
-  if (["draft", "computed", "returned"].indexOf(p.getString("status")) === -1) throw new BadRequestError(`${p.getString("number")} is ${p.getString("status").replace(/_/g, " ")} and can no longer be recalculated.`);
-  const cfg = config(dao);
-  const year = p.getInt("year");
-  const month = p.getInt("month");
+/** Every employee's payslip for a month (nothing is saved): used by the preview and by compute(). */
+function calculate(dao, year, month, branch) {
   const monthStart = new Date(Date.UTC(year, month - 1, 1));
   const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
   const daysInMonth = monthEnd.getUTCDate();
-
-  for (const old of dao.findRecordsByFilter("employees_payrolls", "payroll = {:p}", "", 5000, 0, { p: p.id }) || []) dao.deleteRecord(old);
-
+  const cfg = config(dao, monthEnd.toISOString());
   let filter = 'status = "Active"';
   const params = {};
-  if (p.getString("branch")) {
+  if (branch) {
     filter += " && branch = {:b}";
-    params.b = p.getString("branch");
+    params.b = branch;
   }
   const users = dao.findRecordsByFilter("users", filter, "name", 5000, 0, params) || [];
   const depts = {};
@@ -201,10 +202,9 @@ function compute(dao, auth, id, meta) {
     (advances[x.getString("employee")] = advances[x.getString("employee")] || []).push(x);
   }
 
-  const col = dao.findCollectionByNameOrId("employees_payrolls");
   const T = { gross: 0, paye: 0, pension_ee: 0, pension_er: 0, maternity_ee: 0, maternity_er: 0, occ_hazard_er: 0, cbhi: 0, medical_ee: 0, medical_er: 0, other_deductions: 0, advances: 0, net: 0, employer_cost: 0, basic: 0, allowances: 0, headcount: 0 };
   const skipped = [];
-  const slipIds = [];
+  const rows = [];
   for (const u of users) {
     const s = structureOf(dao, u);
     if (!s) {
@@ -219,18 +219,7 @@ function compute(dao, auth, id, meta) {
     const factor = joined && joined > monthStart ? (daysInMonth - joined.getUTCDate() + 1) / daysInMonth : 1;
     const adv = advances[u.id] || [];
     const c = computeSlip(cfg, s, { factor, advances: adv.reduce((a, x) => a + x.getFloat("amount"), 0) });
-    const r = new Record(col);
-    r.load({
-      employee: u.id, payroll: p.id, employee_name: u.getString("name"), department_name: depts[u.getString("department")] || "", designation_name: desigs[u.getString("designation")] || "",
-      employment_type: s.employment_type, bank_name: s.bank_name || "", bank_account: s.bank_account || "", rssb_number: s.rssb_number || "", tin: s.tin || "", payment_method: s.payment_method,
-      working_days: Math.round(factor * daysInMonth),
-      ...c,
-      gross_salary: c.gross, net_sallary: c.net, deductions_amount: c.total_deductions,
-      deductions: c.contributions.filter((l) => l.ee > 0).map((l) => ({ name: l.name, amount: l.ee })).concat([{ name: "PAYE", amount: c.paye }]),
-      prepayments: adv.map((x) => x.id),
-    });
-    dao.saveRecord(r);
-    slipIds.push(r.id);
+    rows.push({ u, s, c, adv, factor, working_days: Math.round(factor * daysInMonth), department: depts[u.getString("department")] || "", designation: desigs[u.getString("designation")] || "" });
     for (const k of ["gross", "paye", "pension_ee", "pension_er", "maternity_ee", "maternity_er", "occ_hazard_er", "cbhi", "medical_ee", "medical_er", "advances", "net", "employer_cost", "basic"]) T[k] += c[k];
     T.other_deductions += c.other_deductions.reduce((a, d) => a + d.amount, 0);
     T.allowances += c.gross - c.basic;
@@ -239,6 +228,31 @@ function compute(dao, auth, id, meta) {
   T.rra = T.paye;
   T.rssb = T.pension_ee + T.pension_er + T.maternity_ee + T.maternity_er + T.occ_hazard_er + T.cbhi + T.medical_ee + T.medical_er;
   T.skipped = skipped;
+  return { cfg, rows, T, skipped };
+}
+
+function compute(dao, auth, id, meta) {
+  core.requirePermission(dao, auth, "create_payroll", "compute payrolls");
+  const p = load(dao, id);
+  if (["draft", "computed", "returned"].indexOf(p.getString("status")) === -1) throw new BadRequestError(`${p.getString("number")} is ${p.getString("status").replace(/_/g, " ")} and can no longer be recalculated.`);
+  const { cfg, rows, T } = calculate(dao, p.getInt("year"), p.getInt("month"), p.getString("branch"));
+
+  for (const old of dao.findRecordsByFilter("employees_payrolls", "payroll = {:p}", "", 5000, 0, { p: p.id }) || []) dao.deleteRecord(old);
+  const col = dao.findCollectionByNameOrId("employees_payrolls");
+  for (const x of rows) {
+    const { u, s, c, adv } = x;
+    const r = new Record(col);
+    r.load({
+      employee: u.id, payroll: p.id, employee_name: u.getString("name"), department_name: x.department, designation_name: x.designation,
+      employment_type: s.employment_type, bank_name: s.bank_name || "", bank_account: s.bank_account || "", rssb_number: s.rssb_number || "", tin: s.tin || "", payment_method: s.payment_method,
+      working_days: x.working_days,
+      ...c,
+      gross_salary: c.gross, net_sallary: c.net, deductions_amount: c.total_deductions,
+      deductions: c.contributions.filter((l) => l.ee > 0).map((l) => ({ name: l.name, amount: l.ee })).concat([{ name: "PAYE", amount: c.paye }]),
+      prepayments: adv.map((a) => a.id),
+    });
+    dao.saveRecord(r);
+  }
 
   p.set("totals", T);
   p.set("total_gross", T.gross);
@@ -246,7 +260,7 @@ function compute(dao, auth, id, meta) {
   p.set("total_employer_cost", T.employer_cost);
   p.set("headcount", T.headcount);
   p.set("prepayments_covered", T.advances);
-  p.set("config_snapshot", { bands: cfg.bands, contributions: cfg.contributions, pension_deductible: cfg.pensionDeductible, computed_by: auth.getString("name") });
+  p.set("config_snapshot", { bands: cfg.bands, contributions: cfg.contributions, pension_deductible: cfg.pensionDeductible, rates_on: cfg.at, unconfirmed_rates: cfg.unconfirmed, computed_by: auth.getString("name") });
   p.set("computed_at", new Date().toISOString());
   p.set("status", "computed");
   p.set("prepared_by", auth.id);
@@ -308,6 +322,31 @@ function cancel(dao, auth, id, input, meta) {
   return p;
 }
 
+/** Whole payroll for a month, before it is created: every payslip line, totals and the rates used. */
+function previewRun(dao, auth, input) {
+  core.requirePermission(dao, auth, "create_payroll", "preview payrolls");
+  const year = parseInt(input.year, 10);
+  const month = parseInt(input.month, 10);
+  if (!(year >= 2000 && year <= 2100) || !(month >= 1 && month <= 12)) throw new BadRequestError("Choose the payroll month and year.");
+  const branch = String(input.branch || "");
+  const { cfg, rows, T, skipped } = calculate(dao, year, month, branch);
+  const existing = (dao.findRecordsByFilter("payrolls", "year = {:y} && month = {:m} && status != 'cancelled' && status != 'rejected'", "", 50, 0, { y: year, m: month }) || [])
+    .filter((p) => p.getString("branch") === branch || !p.getString("branch") || !branch)
+    .map((p) => p.getString("number"));
+  return {
+    period: `${MONTHS[month - 1]} ${year}`, rates_on: cfg.at, existing,
+    rates: { bands: cfg.bands, contributions: cfg.contributions, pension_deductible: cfg.pensionDeductible, unconfirmed: cfg.unconfirmed },
+    totals: T, skipped,
+    rows: rows.map(({ u, s, c, working_days, department, designation }) => ({
+      employee: u.id, name: u.getString("name"), department, designation, employment_type: s.employment_type, working_days, has_structure: Boolean(s.record),
+      basic: c.basic, allowances: c.gross - c.basic, gross: c.gross, taxable: c.taxable_income, paye: c.paye, pension_ee: c.pension_ee, maternity_ee: c.maternity_ee,
+      cbhi: c.cbhi, medical_ee: c.medical_ee, other_deductions: c.other_deductions.reduce((a, d) => a + d.amount, 0), advances: c.advances,
+      total_deductions: c.total_deductions, net: c.net, pension_er: c.pension_er, maternity_er: c.maternity_er, occ_hazard_er: c.occ_hazard_er,
+      medical_er: c.medical_er, employer_cost: c.employer_cost, payment_method: s.payment_method, paye_breakdown: c.paye_breakdown,
+    })),
+  };
+}
+
 /** What-if calculation for one salary (used by the salary structure form). */
 function preview(dao, input) {
   const cfg = config(dao);
@@ -318,4 +357,4 @@ function preview(dao, input) {
   }, { factor: 1, advances: 0 });
 }
 
-module.exports = { config, paye, computeSlip, create, compute, submit, markPaid, cancel, preview, MONTHS };
+module.exports = { config, paye, computeSlip, calculate, create, compute, submit, markPaid, cancel, preview, previewRun, MONTHS };

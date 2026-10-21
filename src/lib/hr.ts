@@ -86,6 +86,8 @@ export const payrollApi = {
   action: (id: string, action: "compute" | "submit" | "paid" | "cancel", body: Record<string, unknown> = {}) =>
     pocketbase.send(`/api/dnr/payroll/${id}/${action}`, { method: "POST", body }) as Promise<{ id: string; status: string }>,
   preview: (body: Record<string, unknown>) => pocketbase.send("/api/dnr/payroll/preview", { method: "POST", body }) as Promise<any>,
+  /** The whole payroll of a month, before it is created (nothing saved). */
+  previewRun: (body: { year: number; month: number; branch?: string }) => pocketbase.send("/api/dnr/payroll/preview-run", { method: "POST", body }) as Promise<any>,
 };
 
 // ------------------------------------------------------------------ appraisals

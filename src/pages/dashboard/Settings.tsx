@@ -15,7 +15,7 @@ export default function Settings() {
     { title: "payroll & taxes", path: "/dashboard/settings/general-settings/payroll", permission: ["manage_payroll_settings", GENERAL] },
     { title: "roles & permissions", path: "/dashboard/admin/permissions", permission: [GENERAL, "view_security_admin", "confirm_role_changes"] },
     { title: "branches", path: "/dashboard/settings/general-settings/branches", permission: GENERAL },
-    { title: "SMTP settings", path: "/dashboard/settings/general-settings/smtp", permission: GENERAL },
+    { title: "E-mail", path: "/dashboard/settings/general-settings/smtp", permission: GENERAL },
     { title: "procurement", path: "/dashboard/settings/general-settings/procurement", permission: "manage_procurement_settings" },
     { title: "approval workflows", path: "/dashboard/settings/general-settings/approval-workflows", permission: ["manage_approval_workflows", "view_security_admin"] },
   ].filter((t) => can(t.permission));
