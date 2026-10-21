@@ -32,6 +32,9 @@ export function PayslipView({ slip, payroll }: { slip: any; payroll: any }) {
     ...((slip.contributions || []) as any[]).filter((c) => c.ee > 0).map((c) => [`${c.name} (${c.ee_rate}%)`, c.ee, `Base ${rwf(c.base)}`] as [string, number, string]),
     ...((slip.other_deductions || []) as any[]).map((d) => [d.name, d.amount] as [string, number]),
     ...(slip.advances ? [["Salary advance recovered", slip.advances] as [string, number]] : []),
+    ...(((slip.loan_deductions || []) as any[]).length
+      ? (slip.loan_deductions as any[]).map((l) => [`Staff loan instalment (${l.number})`, l.amount] as [string, number])
+      : slip.loans ? [["Staff loan instalment", slip.loans] as [string, number]] : []),
   ];
   const employer = ((slip.contributions || []) as any[]).filter((c) => c.er > 0);
   const row = "flex justify-between gap-3 py-1";

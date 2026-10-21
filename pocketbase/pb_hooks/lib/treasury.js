@@ -1168,7 +1168,8 @@ function submitRec(dao, id, actor, meta) {
       ? `The cash counted (${fmt(fig.statement_balance)}) differs from the cash book (${fmt(fig.book_balance)}) by ${fmt(fig.difference)}. Record the shortage or surplus first.`
       : `The reconciliation does not balance: adjusted bank balance ${fmt(fig.adjusted_bank_balance)}, adjusted cash book balance ${fmt(fig.adjusted_book_balance)}, difference ${fmt(fig.difference)}. Match the remaining items, record bank charges and interest, or check the statement balance.`);
   }
-  const missing = fig.items.filter((i) => !i.follow_up).length;
+  // an item already matched to a later statement line is a timing difference by definition
+  const missing = fig.items.filter((i) => !i.follow_up && !i.matched_later).length;
   if (missing) throw new BadRequestError(`${missing} reconciling item${missing === 1 ? " has" : "s have"} no follow-up yet; say what happens to each (timing difference, to investigate, to record, error to correct).`);
   dao.saveRecord(r);
   return require("./approvals.js").start(dao, "bank_reconciliation", r, actor, meta);
@@ -1512,7 +1513,7 @@ function report(dao, actor, key, f) {
 }
 
 module.exports = {
-  VIEWERS, canView, guardRead, validateAccount, paymentAccount, recordVoucherPayment, assertDateOpen, assertFunds, bookBalance, refreshAccount,
+  VIEWERS, canView, guardRead, validateAccount, paymentAccount, recordVoucherPayment, assertDateOpen, assertFunds, bookBalance, refreshAccount, postEntry,
   beforeCreateReceipt, beforeUpdateReceipt, beforeDeleteDraft, submitReceipt, onReceiptApproved, cancelDoc, reverseDoc,
   beforeCreateTransfer, beforeUpdateTransfer, submitTransfer, onTransferApproved,
   importStatement, deleteStatement, match, unmatch, autoMatch, recordFromLine, setFollowUp,

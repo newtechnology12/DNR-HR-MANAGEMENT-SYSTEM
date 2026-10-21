@@ -64,7 +64,7 @@ export default function ReconciliationDetail() {
   const items: RecItem[] = r.items || [];
   const editable = ["draft", "returned"].includes(r.status);
   const open = ["draft", "pending_approval", "returned"].includes(r.status);
-  const missing = items.filter((i) => !i.follow_up).length;
+  const missing = items.filter((i) => !i.follow_up && !i.matched_later).length;
 
   async function submit() {
     setBusy(true);
@@ -191,7 +191,7 @@ export default function ReconciliationDetail() {
                               <td className="whitespace-nowrap font-mono text-[12px] text-slate-500">{i.reference}</td>
                               <td className="whitespace-nowrap text-right tabular-nums">{i.amount.toLocaleString("en-US")}</td>
                               <td className="text-right tabular-nums">{i.age}{i.stale && <Badge tone="danger" className="ml-1.5">Stale cheque</Badge>}</td>
-                              <td className="min-w-[160px] text-[12.5px]">{i.follow_up ? <Badge tone={FOLLOW_UP[i.follow_up]?.tone}>{FOLLOW_UP[i.follow_up]?.label}</Badge> : <Badge tone="warning">Not reviewed</Badge>}{i.follow_up_note && <span className="mt-0.5 block text-[11.5px] text-slate-500">{i.follow_up_note}</span>}{i.matched_later && <span className="mt-0.5 block text-[11.5px] text-sky-700">Cleared after this date</span>}</td>
+                              <td className="min-w-[160px] text-[12.5px]">{i.follow_up ? <Badge tone={FOLLOW_UP[i.follow_up]?.tone}>{FOLLOW_UP[i.follow_up]?.label}</Badge> : i.matched_later ? <Badge tone="info">Timing difference</Badge> : <Badge tone="warning">Not reviewed</Badge>}{i.follow_up_note && <span className="mt-0.5 block text-[11.5px] text-slate-500">{i.follow_up_note}</span>}{i.matched_later && <span className="mt-0.5 block text-[11.5px] text-sky-700">Cleared after this date</span>}</td>
                             </tr>
                           ))}
                         </tbody>

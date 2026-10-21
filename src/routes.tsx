@@ -93,6 +93,11 @@ const LeavePolicySettings = lazy(() => import("./pages/hr/LeavePolicySettings"))
 const PayrollRuns = lazy(() => import("./pages/hr/payroll/PayrollRuns"));
 const PayrollRun = lazy(() => import("./pages/hr/payroll/PayrollRun"));
 const SalaryStructures = lazy(() => import("./pages/hr/payroll/SalaryStructures"));
+const StaffLoans = lazy(() => import("./pages/hr/payroll/StaffLoans"));
+const Journals = lazy(() => import("./pages/ledger/Journals"));
+const JournalDetail = lazy(() => import("./pages/ledger/JournalDetail"));
+const PostingAccounts = lazy(() => import("./pages/setup/PostingAccounts"));
+const SalaryPayments = lazy(() => import("./pages/treasury/SalaryPayments"));
 const PayrollTaxSettings = lazy(() => import("./pages/hr/payroll/PayrollTaxSettings"));
 const PerformanceOverview = lazy(() => import("./pages/hr/performance/PerformanceOverview"));
 const AppraisalPage = lazy(() => import("./pages/hr/performance/AppraisalPage"));
@@ -114,6 +119,7 @@ const Vouchers = lazy(() => import("./pages/finance/Vouchers"));
 const VoucherForm = lazy(() => import("./pages/finance/VoucherForm"));
 const VoucherDetail = lazy(() => import("./pages/finance/VoucherDetail"));
 const PayablesReports = lazy(() => import("./pages/finance/PayablesReports"));
+const LEDGER_USERS = ["view_journals", "export_ledger", "approve_journals"];
 const VOUCHER_USERS = ["view_payment_vouchers", "manage_payment_vouchers", "approve_payment_vouchers", "record_payments"];
 // RALGA IMS — bank and cash (Step 5).
 const TreasuryOverview = lazy(() => import("./pages/treasury/TreasuryOverview"));
@@ -501,6 +507,14 @@ const router = createBrowserRouter([
                         ),
                       },
                       {
+                        path: "loans",
+                        element: (
+                          <ProtectedRoute entity={["create_payroll", "approve_payroll"]}>
+                            <Suspense fallback={null}><StaffLoans /></Suspense>
+                          </ProtectedRoute>
+                        ),
+                      },
+                      {
                         path: ":payrollId",
                         element: (
                           <ProtectedRoute entity="view_payroll_details">
@@ -845,6 +859,8 @@ const router = createBrowserRouter([
                       </ProtectedRoute>
                     ),
                   },
+                  { path: "journals", element: <ProtectedRoute entity={LEDGER_USERS}><Journals /></ProtectedRoute> },
+                  { path: "journals/:journalId", element: <ProtectedRoute entity={LEDGER_USERS}><JournalDetail /></ProtectedRoute> },
                   { path: "vouchers", element: <ProtectedRoute entity={VOUCHER_USERS}><Vouchers /></ProtectedRoute> },
                   { path: "vouchers/new", element: <ProtectedRoute entity="manage_payment_vouchers"><VoucherForm /></ProtectedRoute> },
                   { path: "vouchers/:voucherId", element: <ProtectedRoute entity={VOUCHER_USERS}><VoucherDetail /></ProtectedRoute> },
@@ -865,6 +881,7 @@ const router = createBrowserRouter([
                   { path: "receipts", element: <ProtectedRoute entity={TREASURY_USERS}><Receipts /></ProtectedRoute> },
                   { path: "receipts/:receiptId", element: <ProtectedRoute entity={TREASURY_USERS}><ReceiptDetail /></ProtectedRoute> },
                   { path: "transfers", element: <ProtectedRoute entity={TREASURY_USERS}><Transfers /></ProtectedRoute> },
+                  { path: "salaries", element: <ProtectedRoute entity={["mark_payroll_paid"]}><SalaryPayments /></ProtectedRoute> },
                   { path: "transfers/:transferId", element: <ProtectedRoute entity={TREASURY_USERS}><TransferDetail /></ProtectedRoute> },
                   { path: "statements", element: <ProtectedRoute entity={TREASURY_USERS}><Statements /></ProtectedRoute> },
                   { path: "statements/:statementId", element: <ProtectedRoute entity={TREASURY_USERS}><StatementDetail /></ProtectedRoute> },
@@ -986,6 +1003,14 @@ const router = createBrowserRouter([
                     element: (
                       <ProtectedRoute entity={["view_master_data", "manage_payroll_settings"]}>
                         <TaxRates />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "posting-accounts",
+                    element: (
+                      <ProtectedRoute entity={[...MASTER_DATA_USERS, "manage_chart_of_accounts"]}>
+                        <PostingAccounts />
                       </ProtectedRoute>
                     ),
                   },

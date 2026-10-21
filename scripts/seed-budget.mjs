@@ -48,9 +48,19 @@ const PROJECT_LINES = [
   ["CB", "CBD", "5301", "DP-CB", "CB-01", 120], ["CB", "CBD", "5209", "DP-CB", "CB-01", 45], ["CB", "CBD", "5215", "DP-CB", "CB-01", 15],
   ["RCS", "RCS", "5303", "MC", "RCS-01", 30], ["ICT", "ICT", "5214", "MC", "ICT-01", 20],
 ];
+// Personnel costs (M6): monthly cost in RWF million per department — basic, allowances, employer contributions —
+// and the share paid by a donor programme for donor-funded staff (charged to the project's lines).
+const PERSONNEL = {
+  OSG: [10.6, 5.0, 1.16], PME: [4.7, 2.1, 0.5], FIN: [8.6, 3.8, 0.93], HRM: [4.9, 2.2, 0.53], CBD: [4.0, 1.8, 0.43], ICT: [4.5, 1.9, 0.48],
+  APR: [5.4, 2.3, 0.57], RCS: [4.0, 1.7, 0.42], LEG: [3.8, 1.7, 0.42], COM: [3.8, 1.7, 0.41], IAU: [3.8, 1.6, 0.41], PRC: [3.5, 1.5, 0.37],
+};
+const DONOR_STAFF = { CBD: ["DP-CB", "CB-01", 0.3], APR: ["DP-LED", "LED-01", 0.25] };
+// Employer contributions by scheme: pension, maternity leave, occupational hazards.
+const EMPLOYER = [["5103", 0.72], ["5104", 0.04], ["5105", 0.24]];
+
 // Revenue: [dept code, account, funding code, project code, RWF million]
 const REVENUE = [
-  ["OSG", "4101", "MC", "", 980], ["APR", "4104", "DP-LED", "LED-01", 240], ["CBD", "4104", "DP-CB", "CB-01", 180], ["RCS", "4201", "MC", "", 60], ["CBD", "4202", "MC", "", 35],
+  ["OSG", "4101", "MC", "", 2100], ["APR", "4104", "DP-LED", "LED-01", 240], ["CBD", "4104", "DP-CB", "CB-01", 180], ["RCS", "4201", "MC", "", 60], ["CBD", "4202", "MC", "", 35],
 ];
 
 /** Monthly amounts (July → June): workshops and programmes peak mid-year; capital in Q2/Q3; the rest flat. */
@@ -128,6 +138,20 @@ async function main() {
   for (const [, dept, acc, fund, project, mio] of PROJECT_LINES) {
     const amount = mio * M;
     lines.push({ code: `${project}-${acc}`, kind: acc.startsWith("1") ? "capital" : "expense", gl_account: acc, department: dept, funding_source: fund, project, amount, phasing: phase(amount, acc) });
+  }
+  // Personnel: 12 months plus 5% for increments, on member contributions, with the donor-funded share on the project.
+  for (const d of depts) {
+    const p = PERSONNEL[d.code];
+    if (!p) continue;
+    const donor = DONOR_STAFF[d.code];
+    const parts = [["5101", p[0]], ["5102", p[1]], ...EMPLOYER.map(([acc, share]) => [acc, p[2] * share])];
+    for (const [acc, monthly] of parts) {
+      const year = monthly * 12 * 1.05 * M;
+      const donorShare = donor ? round100k(year * donor[2]) : 0;
+      const own = round100k(year) - donorShare;
+      lines.push({ code: `${d.code}-${acc}-MC`, kind: "expense", gl_account: acc, department: d.code, funding_source: "MC", amount: own, phasing: phase(own, acc) });
+      if (donor && donorShare) lines.push({ code: `${donor[1]}-${acc}`, kind: "expense", gl_account: acc, department: d.code, funding_source: donor[0], project: donor[1], amount: donorShare, phasing: phase(donorShare, acc) });
+    }
   }
   for (const [dept, acc, fund, project, mio] of REVENUE) {
     const amount = mio * M;

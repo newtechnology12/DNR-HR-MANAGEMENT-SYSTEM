@@ -41,13 +41,16 @@
   "login.signIn": "Injira",
   "login.forgot": "Wibagiwe ijambobanga?",
   "nav.group.treasury": "Banki n'isanduku",
+  "nav.group.ledger": "Igitabo rusange",
   "nav.cashPosition": "Amafaranga ahari",
   "nav.bankAccounts": "Konti za banki n'isanduku",
   "nav.receipts": "Amafaranga yinjiye",
   "nav.transfers": "Kwimura amafaranga",
+  "nav.salaryPayments": "Kwishyura imishahara",
   "nav.bankStatements": "Raporo za banki",
   "nav.reconciliations": "Guhuza konti",
   "nav.treasuryReports": "Raporo z'imari",
+  "nav.journals": "Inyandiko z'ibaruramari",
   "login.subtitle": "Injira ukoresheje konti yawe y’akazi ya RALGA.",
   "login.passwordPlaceholder": "Andika ijambobanga ryawe",
   "login.keep": "Komeza unyinjize kuri iki gikoresho",
@@ -107,5 +110,7 @@
   "nav.myEquipment": "Ubusabe bw’ibikoresho",
   "nav.help": "Ubufasha n’amabwiriza ya HR",
   "nav.attendanceCorrections": "Gukosora kwitaba",
-  "nav.strategicObjectives": "Intego z’ingenzi"
+  "nav.strategicObjectives": "Intego z’ingenzi",
+  "nav.staffLoans": "Inguzanyo z'abakozi",
+  "nav.postingAccounts": "Konti zandikwaho"
 }

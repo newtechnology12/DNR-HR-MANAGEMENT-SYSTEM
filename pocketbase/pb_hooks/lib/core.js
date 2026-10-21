@@ -208,6 +208,7 @@ const DEFAULT_SEQUENCES = {
   bank_statement: { name: "Bank statement import", prefix: "STM" },
   work_plan: { name: "Work plan", prefix: "WP" },
   attendance_correction: { name: "Attendance correction", prefix: "ATC" },
+  staff_loan: { name: "Staff loan", prefix: "LN" },
   asset_transfer: { name: "Asset transfer", prefix: "ATR" },
   asset_disposal: { name: "Asset disposal", prefix: "DSP" },
   depreciation_run: { name: "Depreciation run", prefix: "DEP" },

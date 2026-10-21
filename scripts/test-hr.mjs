@@ -52,6 +52,16 @@ const director = await login("director@dnr-hr.rw");
 const accountant = await login("accountant@dnr-hr.rw");
 const cashier = await login("cashier@dnr-hr.rw");
 const me = employee.authStore.model;
+const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+const tag = Date.now().toString(36).slice(-5).toUpperCase();
+const testGl = await admin.collection("gl_accounts").create({ code: `TP${tag}`, name: `Test payroll bank ${tag}`, type: "asset", is_posting: true, cash_flow_class: "cash", statement_section: "current_assets", active: true });
+const payBank = await finance.collection("bank_accounts").create({ code: `TP-${tag}`, name: "Test payroll account", kind: "bank", bank_name: "Test Bank", account_number: "4321-0000-71", gl_account: testGl.id, opening_balance: 300000000, opening_date: `${day(-30)} 12:00:00.000Z`, currency: "RWF" });
+cleanup.push(async () => {
+  for (const e of await admin.collection("cash_book_entries").getFullList({ filter: `account = "${payBank.id}"`, fields: "id" })) await admin.collection("cash_book_entries").delete(e.id);
+  await admin.collection("bank_accounts").delete(payBank.id);
+  await admin.collection("gl_accounts").delete(testGl.id);
+});
+let loan;
 
 console.log("\nLeave");
 await check("an employee sees only their own leave balance", async () => {
@@ -125,11 +135,34 @@ await check("employees cannot see payrolls or other people's payslips", async ()
 await check("employees cannot prepare a payroll", async () => {
   await expectStatus(employee.send("/api/dnr/payroll", { method: "POST", body: { year: Y + 1, month: 1 } }), 403, "create_payroll");
 });
+await check("staff loans: HR records, Finance approves (never the recorder), staff see only their own", async () => {
+  await expectStatus(hr.send("/api/ims/payroll-loans", { method: "POST", body: { employee: me.id, purpose: "Laptop purchase", principal: 900000, installment: 10000, start_year: Y, start_month: new Date().getMonth() + 1 } }), 400, "60");
+  await expectStatus(employee.send("/api/ims/payroll-loans", { method: "POST", body: { employee: me.id, purpose: "Laptop purchase", principal: 900000, installment: 150000, start_year: Y, start_month: new Date().getMonth() + 1 } }), 403);
+  loan = await hr.send("/api/ims/payroll-loans", { method: "POST", body: { employee: me.id, loan_type: "staff_loan", purpose: "Laptop purchase", principal: 900000, installment: 150000, start_year: Y, start_month: new Date().getMonth() + 1 } });
+  cleanup.push(async () => admin.collection("staff_loans").delete(loan.id));
+  assert(loan.status === "pending_approval" && /^LN-/.test(loan.number), `${loan.status} ${loan.number}`);
+  await expectStatus(hr.send(`/api/ims/payroll-loans/${loan.id}/decide`, { method: "POST", body: { decision: "approve" } }), 403);
+  await expectStatus(finance.send(`/api/ims/payroll-loans/${loan.id}/decide`, { method: "POST", body: { decision: "reject" } }), 400, "why");
+  const r = await finance.send(`/api/ims/payroll-loans/${loan.id}/decide`, { method: "POST", body: { decision: "approve", comment: "Policy limits respected." } });
+  assert(r.status === "active", r.status);
+  assert((await employee.collection("staff_loans").getOne(loan.id)).balance === 900000, "the employee does not see the loan");
+  await expectStatus(accountant.collection("staff_loans").getOne(loan.id), 404);
+});
 let run;
 await check("HR prepares and calculates a payroll; totals match the payslips", async () => {
   run = await hr.send("/api/dnr/payroll", { method: "POST", body: { year: Y + 1, month: 1, notes: "test" } });
   cleanup.push(async () => {
     const p = await admin.collection("payrolls").getOne(run.id);
+    // instalments this payroll recovered on the seeded loans are put back
+    for (const l of await admin.collection("staff_loans").getFullList({ filter: `repayments ~ "${run.id}"` })) {
+      const back = (l.repayments || []).filter((x) => x.payroll === run.id).reduce((a, x) => a + x.amount, 0);
+      await admin.collection("staff_loans").update(l.id, { repayments: (l.repayments || []).filter((x) => x.payroll !== run.id), balance: l.balance + back, repaid: l.repaid - back, status: l.status === "repaid" ? "active" : l.status });
+    }
+    for (const b of await admin.collection("budget_ledger").getFullList({ filter: `source_id = "${run.id}"`, fields: "id" })) await admin.collection("budget_ledger").delete(b.id);
+    for (const j of await admin.collection("gl_journals").getFullList({ filter: `source_id = "${run.id}"`, fields: "id" })) {
+      for (const l of await admin.collection("gl_journal_lines").getFullList({ filter: `journal = "${j.id}"`, fields: "id" })) await admin.collection("gl_journal_lines").delete(l.id);
+      await admin.collection("gl_journals").delete(j.id);
+    }
     for (const s of await admin.collection("employees_payrolls").getFullList({ filter: `payroll = "${run.id}"` })) await admin.collection("employees_payrolls").delete(s.id);
     if (p.approval) await admin.collection("approval_requests").delete(p.approval).catch(() => null);
     await admin.collection("payrolls").delete(run.id);
@@ -157,10 +190,67 @@ await check("the preparer cannot approve; finance then the Secretary General app
   p = await admin.collection("payrolls").getOne(run.id);
   assert(p.status === "approved", p.status);
 });
-await check("the preparer cannot record the payment; the cashier can", async () => {
+await check("the loan instalment is deducted from the payslip", async () => {
+  const slip = await admin.collection("employees_payrolls").getFirstListItem(`payroll = "${run.id}" && employee = "${me.id}"`);
+  assert(slip.loans === 150000 && (slip.loan_deductions || [])[0]?.loan === loan.id, `loans ${slip.loans}`);
+  assert(slip.net === slip.gross - slip.total_deductions, "net ≠ gross − deductions");
+});
+await check("approval posts the payroll to the GL (balanced) and to the budget lines by department and funding source", async () => {
+  const p = await admin.collection("payrolls").getOne(run.id);
+  assert(p.gl_journal, "no GL journal");
+  const j = await admin.collection("gl_journals").getOne(p.gl_journal);
+  const lines = await admin.collection("gl_journal_lines").getFullList({ filter: `journal = "${j.id}"` });
+  const debit = lines.reduce((a, l) => a + l.debit, 0);
+  const credit = lines.reduce((a, l) => a + l.credit, 0);
+  assert(j.status === "posted" && debit === credit && debit === p.total_employer_cost, `debit ${debit} credit ${credit} employer cost ${p.total_employer_cost}`);
+  const budgeted = (p.posting.budget || []).reduce((a, b) => a + b.amount, 0) + (p.posting.unbudgeted || []).reduce((a, b) => a + b.amount, 0);
+  assert(budgeted === p.total_employer_cost, `budget ${budgeted} ≠ ${p.total_employer_cost}`);
+  const ledger = await admin.collection("budget_ledger").getFullList({ filter: `source_id = "${run.id}" && type = "actual"` });
+  assert(ledger.reduce((a, l) => a + l.amount, 0) === (p.posting.budget || []).reduce((a, b) => a + b.amount, 0), "budget ledger ≠ posting summary");
+  const cb = await admin.collection("funding_sources").getFirstListItem('code = "DP-CB"');
+  assert(lines.some((l) => l.funding_source === cb.id && l.debit > 0 && l.project), "donor-funded salaries are not charged to the donor programme");
+  assert(!lines.some((l) => l.description && /Mukamana|Uwimana/.test(l.description)), "journal lines must not name employees");
+});
+await check("the general ledger is for finance: staff cannot read journals", async () => {
+  const p = await admin.collection("payrolls").getOne(run.id);
+  await expectStatus(employee.collection("gl_journals").getOne(p.gl_journal), 403);
+  assert((await accountant.collection("gl_journals").getOne(p.gl_journal)).id === p.gl_journal, "the accountant cannot read the journal");
+});
+await check("salary payments: the Cashier sees the approved payroll and the totals per bank (not who is paid what); HR has the bank file; staff see nothing", async () => {
+  const queue = await cashier.send("/api/ims/salary-payments", {});
+  const mine = queue.items.find((x) => x.id === run.id);
+  assert(mine && mine.status === "approved" && mine.total_net > 0, "the approved payroll is not in the Cashier's list");
+  assert(!("total_gross" in mine) && !("totals" in mine), "the Cashier's list must not carry pay details");
+  const t = await cashier.send(`/api/ims/salary-payments/${run.id}/transfers`, {});
+  assert(t.rows === null, "payroll data (who is paid what) is only for HR, the DAF, the SG and the auditors — not the Cashier");
+  assert(t.banks.reduce((a, b) => a + b.total, 0) + t.other.total === mine.total_net && t.banks.reduce((a, b) => a + b.count, 0) + t.other.count === mine.headcount, "bank totals ≠ net pay");
+  const file = await hr.send(`/api/ims/salary-payments/${run.id}/transfers`, {});
+  assert(file.rows.length === mine.headcount && file.rows.reduce((a, r) => a + r.net, 0) === mine.total_net, `bank file ${file.rows.length} / ${file.rows.reduce((a, r) => a + r.net, 0)} vs ${mine.headcount} / ${mine.total_net}`);
+  assert(!file.rows.some((r) => "paye" in r || "gross" in r || "basic" in r), "the bank file must carry only what the bank needs");
+  await expectStatus(employee.send("/api/ims/salary-payments", {}), 403);
+  await expectStatus(employee.send(`/api/ims/salary-payments/${run.id}/transfers`, {}), 403);
+  const p = await admin.collection("payrolls").getOne(run.id);
+  assert((p.posting.by_account || []).reduce((a, x) => a + x.debit, 0) === p.total_employer_cost, "journal by account ≠ employer cost");
+  assert((p.posting.budget || []).every((b) => b.account && b.department !== undefined), "budget rows lack their dimensions");
+});
+await check("the preparer cannot record the payment; the cashier pays from a bank account and the GL clears the salaries payable", async () => {
   await expectStatus(hr.send(`/api/dnr/payroll/${run.id}/paid`, { method: "POST", body: {} }), 403);
-  await cashier.send(`/api/dnr/payroll/${run.id}/paid`, { method: "POST", body: { reference: "TEST" } });
-  assert((await admin.collection("payrolls").getOne(run.id)).status === "paid", "not paid");
+  await cashier.send(`/api/dnr/payroll/${run.id}/paid`, { method: "POST", body: { reference: "TEST", account: payBank.id, payment_date: day(0) } });
+  const p = await admin.collection("payrolls").getOne(run.id);
+  assert(p.status === "paid" && p.payment_account === payBank.id && p.cash_entry && p.payment_journal, "not paid from the account");
+  const entry = await admin.collection("cash_book_entries").getOne(p.cash_entry);
+  assert(entry.direction === "out" && entry.amount === p.total_net, `cash ${entry.amount}`);
+  const pj = await admin.collection("gl_journal_lines").getFullList({ filter: `journal = "${p.payment_journal}"` });
+  assert(pj.some((l) => l.account === testGl.id && l.credit === p.total_net), "the bank is not credited");
+  const l = await admin.collection("staff_loans").getOne(loan.id);
+  assert(l.balance === 750000 && l.repaid === 150000 && (l.repayments || []).length === 1, `loan balance ${l.balance}`);
+});
+await check("the payroll is reconciled with the previous month", async () => {
+  const r = await hr.send(`/api/dnr/payroll/${run.id}/reconciliation`, {});
+  assert(r.previous && r.components.length > 5 && r.components.find((c) => c.key === "gross"), "no comparison");
+  const mine = r.rows.find((x) => x.employee === me.id);
+  assert(mine && mine.reasons.some((t) => /loan/.test(t)), "the new loan deduction is not explained");
+  await expectStatus(employee.send(`/api/dnr/payroll/${run.id}/reconciliation`, {}), 403);
 });
 await check("each payslip carries its period and the run's status, so staff see them without reading the run", async () => {
   const mine = await employee.collection("employees_payrolls").getFullList({ filter: `payroll = "${run.id}"` });

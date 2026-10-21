@@ -12,7 +12,7 @@ import pocketbase from "@/lib/pocketbase";
 import { useAuth } from "@/context/auth.context";
 import { useRoles } from "@/context/roles.context";
 import useSettings from "@/hooks/useSettings";
-import { leaveApi } from "@/lib/hr";
+import { LOAN_TYPES, MONTHS, leaveApi } from "@/lib/hr";
 import { cn } from "@/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LeaveFormModal } from "@/components/modals/LeaveFormModal";
@@ -189,7 +189,45 @@ export function MyPayslipsPage() {
     <main className={myPage}>
       <MyHeader title="My payslips" subtitle="Your payslips from approved payrolls. Open one to print it or save it as PDF. Only you, HR & Payroll, Finance and the auditors can see them." />
       <WCard><MyPayslipList employeeId={uid} /></WCard>
+      <MyLoans uid={uid} />
     </main>
+  );
+}
+
+/** Loans repaid through the payslip: what is left, the monthly instalment and when it ends. */
+function MyLoans({ uid }: { uid: string }) {
+  const q = useQuery(["my-loans", uid], () => pocketbase.collection("staff_loans").getFullList({ filter: `employee = "${uid}"`, sort: "-created" }), { enabled: Boolean(uid) });
+  const rows = ((q.data || []) as any[]).filter((l) => l.status !== "cancelled");
+  if (!rows.length) return null;
+  const STATE: Record<string, [string, string]> = { pending_approval: ["pending", "Waiting for Finance"], active: ["info", "Being repaid"], repaid: ["approved", "Repaid"], rejected: ["rejected", "Not approved"] };
+  const end = (l: any) => {
+    const k = l.start_year * 12 + l.start_month - 1 + Math.max(1, l.installments) - 1;
+    return `${MONTHS[k % 12]} ${Math.floor(k / 12)}`;
+  };
+  return (
+    <WCard>
+      <WHead title="My loans" subtitle="Loans repaid through your payslip. The balance goes down each month when the salaries are paid. Questions: HR & Payroll." />
+      <ul className="mt-3 divide-y divide-[#EDF0F5]">
+        {rows.map((l) => {
+          const pct = l.principal ? Math.round((l.repaid / l.principal) * 100) : 0;
+          const [tone, label] = STATE[l.status] || ["neutral", l.status];
+          return (
+            <li key={l.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_220px_auto] sm:items-center">
+              <div className="min-w-0">
+                <p className="text-[14px] font-bold text-[#14213D]">{LOAN_TYPES[l.loan_type] || "Loan"} · {money(l.principal)}</p>
+                <p className="truncate text-[12.5px] text-[#5B6577]">{l.number} · {l.purpose}</p>
+              </div>
+              <div>
+                <div className="flex justify-between text-[12px] text-[#5B6577]"><span>{money(l.installment)} a month</span><span>until {end(l)}</span></div>
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#EDF0F5]"><div className="h-full rounded-full bg-[#1F9D55]" style={{ width: `${pct}%` }} /></div>
+                <p className="mt-1 text-[12px] text-[#36435A]">Left to repay <b>{money(l.balance)}</b></p>
+              </div>
+              <Pill tone={tone}>{label}</Pill>
+            </li>
+          );
+        })}
+      </ul>
+    </WCard>
   );
 }
 

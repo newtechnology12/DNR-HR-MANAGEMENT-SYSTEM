@@ -39,9 +39,32 @@ async function wipe(name, filter = "") {
 
 // ------------------------------------------------------------------ salaries
 const BANKS = ["Bank of Kigali", "I&M Bank Rwanda", "Equity Bank Rwanda", "BPR Bank Rwanda", "Access Bank Rwanda"];
+/** Grade from the job title (illustrative scale: E executive, M management, P professional, S support). */
+function gradeOf(title) {
+  if (/^Secretary General/i.test(title)) return "E1";
+  if (/Deputy Secretary General/i.test(title)) return "E2";
+  if (/Director|Head of|Manager|Legal Advisor/i.test(title)) return "M1";
+  if (/Chief|Specialist|Analyst|Coordinator|Advisor/i.test(title)) return "P2";
+  if (/Officer|Accountant|Administrator/i.test(title)) return "P3";
+  if (/Assistant/i.test(title)) return "S2";
+  return "P4";
+}
+
 async function salaries(users) {
   await wipe("salary_structures");
+  const titles = Object.fromEntries((await admin.collection("designations").getFullList({ fields: "id,name" })).map((d) => [d.id, d.name]));
+  const fund = Object.fromEntries((await admin.collection("funding_sources").getFullList({ fields: "id,code" })).map((x) => [x.code, x.id]));
+  const proj = Object.fromEntries((await admin.collection("projects").getFullList({ fields: "id,code" })).map((x) => [x.code, x.id]));
+  // Donor-funded staff: part of the salary is charged to the programme (and its budget lines).
+  const splitOf = (u) => {
+    const title = titles[u.designation] || "";
+    if (u.email === "employee@dnr-hr.rw") return [{ funding_source: fund.MC, project: "", percent: 70 }, { funding_source: fund["DP-CB"], project: proj["CB-01"], percent: 30 }];
+    if (/^(david\.uwimana7|denise\.tuyishime\.17)@/.test(u.email)) return [{ funding_source: fund.MC, project: "", percent: 50 }, { funding_source: fund["DP-CB"], project: proj["CB-01"], percent: 50 }];
+    if (/Local Economic Development/i.test(title)) return [{ funding_source: fund["DP-LED"], project: proj["LED-01"], percent: 100 }];
+    return [];
+  };
   let n = 0;
+  let donor = 0;
   for (const u of users) {
     const total = Number(String(u.salary || "").replace(/[^0-9.]/g, "")) || int(350, 2500) * 1000;
     const casual = u.email.endsWith("@dnr-hr.rw") ? false : rand() < 0.06;
@@ -56,11 +79,12 @@ async function salaries(users) {
       recurring_deductions: rand() < 0.12 ? [{ name: "Staff savings (SACCO)", amount: round(total * 0.03) }] : [],
       rssb_number: `${int(1000000, 9999999)}${pick(["A", "B", "C"])}`, tin: String(int(100000000, 199999999)), payment_method: "bank",
       bank_name: pick(BANKS), bank_account: `${int(1000, 4999)}${int(10000000, 99999999)}`, active: true,
-      effective_from: `${YEAR}-01-01 12:00:00.000Z`,
+      effective_from: `${YEAR}-01-01 12:00:00.000Z`, grade: gradeOf(titles[u.designation] || ""), funding_split: splitOf(u),
     });
     n++;
+    if (splitOf(u).length) donor++;
   }
-  console.log(`  ✓ salary structures: ${n}`);
+  console.log(`  ✓ salary structures: ${n} (grades from the job titles; ${donor} donor-funded staff with a funding split)`);
 }
 
 // ------------------------------------------------------------------ leave plans
@@ -109,6 +133,31 @@ async function payroll() {
   const director = await login("director@dnr-hr.rw");
   const cashier = await login("cashier@dnr-hr.rw"); // only the Cashier records payments
   const now = new Date();
+  // Staff loans repaid through the payroll: HR records them, the DAF approves (from this month's payroll).
+  const person = async (email) => admin.collection("users").getFirstListItem(`email = "${email}"`);
+  const loans = [
+    ["accountant@dnr-hr.rw", "staff_loan", "Motorcycle for field work", 1200000, 100000, true],
+    ["cashier@dnr-hr.rw", "emergency", "Medical expenses (family)", 450000, 75000, true],
+    ["jean.habimana.0@dnr-hr.rw", "staff_loan", "School fees", 2000000, 150000, false],
+  ];
+  let active = 0;
+  for (const [email, loan_type, purpose, principal, installment, approve] of loans) {
+    const u = await person(email).catch(() => null);
+    if (!u) continue;
+    const l = await hr.send("/api/ims/payroll-loans", { method: "POST", body: { employee: u.id, loan_type, purpose, principal, installment, start_year: now.getFullYear(), start_month: now.getMonth() + 1 } });
+    if (approve) {
+      await finance.send(`/api/ims/payroll-loans/${l.id}/decide`, { method: "POST", body: { decision: "approve", comment: "Within the staff loan policy." } });
+      active++;
+    }
+  }
+  console.log(`  ✓ staff loans: ${active} repaid through the payroll from this month, 1 waiting for the DAF`);
+  const bank = await admin.collection("bank_accounts").getFirstListItem('code = "BK-OPS"');
+  // Salaries leave the operating account on the last working day of the month.
+  const payday = (y, m) => {
+    const d = new Date(Date.UTC(y, m, 0, 12));
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  };
   const periods = [-2, -1, 0].map((k) => {
     const d = new Date(now.getFullYear(), now.getMonth() + k, 1);
     return { year: d.getFullYear(), month: d.getMonth() + 1 };
@@ -122,7 +171,7 @@ async function payroll() {
     if (i < 2) {
       await finance.send(`/api/dnr/approvals/${rec.approval}/act`, { method: "POST", body: { action: "approve", comment: "Totals reconciled with the HR headcount and the RSSB declaration." } });
       await director.send(`/api/dnr/approvals/${rec.approval}/act`, { method: "POST", body: { action: "approve", comment: "Approved for payment." } });
-      await cashier.send(`/api/dnr/payroll/${id}/paid`, { method: "POST", body: { reference: `BK-TRF-${p.year}${String(p.month).padStart(2, "0")}-${int(1000, 9999)}` } });
+      await cashier.send(`/api/dnr/payroll/${id}/paid`, { method: "POST", body: { account: bank.id, payment_date: payday(p.year, p.month), reference: `BK-TRF-${p.year}${String(p.month).padStart(2, "0")}-${int(1000, 9999)}` } });
     }
     rec = await admin.collection("payrolls").getOne(id);
     out.push(`${number} ${rec.status}`);

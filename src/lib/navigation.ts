@@ -7,7 +7,7 @@ import {
   ClipboardList, Clock, Container, FileSearch, FileSignature, FolderKanban, GitBranch, GitPullRequest, Inbox, Landmark, Layout, ListChecks,
   ListTree, LucideIcon, Network, Percent, PieChart, Receipt, Scale, ScrollText, ServerCog, Settings, ShieldCheck, ShoppingCart, SlidersHorizontal,
   Split, Table, Tags, Truck, Undo2, UserCog, Users, Wallet, WalletCards, Activity, Coins, LayoutGrid, UserCheck,
-  ClipboardCheck, FileText, FolderOpen, HelpCircle, Laptop, MessageSquareText, Target,
+  ClipboardCheck, FileText, FolderOpen, HelpCircle, Laptop, MessageSquareText, Target, BookOpen, Link2,
 } from "lucide-react";
 
 export interface NavItem {
@@ -107,9 +107,17 @@ export const NAVIGATION: NavGroup[] = [
       { key: "bankAccounts", label: "Bank & cash accounts", link: "/dashboard/treasury/accounts", icon: WalletCards, perms: TREASURY_PERMISSIONS },
       { key: "receipts", label: "Receipts", link: "/dashboard/treasury/receipts", icon: PiggyBank, perms: TREASURY_PERMISSIONS },
       { key: "transfers", label: "Transfers", link: "/dashboard/treasury/transfers", icon: ArrowRightLeft, perms: TREASURY_PERMISSIONS },
+      { key: "salaryPayments", label: "Salary payments", link: "/dashboard/treasury/salaries", icon: Wallet, perms: ["mark_payroll_paid"] },
       { key: "bankStatements", label: "Bank statements", link: "/dashboard/treasury/statements", icon: FileSpreadsheet, perms: TREASURY_PERMISSIONS },
       { key: "reconciliations", label: "Reconciliations", link: "/dashboard/treasury/reconciliations", icon: Scale, perms: TREASURY_PERMISSIONS },
       { key: "treasuryReports", label: "Bank & cash reports", link: "/dashboard/treasury/reports", icon: BarChart3, perms: TREASURY_PERMISSIONS },
+    ],
+  },
+  {
+    key: "ledger",
+    label: "General ledger",
+    items: [
+      { key: "journals", label: "Journal entries", link: "/dashboard/finance/journals", icon: BookOpen, perms: ["view_journals", "export_ledger", "approve_journals"] },
     ],
   },
   {
@@ -123,6 +131,7 @@ export const NAVIGATION: NavGroup[] = [
       { key: "leavePlanAll", label: "Leave plan (all staff)", link: "/dashboard/hr/leave-plan", icon: CalendarClock, perms: ["view_leaves"] },
       { key: "payroll", label: "Payroll", link: "/dashboard/hr/payroll", icon: Wallet, perms: ["view_payrolls"] },
       { key: "salaries", label: "Salary structures", link: "/dashboard/hr/payroll/salaries", icon: WalletCards, perms: ["manage_salaries"] },
+      { key: "staffLoans", label: "Staff loans", link: "/dashboard/hr/payroll/loans", icon: Coins, perms: ["create_payroll", "approve_payroll"] },
       { key: "performance", label: "Performance & appraisals", link: "/dashboard/hr/performance", icon: UserCheck, perms: ["view_employee_perfomances", "evaluate_staff", "manage_appraisals"] },
       { key: "attendanceLogs", label: "Attendance logs", link: "/dashboard/attendance/attendance-logs", icon: ListChecks, perms: ["view_attendance_logs"] },
       { key: "attendanceCorrections", label: "Attendance corrections", link: "/dashboard/hr/attendance-corrections", icon: ClipboardCheck, perms: ["update_attendance"] },
@@ -162,6 +171,7 @@ export const NAVIGATION: NavGroup[] = [
       { key: "projects", label: "Projects", link: "/dashboard/setup/projects", icon: FolderKanban, perms: ["view_master_data"] },
       { key: "strategicObjectives", label: "Strategic objectives", link: "/dashboard/setup/strategic-objectives", icon: Target, perms: ["view_master_data"] },
       { key: "costCentres", label: "Cost centres", link: "/dashboard/setup/cost-centres", icon: Network, perms: ["view_master_data"] },
+      { key: "postingAccounts", label: "Posting accounts", link: "/dashboard/setup/posting-accounts", icon: Link2, perms: ["view_master_data", "manage_chart_of_accounts"] },
       { key: "taxRates", label: "Tax & statutory rates", link: "/dashboard/setup/tax-rates", icon: Percent, perms: ["view_master_data", "manage_payroll_settings"] },
       { key: "workflows", label: "Approval workflows", link: "/dashboard/settings/general-settings/approval-workflows", icon: GitBranch, perms: ["manage_approval_workflows", "view_security_admin"] },
       { key: "approvalLimits", label: "Approval limits", link: "/dashboard/setup/approval-limits", icon: Scale, perms: ["manage_approval_workflows", "view_master_data", "view_security_admin"] },

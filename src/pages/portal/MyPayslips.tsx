@@ -41,7 +41,7 @@ export default function MyPayslips({ employeeId }: { employeeId: string }) {
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primaryDark"><FileText size={18} /></span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[14px] font-medium text-slate-900">{payrollOf(s)?.period_label}</span>
-                <span className="text-[12px] text-slate-500">Gross {rwf(s.gross)} · PAYE {rwf(s.paye)} · RSSB {rwf(s.pension_ee + s.maternity_ee)} · CBHI {rwf(s.cbhi)}</span>
+                <span className="text-[12px] text-slate-500">Gross {rwf(s.gross)} · PAYE {rwf(s.paye)} · RSSB {rwf(s.pension_ee + s.maternity_ee)} · CBHI {rwf(s.cbhi)}{s.loans ? ` · Loan ${rwf(s.loans)}` : ""}{s.advances ? ` · Advance ${rwf(s.advances)}` : ""}</span>
               </span>
               <span className="text-right">
                 <span className="block text-[15px] font-semibold tabular-nums">{rwf(s.net)}</span>

@@ -15,6 +15,7 @@ function approved(dao, type, doc, actor, meta) {
   if (type === "cash_receipt") return require("./treasury.js").onReceiptApproved(dao, doc, actor, meta);
   if (type === "bank_transfer") return require("./treasury.js").onTransferApproved(dao, doc, actor, meta);
   if (type === "bank_reconciliation") return require("./treasury.js").onRecApproved(dao, doc, actor, meta);
+  if (type === "payroll") return require("./payroll.js").onApproved(dao, doc, actor, meta);
 }
 
 /** Rejected or returned by an approver. */

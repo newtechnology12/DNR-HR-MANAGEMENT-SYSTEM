@@ -16,7 +16,7 @@ Developed by Infinity Core Solutions Ltd.
 | 3 | Procurement, suppliers, PO, GRN (M3): requisitions, POs and procurement plan lines charged to budget lines (plans cannot exceed a line), supplier bank-detail changes verified by Finance, supplier balances and plan execution reports | **Done** |
 | 4 | Supplier invoices & payment vouchers (M4): duplicate invoice control, payment vouchers for invoices or direct expenses with withholding tax from the dated table, approval Accountant → DAF → SG above limit, execution by the Cashier, supplier ageing, outstanding liabilities, payment register, WHT schedule | **Done** |
 | 5 | Bank & cash, reconciliation (M5): bank accounts and cash books with opening balances, receipts and inter-account transfers approved by the DAF, voucher payments from a chosen account (no overdraft, restricted donor accounts), cash book, bank statement import from Excel / CSV with column mapping and automatic matching, matching by hand, bank charges recorded from the statement, reconciliation (Accountant prepares, DAF approves, then locked), cash counts, cash position and reports | **Done** |
-| 6 | Payroll (M6) | Existing module — GL posting and funding split to add |
+| 6 | Payroll (M6): Rwanda PAYE and RSSB from dated rates, grades and funding split of donor-funded staff, staff loans repaid through the payroll, comparison with the previous month, approval posts a balanced GL journal and budget actuals by department / funding source / project, payment from a chosen bank account (cash book + payment journal), payroll register, PAYE (RRA), RSSB and bank-file exports; general ledger core (journals, posting accounts) | **Done** |
 | 7 | Fixed assets & depreciation (M7) | Planned |
 | 8 | General ledger, period close (M8) | Planned |
 | 9 | Reports, financial statements, role dashboards (M9) | Planned |
@@ -60,7 +60,7 @@ npm run seed:ralga
 # 3. Frontend (http://localhost:5173, proxies /api to the backend)
 npm run dev:frontend
 
-# 4. API tests on a freshly seeded server (must stay green: 304 checks in 12 suites)
+# 4. API tests on a freshly seeded server (must stay green: 310 checks in 12 suites)
 npm run test:api
 ```
 
@@ -276,12 +276,43 @@ public address of the system, switch sending on, then *Send test e-mail*. The se
 server immediately. Approvals, reminders and alerts are e-mailed with the RALGA template; the **E-mail log** on
 the same page lists every message (sent, failed, not sent) and lets an administrator send failed ones again.
 
-## Payroll preview
+## Payroll and the general ledger
 
-HR & payroll → Payroll → *New payroll* first shows the whole month before anything is saved: every payslip
-(basic, allowances, gross, PAYE, pension, maternity, CBHI, other deductions, net, employer cost), the totals for
-RRA and RSSB, who is left out and why, and the PAYE bands and contribution rates **in force that month**
-(Settings → Payroll & taxes, dated rates). *Create payroll* then saves exactly those figures.
+HR & payroll → Payroll. The HR & Payroll Officer prepares, the DAF (and the SG) approve, the Cashier pays.
+
+- **Preview:** *New payroll* first shows the whole month before anything is saved: every payslip (basic,
+  allowances, gross, PAYE, pension, maternity, CBHI, other deductions, net, employer cost), the totals for RRA and
+  RSSB, who is left out and why, and the PAYE bands and contribution rates **in force that month** (Settings →
+  Payroll & taxes, dated rates). *Create payroll* then saves exactly those figures.
+- **Salary structures:** basic, allowances, recurring deductions, **grade**, and for donor-funded staff the
+  **funding split** (share per funding source and project, 100% in total). Without a split the salary is charged
+  to member contributions. Each payslip keeps the department, grade and split of its month.
+- **Staff loans** (HR & payroll → Staff loans): HR records the loan with its monthly instalment and first month
+  (at most 60 instalments; all of a person's instalments together at most half of their last net pay); the DAF
+  approves it — never the person who recorded it, never the borrower. The payroll deducts the instalment and the
+  balance goes down when the payroll is paid. Staff see their loans under *My payslips*.
+- **Against last month:** each payroll lists who joined, who left and whose pay changed, with the reason (basic,
+  allowances, loan, deductions), and the difference per component.
+- **Approval → general ledger and budget:** when the last approver signs, one balanced journal is posted. Costs
+  are by department and funding source (basic salaries 5101, allowances 5102, employer contributions 5103–5106);
+  the liabilities are net salaries 2103, PAYE 2104 and the RSSB contributions 2105–2107, 2112, 2113, other
+  deductions 2111; advances (1120) and loans (1121) recovered are credited to the staff receivables. Every cost is
+  charged to its budget line (department + account + funding source + project) as an actual. Salaries are never
+  stopped by the budget: lines that go over and costs without a budget line are listed on the *GL & budget* tab.
+  Journal lines never carry employee names.
+- **Payment** (Bank & cash → Salary payments): the Cashier sees each approved payroll with the total to transfer
+  to each bank — not who is paid what, which stays with HR & Payroll, the DAF, the SG and the Internal Auditor
+  (HR sends the bank file). Once the bank has executed the transfer, the Cashier records the payment: the bank
+  account (unrestricted, enough money), the date and the bank reference. A cash book entry and a payment journal
+  (Dr net salaries payable / Cr bank) are posted, payslips become visible to staff and loan balances go down.
+- **Exports** (Excel, PDF, CSV): payroll register, PAYE declaration schedule (RRA), RSSB contributions schedule,
+  bank transfer file for all banks or one bank, and the full workbook.
+- **Journal entries** (General ledger → Journal entries; DAF, Accountant, Internal Auditor): every journal with
+  its lines and dimensions, linked to the document that caused it. Posted journals are never edited — they are
+  reversed by an opposite journal. Other roles cannot read the ledger (checked by the server).
+- **Posting accounts** (Setup → Posting accounts): which GL account each automatic posting uses. The DAF changes
+  them; a change applies from the next posting. The seeded accounts and rates are illustrative and must be
+  confirmed by Finance before go-live.
 
 ## Security
 
@@ -348,6 +379,10 @@ automatic and manual matching, preparer ≠ approver of reconciliations, locked 
 work plans (private to the person, the supervisor and HR; only the supervisor approves and assesses; activity
 dates inside the period; what each level needs checked when sent; approved plans locked except progress;
 assigning only to people one supervises; cascading; issues; department plans prepared by the head, one a month,
-with staff results adding up) and attendance
-corrections (HR only, never one's own; approved days added to the log). Run them on a freshly seeded server
+with staff results adding up), attendance
+corrections (HR only, never one's own; approved days added to the log) and payroll (loans recorded by HR and
+approved by someone else, instalment limits, the slip deduction, a balanced journal equal to the employer cost,
+donor-funded salaries charged to the donor programme, budget actuals equal to the posting, staff cannot read
+journals, preparer cannot pay, payment from a bank account clears net salaries payable, comparison with the
+previous month). Run them on a freshly seeded server
 (`npm run seed:ralga` first): some checks use the seeded documents.

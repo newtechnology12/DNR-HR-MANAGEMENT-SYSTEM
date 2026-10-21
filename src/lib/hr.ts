@@ -88,6 +88,22 @@ export const payrollApi = {
   preview: (body: Record<string, unknown>) => pocketbase.send("/api/dnr/payroll/preview", { method: "POST", body }) as Promise<any>,
   /** The whole payroll of a month, before it is created (nothing saved). */
   previewRun: (body: { year: number; month: number; branch?: string }) => pocketbase.send("/api/dnr/payroll/preview-run", { method: "POST", body }) as Promise<any>,
+  /** This payroll against the previous one: components, joiners, leavers, changes per employee. */
+  reconciliation: (id: string) => pocketbase.send(`/api/dnr/payroll/${id}/reconciliation`, {}) as Promise<any>,
+};
+
+// ------------------------------------------------------------------ staff loans
+export const LOAN_TYPES: Record<string, string> = { staff_loan: "Staff loan", salary_advance: "Salary advance (several months)", emergency: "Emergency loan" };
+export const LOAN_STATUS: Record<string, { label: string; tone: Tone }> = {
+  pending_approval: { label: "Waiting for Finance", tone: "warning" },
+  active: { label: "Being repaid", tone: "info" },
+  repaid: { label: "Repaid", tone: "success" },
+  rejected: { label: "Rejected", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+};
+export const loansApi = {
+  create: (body: Record<string, unknown>) => pocketbase.send("/api/ims/payroll-loans", { method: "POST", body }) as Promise<{ id: string; number: string; status: string }>,
+  act: (id: string, action: "decide" | "cancel", body: Record<string, unknown>) => pocketbase.send(`/api/ims/payroll-loans/${id}/${action}`, { method: "POST", body }) as Promise<{ id: string; number: string; status: string }>,
 };
 
 // ------------------------------------------------------------------ appraisals

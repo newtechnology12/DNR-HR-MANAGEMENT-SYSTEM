@@ -29,6 +29,8 @@ export default function SalaryStructures() {
     return users.map((u: any) => ({ user: u, structure: byEmp.get(u.id) || null }));
   });
   const rows = (q.data || []).filter((r) => `${r.user.name} ${r.user.expand?.department?.name || ""}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const fundsQ = useQuery(["funding-sources-codes"], () => pocketbase.collection("funding_sources").getFullList({ fields: "id,code" }), { staleTime: 600_000 });
+  const funds: Record<string, string> = Object.fromEntries(((fundsQ.data || []) as any[]).map((x) => [x.id, x.code]));
   const gross = (s: any) => (s ? s.basic_salary + s.transport_allowance + s.housing_allowance + s.communication_allowance + (s.other_allowances || []).reduce((a: number, x: any) => a + (Number(x.amount) || 0), 0) : 0);
   const withS = (q.data || []).filter((r) => r.structure?.active);
   return (
@@ -54,6 +56,8 @@ export default function SalaryStructures() {
                 { header: "Communication", value: (r: any) => r.structure.communication_allowance || 0, format: "money" },
                 { header: "Gross", value: (r: any) => gross(r.structure), format: "money" },
                 { header: "Paid by", value: (r: any) => r.structure.payment_method || "" },
+                { header: "Grade", value: (r: any) => r.structure.grade || "" },
+                { header: "Funding", value: (r: any) => (r.structure.funding_split || []).map((x: any) => `${funds[x.funding_source] || "?"} ${x.percent}%`).join(", ") || "Member contributions", width: 22 },
               ],
             }}
           />
@@ -80,7 +84,11 @@ export default function SalaryStructures() {
             <tbody className="divide-y divide-slate-100">
               {rows.map(({ user: u, structure: s }) => (
                 <tr key={u.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-2"><p className="font-medium">{u.name}</p><p className="text-[12px] text-slate-500">{u.expand?.department?.name}{u.expand?.designation?.name ? ` · ${u.expand.designation.name}` : ""}</p></td>
+                  <td className="px-3 py-2">
+                    <p className="font-medium">{u.name}{s?.grade && <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-px font-mono text-[11px] text-slate-600">{s.grade}</span>}</p>
+                    <p className="text-[12px] text-slate-500">{u.expand?.department?.name}{u.expand?.designation?.name ? ` · ${u.expand.designation.name}` : ""}</p>
+                    {(s?.funding_split || []).length > 0 && <p className="text-[11.5px] font-medium text-violet-700">Funded: {(s.funding_split as any[]).map((x) => `${funds[x.funding_source] || "?"} ${x.percent}%`).join(" · ")}</p>}
+                  </td>
                   {s ? (
                     <>
                       <td className="px-3 py-2 capitalize">{s.employment_type}{!s.active && <Badge tone="neutral" className="ml-1">Inactive</Badge>}</td>
@@ -111,11 +119,18 @@ export default function SalaryStructures() {
 function StructureDialog({ user, structure, onClose }: { user: any; structure: any; onClose: () => void }) {
   const queryClient = useQueryClient();
   const init = structure || { employment_type: user.employment_type || "permanent", basic_salary: Number(user.salary) || 0, transport_allowance: 0, housing_allowance: 0, communication_allowance: 0, other_allowances: [], recurring_deductions: [], payment_method: "bank", bank_name: user.bank_name || "", bank_account: user.bank_account_number || "", active: true };
-  const [v, setV] = React.useState<any>({ ...init, other_allowances: init.other_allowances || [], recurring_deductions: init.recurring_deductions || [] });
+  const [v, setV] = React.useState<any>({ ...init, other_allowances: init.other_allowances || [], recurring_deductions: init.recurring_deductions || [], funding_split: init.funding_split || [], grade: init.grade || "" });
+  const ref = useQuery(["salary-funding-ref"], async () => ({
+    funds: await pocketbase.collection("funding_sources").getFullList({ filter: "active = true", sort: "code", fields: "id,code,name,type" }),
+    projects: await pocketbase.collection("projects").getFullList({ sort: "code", fields: "id,code,name,funding_source,status" }),
+  }), { staleTime: 600_000 });
+  const split = (v.funding_split || []) as { funding_source: string; project: string; percent: number }[];
+  const splitTotal = Math.round(split.reduce((a, x) => a + (Number(x.percent) || 0), 0) * 100) / 100;
+  const setSplit = (i: number, patch: Record<string, unknown>) => setV((x: any) => ({ ...x, funding_split: x.funding_split.map((y: any, j: number) => (j === i ? { ...y, ...patch } : y)) }));
   const preview = useQuery(["salary-preview", JSON.stringify(v)], () => payrollApi.preview(v), { keepPreviousData: true, enabled: Number(v.basic_salary) > 0 });
   const save = useMutation(
     () => {
-      const data = { ...v, employee: user.id, basic_salary: Number(v.basic_salary) || 0, transport_allowance: Number(v.transport_allowance) || 0, housing_allowance: Number(v.housing_allowance) || 0, communication_allowance: Number(v.communication_allowance) || 0 };
+      const data = { ...v, employee: user.id, basic_salary: Number(v.basic_salary) || 0, transport_allowance: Number(v.transport_allowance) || 0, housing_allowance: Number(v.housing_allowance) || 0, communication_allowance: Number(v.communication_allowance) || 0, funding_split: split.filter((x) => x.funding_source).map((x) => ({ ...x, percent: Number(x.percent) || 0 })) };
       return structure ? pocketbase.collection("salary_structures").update(structure.id, data) : pocketbase.collection("salary_structures").create(data);
     },
     {
@@ -160,6 +175,7 @@ function StructureDialog({ user, structure, onClose }: { user: any; structure: a
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Employment type"><select className={inputCls} value={v.employment_type} onChange={set("employment_type")}>{EMPLOYMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
+              <Field label="Grade" hint="Salary scale grade, e.g. M1, P3, S2"><input className={cn(inputCls, "font-mono uppercase")} value={v.grade} maxLength={30} list="salary-grades" onChange={(e) => setV((x: any) => ({ ...x, grade: e.target.value.toUpperCase() }))} /><datalist id="salary-grades">{["E1", "E2", "M1", "M2", "P1", "P2", "P3", "P4", "S1", "S2", "S3"].map((g) => <option key={g} value={g} />)}</datalist></Field>
               <Field label="Basic salary" required><input type="number" min={0} className={cn(inputCls, "text-right")} value={v.basic_salary} onChange={set("basic_salary")} /></Field>
               <Field label="Transport allowance" hint="Not subject to RSSB pension"><input type="number" min={0} className={cn(inputCls, "text-right")} value={v.transport_allowance} onChange={set("transport_allowance")} /></Field>
               <Field label="Housing allowance"><input type="number" min={0} className={cn(inputCls, "text-right")} value={v.housing_allowance} onChange={set("housing_allowance")} /></Field>
@@ -172,6 +188,33 @@ function StructureDialog({ user, structure, onClose }: { user: any; structure: a
               <Field label="Account number"><input className={inputCls} value={v.bank_account || ""} onChange={set("bank_account")} /></Field>
               <Field label="RSSB number"><input className={inputCls} value={v.rssb_number || ""} onChange={set("rssb_number")} /></Field>
               <Field label="TIN"><input className={inputCls} value={v.tin || ""} onChange={set("tin")} /></Field>
+            </div>
+            <div>
+              <p className="mb-1 text-[13px] font-medium text-slate-700">Funding of this salary</p>
+              <p className="mb-2 text-[12px] text-slate-500">For donor-funded staff: the share each funding source (and project) pays. The payroll charges the salary to those budget lines. Leave empty to charge it all to member contributions.</p>
+              <div className="space-y-2">
+                {split.map((x, i) => {
+                  const projects = ((ref.data?.projects || []) as any[]).filter((p) => !x.funding_source || p.funding_source === x.funding_source);
+                  return (
+                    <div key={i} className="grid grid-cols-[1fr_1fr_90px_auto] items-center gap-2">
+                      <select aria-label="Funding source" className={inputCls} value={x.funding_source} onChange={(e) => setSplit(i, { funding_source: e.target.value, project: "" })}>
+                        <option value="">Funding source…</option>
+                        {((ref.data?.funds || []) as any[]).map((f) => <option key={f.id} value={f.id}>{f.code} · {f.name}</option>)}
+                      </select>
+                      <select aria-label="Project" className={inputCls} value={x.project} onChange={(e) => setSplit(i, { project: e.target.value })}>
+                        <option value="">No project</option>
+                        {projects.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+                      </select>
+                      <div className="relative"><input aria-label="Percentage" type="number" min={0} max={100} className={cn(inputCls, "pr-6 text-right")} value={x.percent} onChange={(e) => setSplit(i, { percent: Number(e.target.value) })} /><span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-slate-500">%</span></div>
+                      <button type="button" onClick={() => setV((y: any) => ({ ...y, funding_split: y.funding_split.filter((_: any, j: number) => j !== i) }))} className="rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove"><Trash2 size={15} /></button>
+                    </div>
+                  );
+                })}
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setV((x: any) => ({ ...x, funding_split: [...(x.funding_split || []), { funding_source: "", project: "", percent: Math.max(0, 100 - splitTotal) }] }))}><Plus size={14} /> Add a funding source</Button>
+                  {split.length > 0 && <span className={cn("text-[12.5px] font-semibold", splitTotal === 100 ? "text-emerald-700" : "text-red-600")}>Total {splitTotal}%{splitTotal !== 100 ? " — must be 100%" : ""}</span>}
+                </div>
+              </div>
             </div>
             <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" className="h-4 w-4" checked={Boolean(v.active)} onChange={set("active")} /> Include in payroll</label>
           </div>
@@ -189,7 +232,7 @@ function StructureDialog({ user, structure, onClose }: { user: any; structure: a
             )}
           </aside>
         </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={!(Number(v.basic_salary) > 0) || save.isLoading} onClick={() => save.mutate()}>Save</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={!(Number(v.basic_salary) > 0) || save.isLoading || (split.length > 0 && splitTotal !== 100)} onClick={() => save.mutate()}>Save</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

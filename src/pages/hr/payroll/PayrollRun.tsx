@@ -1,12 +1,13 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { ArrowUpRight, Ban, Banknote, Calculator, Check, Clock, CornerUpLeft, Download, Landmark, MessageSquare, Send, UserPlus, Users, Wallet, XCircle } from "lucide-react";
+import { ArrowUpRight, Ban, Banknote, BookOpen, Calculator, Check, Clock, CornerUpLeft, Download, FileDown, Landmark, MessageSquare, Send, UserPlus, Users, Wallet, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
+import { usePermissions } from "@/context/auth.context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,6 +16,9 @@ import { ActionDialog, ActionKind, ApprovalTracker } from "@/components/enterpri
 import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, SmartButtons, toChatter } from "@/components/enterprise/DocumentLayout";
 import { compactMoney, errorMessage, procurementApi } from "@/lib/procurement";
 import { CONTRIBUTION_BASES, PAYROLL_STATUS, payrollApi, rwf } from "@/lib/hr";
+import { exportReport, ExportFormat } from "@/lib/exporter";
+import ExportMenu from "@/components/enterprise/ExportMenu";
+import useSettings from "@/hooks/useSettings";
 import { cn } from "@/utils";
 import { Field, inputCls } from "@/components/portal/kit";
 import { PayslipDialog } from "./Payslip";
@@ -42,9 +46,10 @@ export default function PayrollRun() {
   const [paying, setPaying] = React.useState(false);
   const [slip, setSlip] = React.useState<any>(null);
   const [search, setSearch] = React.useState("");
+  const { settings }: any = useSettings();
 
   const q = useQuery(["payroll", payrollId], async () => {
-    const p: any = await pocketbase.collection("payrolls").getOne(payrollId!, { expand: "branch,prepared_by,paid_by,approval" });
+    const p: any = await pocketbase.collection("payrolls").getOne(payrollId!, { expand: "branch,prepared_by,paid_by,approval,payment_account,gl_journal,payment_journal" });
     const [slips, actions, audit] = await Promise.all([
       pocketbase.collection("employees_payrolls").getFullList({ filter: `payroll = "${payrollId}"`, sort: "department_name,employee_name" }),
       pocketbase.collection("approval_actions").getFullList({ filter: `document_type = "payroll" && document_id = "${payrollId}"`, sort: "created", expand: "actor,target_user" }).catch(() => [] as any[]),
@@ -103,6 +108,52 @@ export default function PayrollRun() {
     XLSX.writeFile(wb, `${p.number}-payroll.xlsx`);
   }
 
+  const employerLine = [settings?.payroll_employer_tin ? `Employer TIN ${settings.payroll_employer_tin}` : "", settings?.payroll_rssb_number ? `RSSB employer number ${settings.payroll_rssb_number}` : ""].filter(Boolean).join(" · ");
+  const sub = (what: string) => `${p.number} · ${p.period_label} · ${PAYROLL_STATUS[status]?.label || status}${employerLine ? ` · ${employerLine}` : ""}${what ? ` · ${what}` : ""}`;
+  const exportRegister = (format: ExportFormat) => exportReport({
+    title: `Payroll register — ${p.period_label}`, subtitle: sub(""), rows: slips as any[], format, what: `payroll_register:${p.number}`, orientation: "landscape", fileName: `${p.number}-register`,
+    totals: ["Basic", "Allowances", "Gross", "PAYE", "Pension (EE)", "Maternity (EE)", "CBHI", "Other / advances / loans", "Total deductions", "Net pay", "Employer contributions", "Employer cost"],
+    columns: [
+      { header: "Employee", value: (x: any) => x.employee_name, width: 24 }, { header: "Department", value: (x: any) => x.department_name, width: 22 }, { header: "Grade", value: (x: any) => x.grade || "", width: 7 },
+      { header: "Basic", value: (x: any) => x.basic, format: "money" }, { header: "Allowances", value: (x: any) => x.gross - x.basic, format: "money" }, { header: "Gross", value: (x: any) => x.gross, format: "money" },
+      { header: "PAYE", value: (x: any) => x.paye, format: "money" }, { header: "Pension (EE)", value: (x: any) => x.pension_ee, format: "money" }, { header: "Maternity (EE)", value: (x: any) => x.maternity_ee, format: "money" },
+      { header: "CBHI", value: (x: any) => x.cbhi, format: "money" },
+      { header: "Other / advances / loans", value: (x: any) => (x.other_deductions || []).reduce((a: number, d: any) => a + d.amount, 0) + (x.advances || 0) + (x.loans || 0), format: "money" },
+      { header: "Total deductions", value: (x: any) => x.total_deductions, format: "money" }, { header: "Net pay", value: (x: any) => x.net, format: "money" },
+      { header: "Employer contributions", value: (x: any) => x.employer_cost - x.gross, format: "money" }, { header: "Employer cost", value: (x: any) => x.employer_cost, format: "money" },
+    ],
+  });
+  const exportPaye = (format: ExportFormat) => exportReport({
+    title: `PAYE declaration schedule (RRA) — ${p.period_label}`, subtitle: sub("Declare and pay by the 15th of the following month"), rows: slips as any[], format, what: `payroll_paye:${p.number}`, fileName: `${p.number}-paye-rra`,
+    totals: ["Gross pay", "Taxable income", "PAYE"],
+    columns: [
+      { header: "Employee", value: (x: any) => x.employee_name, width: 26 }, { header: "TIN", value: (x: any) => x.tin || "", width: 12 }, { header: "Type", value: (x: any) => x.employment_type || "", width: 10 },
+      { header: "Gross pay", value: (x: any) => x.gross, format: "money" }, { header: "Taxable income", value: (x: any) => x.taxable_income, format: "money" }, { header: "PAYE", value: (x: any) => x.paye, format: "money" },
+    ],
+  });
+  const exportRssb = (format: ExportFormat) => exportReport({
+    title: `RSSB contributions schedule — ${p.period_label}`, subtitle: sub("Pension, maternity leave, occupational hazards, CBHI and medical"), rows: slips as any[], format, what: `payroll_rssb:${p.number}`, orientation: "landscape", fileName: `${p.number}-rssb`,
+    totals: ["Pension base", "Pension EE", "Pension ER", "Maternity EE", "Maternity ER", "Occupational hazards ER", "CBHI", "Medical EE", "Medical ER", "Total"],
+    columns: [
+      { header: "Employee", value: (x: any) => x.employee_name, width: 24 }, { header: "RSSB number", value: (x: any) => x.rssb_number || "", width: 12 },
+      { header: "Pension base", value: (x: any) => x.pension_base, format: "money" }, { header: "Pension EE", value: (x: any) => x.pension_ee, format: "money" }, { header: "Pension ER", value: (x: any) => x.pension_er, format: "money" },
+      { header: "Maternity EE", value: (x: any) => x.maternity_ee, format: "money" }, { header: "Maternity ER", value: (x: any) => x.maternity_er, format: "money" },
+      { header: "Occupational hazards ER", value: (x: any) => x.occ_hazard_er, format: "money" }, { header: "CBHI", value: (x: any) => x.cbhi, format: "money" },
+      { header: "Medical EE", value: (x: any) => x.medical_ee, format: "money" }, { header: "Medical ER", value: (x: any) => x.medical_er, format: "money" },
+      { header: "Total", value: (x: any) => x.pension_ee + x.pension_er + x.maternity_ee + x.maternity_er + x.occ_hazard_er + x.cbhi + x.medical_ee + x.medical_er, format: "money" },
+    ],
+  });
+  const bankRows = (slips as any[]).filter((x) => (x.payment_method || "bank") === "bank").sort((a, b) => `${a.bank_name}${a.employee_name}`.localeCompare(`${b.bank_name}${b.employee_name}`));
+  const payRef = `SALARY ${String(p.period_label || "").toUpperCase()}`;
+  const exportBank = (format: ExportFormat, bank?: string) => exportReport({
+    title: `Salary transfers${bank ? ` — ${bank}` : ""} — ${p.period_label}`, subtitle: sub(`Reference "${payRef}"`), format, what: `payroll_bank_file:${p.number}`,
+    rows: bank ? bankRows.filter((x) => (x.bank_name || "No bank recorded") === bank) : bankRows, fileName: `${p.number}-bank${bank ? `-${bank.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` : ""}`, totals: ["Amount"],
+    columns: [
+      { header: "Beneficiary", value: (x: any) => x.employee_name, width: 26 }, { header: "Bank", value: (x: any) => x.bank_name || "", width: 20 }, { header: "Account number", value: (x: any) => x.bank_account || "", width: 18 },
+      { header: "Amount", value: (x: any) => x.net, format: "money" }, { header: "Currency", value: () => "RWF", width: 7 }, { header: "Reference", value: () => payRef, width: 22 },
+    ],
+  });
+
   const actionsBar = (
     <>
       {isApprover && (
@@ -117,7 +168,7 @@ export default function PayrollRun() {
       {canPrepare && ["draft", "computed", "returned"].includes(status) && <Button size="sm" variant={status === "draft" ? "default" : "outline"} disabled={run.isLoading} onClick={() => run.mutate("compute")}><Calculator size={14} /> {status === "draft" ? "Calculate" : "Recalculate"}</Button>}
       {canPrepare && ["computed", "returned"].includes(status) && <Button size="sm" disabled={run.isLoading} onClick={() => run.mutate("submit")}><Send size={14} /> Submit for approval</Button>}
       {canPerform("mark_payroll_paid") && status === "approved" && <Button size="sm" onClick={() => setPaying(true)}><Banknote size={14} /> Record payment</Button>}
-      <Button size="sm" variant="outline" onClick={exportExcel} disabled={!slips.length}><Download size={14} /> Excel</Button>
+      <Button size="sm" variant="outline" onClick={exportExcel} disabled={!slips.length}><Download size={14} /> Excel (all sheets)</Button>
       {canPrepare && !["paid", "cancelled", "approved"].includes(status) && <Button size="sm" variant="ghost" onClick={() => setDecision("cancel")}><Ban size={14} /> Cancel</Button>}
       {approval && <Button size="sm" variant="ghost" onClick={() => setDecision("comment")}><MessageSquare size={14} /> Comment</Button>}
     </>
@@ -157,7 +208,8 @@ export default function PayrollRun() {
           ]}
           right={[
             { label: "Approval", value: approval ? `${approval.workflow_name} — ${approval.status}` : "Not submitted" },
-            { label: "Paid", value: p.paid_at ? `${format(new Date(p.paid_at.replace(" ", "T")), "d MMM yyyy")} by ${p.expand?.paid_by?.name || "—"}` : "" , hint: p.payment_reference ? `Reference ${p.payment_reference}` : undefined },
+            { label: "Paid", value: p.paid_at ? `${format(new Date(p.paid_at.replace(" ", "T")), "d MMM yyyy")} by ${p.expand?.paid_by?.name || "—"}` : "" , hint: [p.expand?.payment_account ? `from ${p.expand.payment_account.code}` : "", p.payment_reference ? `reference ${p.payment_reference}` : ""].filter(Boolean).join(" · ") || undefined },
+            { label: "General ledger", value: p.expand?.gl_journal ? (["view_journals", "export_ledger", "approve_journals"].some((x) => canPerform(x)) ? <Link className="font-medium text-primaryDark hover:underline" to={`/dashboard/finance/journals/${p.gl_journal}`}>{p.expand.gl_journal.number}</Link> : p.expand.gl_journal.number) : <span className="text-slate-500">Posted when approved</span>, hint: p.expand?.payment_journal ? `Payment journal ${p.expand.payment_journal.number}` : undefined },
             { label: "PAYE due to RRA", value: <span className="font-semibold">RWF {rwf(T.paye)}</span> },
             { label: "Due to RSSB", value: <span className="font-semibold">RWF {rwf(T.rssb)}</span>, hint: "Employee and employer contributions" },
           ]}
@@ -170,6 +222,9 @@ export default function PayrollRun() {
             { key: "register", label: "Payroll register", count: slips.length },
             { key: "statutory", label: "RRA & RSSB" },
             { key: "bank", label: "Bank transfers" },
+            ...((T.loans || 0) > 0 ? [{ key: "loans", label: "Loans", count: (slips as any[]).filter((x) => x.loans > 0).length }] : []),
+            ...(p.posting ? [{ key: "posting", label: "GL & budget" }] : []),
+            { key: "reconciliation", label: "Against last month" },
             ...(approval ? [{ key: "approval", label: "Approval" }] : []),
             { key: "rates", label: "Rates used" },
           ]}
@@ -177,7 +232,10 @@ export default function PayrollRun() {
         <div className="pt-4">
           {tab === "register" && (
             <>
-              <input type="search" className={cn(inputCls, "mb-3 sm:w-72")} placeholder="Search employee or department" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <input type="search" className={cn(inputCls, "sm:w-72")} placeholder="Search employee or department" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <ExportMenu label="Payroll register" permission={["export_payroll", "view_payroll_details"]} disabled={!slips.length} onExport={exportRegister} />
+              </div>
               <div className="overflow-x-auto rounded-md border border-slate-200">
                 <table className="dnr-grid w-full min-w-[1500px] border-separate border-spacing-0 text-[12.5px]">
                   <thead>
@@ -251,6 +309,10 @@ export default function PayrollRun() {
 
           {tab === "statutory" && (
             <div className="grid gap-4 lg:grid-cols-2">
+              <div className="flex flex-wrap gap-2 lg:col-span-2">
+                <ExportMenu label="PAYE schedule (RRA)" permission={["export_payroll", "view_payroll_details"]} disabled={!slips.length} onExport={exportPaye} />
+                <ExportMenu label="RSSB schedule" permission={["export_payroll", "view_payroll_details"]} disabled={!slips.length} onExport={exportRssb} />
+              </div>
               <div className="rounded-lg border border-slate-200 p-4">
                 <p className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Rwanda Revenue Authority</p>
                 <p className="mt-1 text-[24px] font-bold tabular-nums">RWF {rwf(T.paye)}</p>
@@ -273,12 +335,18 @@ export default function PayrollRun() {
 
           {tab === "bank" && (
             <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <ExportMenu label="Bank file (all banks)" permission={["export_payroll", "view_payroll_details"]} disabled={!bankRows.length} onExport={(fmt) => exportBank(fmt)} />
+                <span className="text-[12px] text-slate-500">Reference on every transfer: <b className="font-mono">{payRef}</b></span>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {byBank.map(([bank, v]) => (
                   <div key={bank} className="rounded-lg border border-slate-200 px-3 py-2.5">
                     <p className="text-[12.5px] font-medium">{bank}</p>
                     <p className="text-[16px] font-semibold tabular-nums">RWF {rwf(v.total)}</p>
-                    <p className="text-[11.5px] text-slate-500">{v.n} transfer{v.n === 1 ? "" : "s"}</p>
+                    <p className="flex items-center justify-between text-[11.5px] text-slate-500">{v.n} transfer{v.n === 1 ? "" : "s"}
+                      <button type="button" onClick={() => exportBank("csv", bank)} className="inline-flex items-center gap-1 font-medium text-primaryDark hover:underline"><FileDown size={12} /> CSV for this bank</button>
+                    </p>
                   </div>
                 ))}
               </div>
@@ -295,6 +363,9 @@ export default function PayrollRun() {
             </div>
           )}
 
+          {tab === "loans" && <LoansTab slips={slips as any[]} />}
+          {tab === "posting" && <PostingTab payroll={p} />}
+          {tab === "reconciliation" && <ReconciliationTab payrollId={p.id} />}
           {tab === "approval" && <ApprovalTracker approval={approval} actions={actions} />}
 
           {tab === "rates" && (
@@ -343,11 +414,20 @@ export default function PayrollRun() {
   );
 }
 
-function PayDialog({ payroll, onClose, onDone }: { payroll: any; onClose: () => void; onDone: () => void }) {
+export function PayDialog({ payroll, onClose, onDone }: { payroll: { id: string; number: string; total_net: number; headcount: number }; onClose: () => void; onDone: () => void }) {
   const [reference, setReference] = React.useState("");
-  const pay = useMutation(() => payrollApi.action(payroll.id, "paid", { reference }), {
+  const [account, setAccount] = React.useState("");
+  const [date, setDate] = React.useState(format(new Date(), "yyyy-MM-dd"));
+  const accounts = useQuery(["payroll-pay-accounts"], () => pocketbase.collection("bank_accounts").getFullList({ filter: 'kind = "bank" && status = "active" && funding_source = ""', sort: "-is_default,code" }));
+  React.useEffect(() => {
+    const list = (accounts.data || []) as any[];
+    if (!account && list.length) setAccount(list[0].id);
+  }, [accounts.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const chosen = ((accounts.data || []) as any[]).find((x) => x.id === account);
+  const short = chosen && chosen.book_balance < payroll.total_net;
+  const pay = useMutation(() => payrollApi.action(payroll.id, "paid", { reference, account, payment_date: date }), {
     onSuccess: () => {
-      toast.success("Payment recorded — employees can now see their payslips");
+      toast.success("Payment recorded — the cash book and the GL are updated, employees can see their payslips");
       onDone();
     },
     onError: (e) => {
@@ -359,14 +439,189 @@ function PayDialog({ payroll, onClose, onDone }: { payroll: any; onClose: () => 
       <DialogContent className="max-w-md bg-white">
         <DialogHeader>
           <DialogTitle>Record payment of {payroll.number}</DialogTitle>
-          <DialogDescription>RWF {rwf(payroll.total_net)} to {payroll.headcount} employees. Salary advances included in this payroll are marked as recovered.</DialogDescription>
+          <DialogDescription>RWF {rwf(payroll.total_net)} net pay to {payroll.headcount} employees. Salary advances and loan instalments in this payroll are marked as recovered.</DialogDescription>
         </DialogHeader>
-        <Field label="Bank transfer reference" hint="Batch or order number from the bank">
-          <input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} />
-        </Field>
+        <div className="space-y-3">
+          <Field label="Paid from" required hint={chosen ? `Cash book balance RWF ${rwf(chosen.book_balance)}` : "Unrestricted bank accounts only (donor accounts hold restricted money)"} error={short ? "Not enough money in this account for the whole payroll." : undefined}>
+            <select className={inputCls} value={account} onChange={(e) => setAccount(e.target.value)}>
+              {((accounts.data || []) as any[]).map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
+            </select>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Payment date" required><input type="date" className={inputCls} value={date} max={format(new Date(), "yyyy-MM-dd")} onChange={(e) => setDate(e.target.value)} /></Field>
+            <Field label="Bank reference" hint="Batch or order number"><input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
+          </div>
+        </div>
         <p className="text-[12px] text-slate-500">Separation of duties: the person who prepared the payroll cannot record its payment.</p>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={pay.isLoading} onClick={() => pay.mutate()}>Record payment</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={pay.isLoading || !account || !date || short} onClick={() => pay.mutate()}>Record payment</Button></DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function LoansTab({ slips }: { slips: any[] }) {
+  const rows = slips.filter((x) => x.loans > 0);
+  return (
+    <div className="overflow-x-auto rounded-md border border-slate-200">
+      <table className="dnr-grid w-full min-w-[560px] text-[12.5px]">
+        <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Employee</th><th className={th}>Loan</th><th className={cn(th, "text-right")}>Instalment</th></tr></thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.flatMap((x) => (x.loan_deductions || []).map((d: any) => (
+            <tr key={`${x.id}-${d.loan}`}><td className="px-2.5 py-1.5">{x.employee_name}</td><td className="px-2.5 py-1.5 font-mono">{d.number}</td><td className={td}>{rwf(d.amount)}</td></tr>
+          )))}
+        </tbody>
+        <tfoot><tr className="bg-slate-50 font-semibold"><td className="px-2.5 py-1.5" colSpan={2}>Total recovered through this payroll</td><td className={td}>{rwf(rows.reduce((a, x) => a + x.loans, 0))}</td></tr></tfoot>
+      </table>
+      <p className="px-3 py-2 text-[12px] text-slate-500">Loan balances go down when the payment of this payroll is recorded. <Link className="font-medium text-primaryDark hover:underline" to="/dashboard/hr/payroll/loans">All staff loans</Link></p>
+    </div>
+  );
+}
+
+const SHORT: Record<string, string> = { "5101": "Basic", "5102": "Allowances", "5103": "Pension", "5104": "Maternity", "5105": "Occ. hazards", "5106": "Medical" };
+const showDate = (d?: string) => (d ? format(new Date(`${d.slice(0, 10)}T12:00:00`), "d MMM yyyy") : "—");
+
+function PostingTab({ payroll }: { payroll: any }) {
+  const ps = payroll.posting || {};
+  const { can } = usePermissions();
+  const ledger = can(["view_journals", "export_ledger", "approve_journals"]);
+  const budget = (ps.budget || []) as any[];
+  const unbudgeted = (ps.unbudgeted || []) as any[];
+  const charged = budget.reduce((t, x) => t + x.amount, 0);
+  const grid = budget.length > 0 && budget.every((x) => x.account);
+  const accounts = Array.from(new Set(budget.map((x) => x.account))).sort();
+  const holders = Object.values(budget.reduce((g: Record<string, any>, x) => {
+    const key = `${x.department}|${x.project}|${x.funding}`;
+    const h = g[key] || (g[key] = { key, department: x.department || "All departments", source: x.project || (x.funding && x.funding !== "MC" ? x.funding : ""), cells: {} as Record<string, any>, total: 0, available: 0, over: false });
+    h.cells[x.account] = x;
+    h.total += x.amount;
+    h.available += x.available;
+    h.over = h.over || x.over;
+    return g;
+  }, {})).sort((p: any, q: any) => p.department.localeCompare(q.department) || p.source.localeCompare(q.source)) as any[];
+  const byAccount = (ps.by_account || []) as any[];
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 px-3 py-2.5"><p className="text-[11.5px] text-slate-500">Journal</p><p className="text-[16px] font-semibold">{ledger ? <Link className="text-primaryDark hover:underline" to={`/dashboard/finance/journals/${payroll.gl_journal}`}>{ps.journal}</Link> : ps.journal}</p><p className="text-[11.5px] text-slate-500">dated {showDate(ps.date)} · RWF {rwf(ps.total)}{ps.lines ? ` · ${ps.lines} lines` : ""}</p></div>
+        <div className="rounded-lg border border-slate-200 px-3 py-2.5"><p className="text-[11.5px] text-slate-500">Charged to budget lines</p><p className="text-[16px] font-semibold tabular-nums">RWF {rwf(charged)}</p><p className="text-[11.5px] text-slate-500">{budget.length} lines{budget.some((x) => x.over) ? " · some over budget" : " · all within budget"}</p></div>
+        <div className={cn("rounded-lg border px-3 py-2.5", unbudgeted.length ? "border-amber-300 bg-amber-50" : "border-slate-200")}><p className="text-[11.5px] text-slate-500">Not budgeted</p><p className="text-[16px] font-semibold tabular-nums">RWF {rwf(unbudgeted.reduce((t, x) => t + x.amount, 0))}</p><p className="text-[11.5px] text-slate-500">{unbudgeted.length ? "Add personnel lines in a budget revision" : "Every cost had a budget line"}</p></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12.5px] font-semibold text-slate-700">By funding source</span>
+        {(ps.by_funding || []).map((x: any) => <span key={x.funding_source} className="rounded-md border border-slate-200 px-2.5 py-1 text-[12.5px]">{x.name}: <b className="tabular-nums">RWF {rwf(x.amount)}</b></span>)}
+      </div>
+      {unbudgeted.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+          No budget line for: {unbudgeted.map((u) => `${u.account_name} · ${u.department_name || "—"} · ${u.funding_name} (RWF ${rwf(u.amount)})`).join("; ")}.
+        </div>
+      )}
+      {budget.length > 0 && (
+        <div className="overflow-x-auto rounded-md border border-slate-200">
+          {grid ? (
+            <table className="dnr-grid w-full min-w-[860px] text-[12.5px]">
+              <thead>
+                <tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className={th}>Charged to</th>
+                  {accounts.map((a) => <th key={a} className={cn(th, "text-right")} title={budget.find((x) => x.account === a)?.name}><span className="block font-mono normal-case tracking-normal text-slate-400">{a}</span>{SHORT[a] || a}</th>)}
+                  <th className={cn(th, "text-right")}>This payroll</th><th className={cn(th, "text-right")}>Still available</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {holders.map((h) => (
+                  <tr key={h.key} className={h.over ? "bg-red-50/60" : ""}>
+                    <td className="px-2.5 py-1.5"><span className="font-medium text-slate-800">{h.department}</span>{h.source && <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-px font-mono text-[11px] text-violet-700">{h.source}</span>}</td>
+                    {accounts.map((a) => {
+                      const c = h.cells[a];
+                      return <td key={a} className={cn(td, c?.over && "font-semibold text-red-700")} title={c ? `${c.code} · still available RWF ${rwf(c.available)}` : undefined}>{c ? rwf(c.amount) : <span className="text-slate-300">—</span>}</td>;
+                    })}
+                    <td className={cn(td, "font-semibold")}>{rwf(h.total)}</td>
+                    <td className={cn(td, h.available < 0 ? "font-semibold text-red-700" : "text-slate-600")}>{h.available < 0 ? `over by ${rwf(-h.available)}` : rwf(h.available)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-50 font-semibold">
+                  <td className="px-2.5 py-1.5">Total</td>
+                  {accounts.map((a) => <td key={a} className={td}>{rwf(budget.filter((x) => x.account === a).reduce((t, x) => t + x.amount, 0))}</td>)}
+                  <td className={td}>{rwf(charged)}</td>
+                  <td className={td}>{rwf(budget.reduce((t, x) => t + x.available, 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          ) : (
+            <table className="dnr-grid w-full min-w-[620px] text-[12.5px]">
+              <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Budget line charged</th><th className={cn(th, "text-right")}>This payroll</th><th className={cn(th, "text-right")}>Still available</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {budget.map((x) => (
+                  <tr key={x.line} className={x.over ? "bg-red-50/60" : ""}>
+                    <td className="px-2.5 py-1.5"><span className="font-mono text-[11.5px]">{x.code}</span> {x.name}</td>
+                    <td className={td}>{rwf(x.amount)}</td>
+                    <td className={cn(td, x.over ? "font-semibold text-red-700" : "")}>{x.over ? `over by ${rwf(-x.available)}` : rwf(x.available)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p className="px-3 py-2 text-[12px] text-slate-500">Salaries are never stopped by the budget; an overrun shows in red here and in the budget reports so that a revision can be prepared.</p>
+        </div>
+      )}
+      {byAccount.length > 0 && (
+        <div className="overflow-x-auto rounded-md border border-slate-200">
+          <table className="dnr-grid w-full min-w-[560px] text-[12.5px]">
+            <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Journal by account</th><th className={cn(th, "text-right")}>Debit</th><th className={cn(th, "text-right")}>Credit</th></tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {byAccount.map((x) => <tr key={x.account}><td className="px-2.5 py-1.5"><span className="font-mono font-semibold">{x.code}</span> {x.name}</td><td className={td}>{x.debit ? rwf(x.debit) : ""}</td><td className={td}>{x.credit ? rwf(x.credit) : ""}</td></tr>)}
+            </tbody>
+            <tfoot><tr className="bg-slate-50 font-semibold"><td className="px-2.5 py-1.5">Total</td><td className={td}>{rwf(byAccount.reduce((t, x) => t + x.debit, 0))}</td><td className={td}>{rwf(byAccount.reduce((t, x) => t + x.credit, 0))}</td></tr></tfoot>
+          </table>
+        </div>
+      )}
+      <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-slate-500">
+        <BookOpen size={13} /> Salary costs are posted by department and funding source, with no personal pay data in the ledger; what is owed to staff, RRA and RSSB is cleared when it is paid.
+        {ledger && payroll.gl_journal && <Link className="font-medium text-primaryDark hover:underline" to={`/dashboard/finance/journals/${payroll.gl_journal}`}>Open the journal lines →</Link>}
+      </p>
+    </div>
+  );
+}
+
+function ReconciliationTab({ payrollId }: { payrollId: string }) {
+  const q = useQuery(["payroll-reconciliation", payrollId], () => payrollApi.reconciliation(payrollId));
+  if (q.isLoading) return <Skeleton className="h-48 w-full" />;
+  if (q.isError) return <p className="text-[13px] text-red-700">{errorMessage(q.error)}</p>;
+  const r = q.data;
+  if (!r.previous) return <p className="text-[13px] text-slate-500">No earlier approved payroll to compare with.</p>;
+  const KIND: Record<string, string> = { joiner: "Joined", leaver: "Left", changed: "Changed" };
+  return (
+    <div className="space-y-4">
+      <p className="text-[13px] text-slate-600">Compared with <b>{r.previous.number}</b> ({r.previous.period_label}, {r.previous.headcount} employees): {r.joiners} joined, {r.leavers} left, {r.changed} with a different pay. Everyone else is paid the same.</p>
+      <div className="overflow-x-auto rounded-md border border-slate-200">
+        <table className="dnr-grid w-full min-w-[620px] text-[12.5px]">
+          <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Component</th><th className={cn(th, "text-right")}>{r.previous.period_label}</th><th className={cn(th, "text-right")}>{r.current.period_label}</th><th className={cn(th, "text-right")}>Difference</th></tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {(r.components as any[]).map((c) => (
+              <tr key={c.key} className={c.key === "net" || c.key === "gross" ? "font-semibold" : ""}><td className="px-2.5 py-1.5">{c.label}</td><td className={td}>{rwf(c.previous)}</td><td className={td}>{rwf(c.current)}</td><td className={cn(td, c.difference > 0 ? "text-emerald-700" : c.difference < 0 ? "text-red-700" : "text-slate-400")}>{c.difference > 0 ? "+" : ""}{rwf(c.difference)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {(r.rows as any[]).length > 0 && (
+        <div className="overflow-x-auto rounded-md border border-slate-200">
+          <table className="dnr-grid w-full min-w-[760px] text-[12.5px]">
+            <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Employee</th><th className={th}>What changed</th><th className={cn(th, "text-right")}>Gross</th><th className={cn(th, "text-right")}>Net pay</th><th className={cn(th, "text-right")}>Net difference</th></tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {(r.rows as any[]).map((x) => (
+                <tr key={x.employee}>
+                  <td className="px-2.5 py-1.5"><span className="block font-medium">{x.name}</span><span className="text-[11px] text-slate-500">{x.department}</span></td>
+                  <td className="px-2.5 py-1.5"><span className="mr-1 rounded bg-slate-100 px-1.5 py-px text-[11px] font-semibold">{KIND[x.kind]}</span>{(x.reasons || []).join("; ")}</td>
+                  <td className={td}>{x.current ? rwf(x.current.gross) : "—"}</td>
+                  <td className={td}>{x.current ? rwf(x.current.net) : "—"}</td>
+                  <td className={cn(td, x.diff_net > 0 ? "text-emerald-700" : x.diff_net < 0 ? "text-red-700" : "")}>{x.diff_net > 0 ? "+" : ""}{rwf(x.diff_net)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

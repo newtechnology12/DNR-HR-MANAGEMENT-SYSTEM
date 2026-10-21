@@ -16,6 +16,7 @@ const WRITE_PERMISSION = {
   fiscal_years: ["manage_fiscal_years", "change fiscal years"],
   approval_limits: ["manage_approval_workflows", "change approval limits"],
   strategic_objectives: ["manage_projects", "change the strategic objectives"],
+  posting_accounts: ["manage_chart_of_accounts", "change the posting accounts"],
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

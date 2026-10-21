@@ -57,7 +57,7 @@ onRecordBeforeCreateRequest((e) => {
 // Collections only certain roles may change (see lib/guards.js for the permission map).
 const GUARDED = [
   "roles", "departments", "warehouses", "approval_workflows", "number_sequences", "procurement_categories", "units_of_measure",
-  "gl_accounts", "cost_centres", "funding_sources", "projects", "tax_rates", "fiscal_years", "approval_limits", "strategic_objectives",
+  "gl_accounts", "cost_centres", "funding_sources", "projects", "tax_rates", "fiscal_years", "approval_limits", "strategic_objectives", "posting_accounts",
 ];
 onRecordBeforeCreateRequest((e) => require(`${__hooks}/lib/guards.js`).guard(e, "create"), ...GUARDED);
 onRecordBeforeUpdateRequest((e) => require(`${__hooks}/lib/guards.js`).guard(e, "update"), ...GUARDED);
