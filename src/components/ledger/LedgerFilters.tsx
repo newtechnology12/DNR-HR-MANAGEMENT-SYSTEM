@@ -4,7 +4,6 @@
  * balance line opens its account ledger for the same period and filters, and a link can be shared.
  */
 import { useSearchParams } from "react-router-dom";
-import { ChevronDown } from "lucide-react";
 import { DateRangeFilter, FilterChip, FilterSelect, fmtDate } from "@/components/ims";
 import { useJournalRefs } from "./LinesEditor";
 
@@ -65,24 +64,6 @@ export function useLedgerChips(f: LedgerFilter, set: (p: Partial<LedgerFilter>) 
 
 export const periodLabel = (from?: string, to?: string) => (from && to ? `${fmtDate(from)} – ${fmtDate(to)}` : "");
 
-function PeriodSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
-  return (
-    <span className="relative inline-block">
-      <select
-        aria-label="Period"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-button w-[180px] appearance-none truncate rounded-control border border-ims-link/60 bg-ims-card pl-3 pr-9 text-[13.5px] font-semibold text-ims-text outline-none focus:border-ims-focus focus:ring-2 focus:ring-ims-focus/25"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-      <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ims-muted" aria-hidden />
-    </span>
-  );
-}
-
 /** Period shortcut, dates, department, funding source and project — children of a FilterBar. */
 export function LedgerFilterControls({ f, set, shown }: { f: LedgerFilter; set: (p: Partial<LedgerFilter>) => void; shown?: { from: string; to: string; fy_start?: string } }) {
   const refs = useJournalRefs();
@@ -93,7 +74,9 @@ export function LedgerFilterControls({ f, set, shown }: { f: LedgerFilter; set: 
   const preset = presets.find((p) => p.from === from && p.to === to)?.value || "custom";
   return (
     <>
-      <PeriodSelect
+      <FilterSelect
+        label="Period"
+        all={false}
         value={preset}
         options={[...presets, { value: "custom", label: "Chosen dates" }]}
         onChange={(v) => {
