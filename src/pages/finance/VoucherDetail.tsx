@@ -22,6 +22,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { inputCls } from "@/components/portal/kit";
 import { cn } from "@/utils";
 import DocumentUploads from "@/components/enterprise/Attachments";
+import { AccountSelect } from "@/components/treasury/TreasuryKit";
+import { activeAccounts } from "@/lib/treasury";
 
 const STEPS = [
   { key: "draft", label: "Draft" },
@@ -41,7 +43,7 @@ export default function VoucherDetail() {
   const [busy, setBusy] = React.useState(false);
 
   const q = useQuery(["voucher", voucherId], async () => {
-    const v: any = await pocketbase.collection("payment_vouchers").getOne(voucherId!, { expand: "supplier,prepared_by,paid_by,approval,budget_line,department,expense_account" });
+    const v: any = await pocketbase.collection("payment_vouchers").getOne(voucherId!, { expand: "supplier,prepared_by,paid_by,approval,budget_line,department,expense_account,paid_from" });
     const payments = await pocketbase.collection("payments").getFullList({ filter: `voucher = "${voucherId}"`, sort: "created", expand: "invoice,paid_by" }).catch(() => [] as any[]);
     return { v, payments };
   });
@@ -110,6 +112,7 @@ export default function VoucherDetail() {
             { label: "Prepared by", value: v.expand?.prepared_by?.name, hint: showDay(v.created) },
             { label: "Pay by", value: v.due_date ? showDay(v.due_date) : "" },
             { label: "Paid", value: v.status === "paid" ? `${showDay(v.payment_date)} · ${PAYMENT_METHODS[v.payment_method] || v.payment_method} ${v.payment_reference}` : "", hint: v.expand?.paid_by ? `by ${v.expand.paid_by.name}` : undefined },
+            { label: "Paid from", value: v.expand?.paid_from ? <Link to={`/dashboard/treasury/accounts/${v.paid_from}`} className="text-primaryDark hover:underline">{v.expand.paid_from.code} · {v.expand.paid_from.name}</Link> : "" },
             { label: "Notes", value: v.notes },
           ]}
         />
@@ -195,11 +198,27 @@ function PayDialog({ v, onClose, onDone }: { v: any; onClose: () => void; onDone
   const [reference, setReference] = React.useState("");
   const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = React.useState(false);
+  const [account, setAccount] = React.useState<any>(null);
   const needsRef = method === "bank_transfer" || method === "cheque";
+  const kind = method === "cash" ? "cash" : "bank";
+  // The account the money leaves: the default of the right kind, unless the Cashier chooses another.
+  React.useEffect(() => {
+    let live = true;
+    activeAccounts(kind).then((list) => {
+      if (!live) return;
+      const usable = list.filter((a: any) => !a.funding_source || a.funding_source === v.funding_source);
+      setAccount(usable.find((a: any) => a.is_default) || usable[0] || null);
+    }).catch(() => null);
+    return () => {
+      live = false;
+    };
+  }, [kind, v.funding_source]);
+  const short = account && account.book_balance < v.net_amount;
+  const restricted = account?.funding_source && account.funding_source !== v.funding_source;
   async function run() {
     setBusy(true);
     try {
-      const r = await payablesApi.action(v.id, "pay", { method, reference: reference.trim(), payment_date: `${date} 12:00:00.000Z` });
+      const r = await payablesApi.action(v.id, "pay", { method, reference: reference.trim(), payment_date: `${date} 12:00:00.000Z`, account: account?.id || "" });
       toast.success(`${v.number} paid — ${(r.payments || []).join(", ")}`);
       onDone();
     } catch (e) {
@@ -223,12 +242,17 @@ function PayDialog({ v, onClose, onDone }: { v: any; onClose: () => void; onDone
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block text-[12.5px] font-medium text-slate-700">Method<select className={cn(inputCls, "mt-1")} value={method} onChange={(e) => setMethod(e.target.value)}>{Object.entries(PAYMENT_METHODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
           <label className="block text-[12.5px] font-medium text-slate-700">Payment date<input type="date" className={cn(inputCls, "mt-1")} value={date} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDate(e.target.value)} /></label>
+          <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">{kind === "cash" ? "Pay from cash book" : "Pay from bank account"}<span className="text-red-600"> *</span>
+            <span className="mt-1 block"><AccountSelect value={account?.id || ""} kind={kind} onChange={(_, a) => setAccount(a || null)} /></span>
+            {short && <span className="mt-1 block text-[12px] font-medium text-red-600">Only {rwf(account.book_balance)} in {account.code}: not enough for {rwf(v.net_amount)}.</span>}
+            {restricted && <span className="mt-1 block text-[12px] font-medium text-red-600">{account.code} holds restricted donor money of another funding source.</span>}
+          </label>
           <label className="block text-[12.5px] font-medium text-slate-700 sm:col-span-2">{method === "cheque" ? "Cheque number" : "Bank / transaction reference"}{needsRef && <span className="text-red-600"> *</span>}<input className={cn(inputCls, "mt-1")} value={reference} onChange={(e) => setReference(e.target.value)} placeholder={method === "cheque" ? "e.g. 004512" : "e.g. BK-TRF-2026-10-0412"} /></label>
         </div>
         <p className="text-[12px] text-slate-500">Separation of duties: whoever prepared or approved this voucher cannot execute it. The supplier's verified bank details must not have changed since it was prepared.</p>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={run} disabled={busy || (needsRef && reference.trim().length < 3)}><Banknote size={14} /> {busy ? "Paying…" : `Confirm payment of ${rwf(v.net_amount)}`}</Button>
+          <Button onClick={run} disabled={busy || !account || short || restricted || (needsRef && reference.trim().length < 3)}><Banknote size={14} /> {busy ? "Paying…" : `Confirm payment of ${rwf(v.net_amount)}`}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

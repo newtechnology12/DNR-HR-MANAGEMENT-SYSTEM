@@ -29,6 +29,8 @@ const DOCUMENT_TYPES: Record<string, string> = {
   journal_entry: "Journal entries",
   asset_disposal: "Asset disposals",
   bank_reconciliation: "Bank reconciliations",
+  cash_receipt: "Receipts (bank and cash)",
+  bank_transfer: "Transfers between accounts",
 };
 
 const blank = () => ({

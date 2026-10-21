@@ -3,7 +3,7 @@
  * "*" means every signed-in user. The server enforces the same permissions on the data.
  */
 import {
-  AlignEndHorizontal, Banknote, BarChart3, FileCheck2, Blocks, Boxes, Building2, CalendarClock, CalendarRange, CandlestickChart, CarFront, CircleDollarSign,
+  AlignEndHorizontal, ArrowRightLeft, Banknote, FileSpreadsheet, PiggyBank, BarChart3, FileCheck2, Blocks, Boxes, Building2, CalendarClock, CalendarRange, CandlestickChart, CarFront, CircleDollarSign,
   ClipboardList, Clock, Container, FileSearch, FileSignature, FolderKanban, GitBranch, GitPullRequest, Inbox, Landmark, Layout, ListChecks,
   ListTree, LucideIcon, Network, Percent, PieChart, Receipt, Scale, ScrollText, ServerCog, Settings, ShieldCheck, ShoppingCart, SlidersHorizontal,
   Split, Table, Tags, Truck, Undo2, User, UserCog, Users, Wallet, WalletCards, Activity, Coins, LayoutGrid, UserCheck,
@@ -27,6 +27,8 @@ export const APPROVER_PERMISSIONS = [
   "approve_procurement_plans", "approve_payroll", "approve_purchase_returns", "approve_budgets", "approve_payment_vouchers",
   "approve_journals", "approve_asset_disposals", "approve_bank_reconciliation", "approve_depreciation", "approve_treasury",
 ];
+
+const TREASURY_PERMISSIONS = ["view_treasury", "manage_treasury", "manage_bank_accounts", "approve_treasury", "record_payments", "prepare_bank_reconciliation", "approve_bank_reconciliation", "export_treasury"];
 
 export const NAVIGATION: NavGroup[] = [
   {
@@ -74,6 +76,19 @@ export const NAVIGATION: NavGroup[] = [
       { key: "vouchers", label: "Payment vouchers", link: "/dashboard/finance/vouchers", icon: FileCheck2, perms: ["view_payment_vouchers", "manage_payment_vouchers", "approve_payment_vouchers", "record_payments"] },
       { key: "payments", label: "Payments", link: "/dashboard/finance/payments", icon: Banknote, perms: ["view_invoices", "view_payment_vouchers", "record_payments"] },
       { key: "payablesReports", label: "Payables reports", link: "/dashboard/finance/reports", icon: BarChart3, perms: ["view_payment_vouchers", "manage_payment_vouchers", "view_invoices", "export_invoices"] },
+    ],
+  },
+  {
+    key: "treasury",
+    label: "Bank & cash",
+    items: [
+      { key: "cashPosition", label: "Cash position", link: "/dashboard/treasury", icon: Landmark, perms: TREASURY_PERMISSIONS },
+      { key: "bankAccounts", label: "Bank & cash accounts", link: "/dashboard/treasury/accounts", icon: WalletCards, perms: TREASURY_PERMISSIONS },
+      { key: "receipts", label: "Receipts", link: "/dashboard/treasury/receipts", icon: PiggyBank, perms: TREASURY_PERMISSIONS },
+      { key: "transfers", label: "Transfers", link: "/dashboard/treasury/transfers", icon: ArrowRightLeft, perms: TREASURY_PERMISSIONS },
+      { key: "bankStatements", label: "Bank statements", link: "/dashboard/treasury/statements", icon: FileSpreadsheet, perms: TREASURY_PERMISSIONS },
+      { key: "reconciliations", label: "Reconciliations", link: "/dashboard/treasury/reconciliations", icon: Scale, perms: TREASURY_PERMISSIONS },
+      { key: "treasuryReports", label: "Bank & cash reports", link: "/dashboard/treasury/reports", icon: BarChart3, perms: TREASURY_PERMISSIONS },
     ],
   },
   {

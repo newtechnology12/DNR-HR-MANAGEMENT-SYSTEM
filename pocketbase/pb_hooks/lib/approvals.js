@@ -128,6 +128,48 @@ const DOCS = {
       requester: doc.getString("prepared_by"), number: doc.getString("number"), title: `${doc.getString("payee_name")} — ${doc.getString("description")}`.slice(0, 200),
     }),
   },
+  cash_receipt: {
+    collection: "cash_receipts",
+    approvePermission: "approve_treasury",
+    label: "receipt",
+    link: (id) => `/dashboard/treasury/receipts/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    // The Cashier who recorded the money cannot verify it.
+    context: (doc) => ({
+      amount: doc.getInt("amount"), currency: "RWF", department: "", category: "", branch: "", funding_source: doc.getString("funding_source"),
+      requester: doc.getString("recorded_by"), number: doc.getString("number"), title: `Receipt from ${doc.getString("payer_name")}`,
+    }),
+  },
+  bank_transfer: {
+    collection: "bank_transfers",
+    approvePermission: "approve_treasury",
+    label: "inter-account transfer",
+    link: (id) => `/dashboard/treasury/transfers/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    context: (doc) => ({
+      amount: doc.getInt("amount"), currency: "RWF", department: "", category: "", branch: "",
+      requester: doc.getString("prepared_by"), number: doc.getString("number"), title: doc.getString("description").slice(0, 200),
+    }),
+  },
+  bank_reconciliation: {
+    collection: "bank_reconciliations",
+    approvePermission: "approve_bank_reconciliation",
+    label: "bank reconciliation",
+    link: (id) => `/dashboard/treasury/reconciliations/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    // SoD rule 5: whoever prepared the reconciliation cannot approve it.
+    context: (doc) => {
+      let account = "";
+      try {
+        const a = $app.dao().findRecordById("bank_accounts", doc.getString("account"));
+        account = `${a.getString("code")} ${a.getString("name")}`;
+      } catch (_) {}
+      return {
+        amount: 0, currency: "RWF", department: "", category: "", branch: "",
+        requester: doc.getString("prepared_by"), number: doc.getString("number"), title: `Bank reconciliation ${account} as of ${doc.getString("as_of").slice(0, 10)}`,
+      };
+    },
+  },
   supplier_bank_change: {
     collection: "supplier_bank_changes",
     approvePermission: "approve_suppliers",

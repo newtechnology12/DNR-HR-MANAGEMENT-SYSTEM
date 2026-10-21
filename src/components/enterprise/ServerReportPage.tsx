@@ -23,7 +23,7 @@ export interface ServerReportResult {
   generated_at: string;
 }
 
-type FilterKey = "from" | "to" | "supplier" | "department";
+type FilterKey = "from" | "to" | "supplier" | "department" | "account";
 
 const FORMAT: Record<string, CellFormat> = { money: "money", number: "number", pct: "percent", date: "date" };
 const cellText = (type: string, v: any) => {
@@ -53,12 +53,13 @@ export default function ServerReportPage({
   const [params, setParams] = useSearchParams();
   const first = groups[0]?.items[0]?.[0] || "";
   const key = params.get("r") || first;
-  const [f, setF] = React.useState<Record<string, string>>({ from: defaultFrom || `${new Date().getFullYear()}-01-01`, to: new Date().toISOString().slice(0, 10), supplier: "", department: "" });
+  const [f, setF] = React.useState<Record<string, string>>({ from: defaultFrom || `${new Date().getFullYear()}-01-01`, to: new Date().toISOString().slice(0, 10), supplier: "", department: "", account: "" });
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState<{ key: string; dir: 1 | -1 } | null>(null);
   const ref = useQuery(["server-report-filters", filters.join()], async () => ({
     suppliers: filters.includes("supplier") ? await pocketbase.collection("suppliers").getFullList({ sort: "name", fields: "id,name" }) : [],
     departments: filters.includes("department") ? await pocketbase.collection("departments").getFullList({ sort: "name", fields: "id,name" }) : [],
+    accounts: filters.includes("account") ? (await pocketbase.collection("bank_accounts").getFullList({ sort: "kind,code", fields: "id,code,name" })).map((a: any) => ({ id: a.id, name: `${a.code} · ${a.name}` })) : [],
   }));
   const active = Object.fromEntries(Object.entries(f).filter(([k]) => filters.includes(k as FilterKey)));
   const q = useQuery(["server-report", title, key, active], () => run(key, active), { keepPreviousData: true, enabled: Boolean(key) });
@@ -76,6 +77,7 @@ export default function ServerReportPage({
     filters.includes("to") && f.to && `to ${showDay(f.to)}`,
     f.supplier && filters.includes("supplier") && nameOf(ref.data?.suppliers, f.supplier),
     f.department && filters.includes("department") && nameOf(ref.data?.departments, f.department),
+    f.account && filters.includes("account") && nameOf(ref.data?.accounts, f.account),
   ].filter(Boolean).join(" · ");
 
   const doExport = (format: "xlsx" | "pdf" | "csv") =>
@@ -123,6 +125,11 @@ export default function ServerReportPage({
             {filters.includes("department") && (
               <label className="text-[12px] font-medium text-slate-600">Department
                 <select className={cn(selectCls, "mt-1")} value={f.department} onChange={(e) => setF({ ...f, department: e.target.value })}><option value="">All</option>{(ref.data?.departments || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+              </label>
+            )}
+            {filters.includes("account") && (
+              <label className="text-[12px] font-medium text-slate-600">Account
+                <select className={cn(selectCls, "mt-1")} value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })}><option value="">All</option>{(ref.data?.accounts || []).map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
               </label>
             )}
             <label className="col-span-2 text-[12px] font-medium text-slate-600 sm:col-span-1">Search in results

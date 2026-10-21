@@ -5,6 +5,7 @@
 import pocketbase from "@/lib/pocketbase";
 import type { ImportConfig } from "@/components/enterprise/ExcelImport";
 import { DOCUMENT_TYPE_LABELS } from "@/lib/ims";
+import { METHOD_LABELS, PAYER_TYPES } from "@/lib/treasury";
 
 const USER_MATCH = ["email", "name", "names"];
 const YES = (v: unknown) => (v === undefined ? true : Boolean(v));
@@ -24,6 +25,31 @@ const SECTIONS = [
 const CASH_FLOW = [["cash", "Cash and cash equivalents"], ["operating", "Operating"], ["investing", "Investing"], ["financing", "Financing"], ["none", "Non-cash"]].map(([value, label]) => ({ value, label }));
 
 export const IMPORTS: Record<string, ImportConfig> = {
+  receipts: {
+    name: "receipts",
+    title: "Receipts",
+    collection: "cash_receipts",
+    permission: "manage_treasury",
+    notes: [
+      "Imported receipts are drafts: open each one, check it and send it to the DAF for verification.",
+      "Account: the code of the bank account or cash book (e.g. BK-OPS). Income account: its code in the chart of accounts (e.g. 4101 member contributions).",
+    ],
+    fields: [
+      { name: "account", label: "Account", type: "relation", collection: "bank_accounts", matchBy: ["code", "name"], relationFilter: 'status = "active"', required: true, example: "BK-OPS" },
+      { name: "receipt_date", label: "Date received", type: "date", required: true, example: "2026-10-06" },
+      { name: "payer_type", label: "Kind of payer", type: "select", options: Object.entries(PAYER_TYPES).map(([value, label]) => ({ value, label })), example: "Member (district / City of Kigali)" },
+      { name: "payer_name", label: "Received from", type: "text", required: true, example: "Karongi District" },
+      { name: "amount", label: "Amount (RWF)", type: "money", required: true, example: 14600000 },
+      { name: "method", label: "Method", type: "select", options: ["bank_transfer", "cheque", "mobile_money", "direct_deposit", "cash"].map((value) => ({ value, label: METHOD_LABELS[value] })), example: "Bank transfer" },
+      { name: "reference", label: "Reference / cheque number", type: "text", example: "KRG-CONTR-2627", hint: "Required for cheques; helps matching with the bank statement" },
+      { name: "income_account", label: "Income account", type: "relation", collection: "gl_accounts", matchBy: ["code", "name"], relationFilter: "is_posting = true", required: true, example: "4101" },
+      { name: "funding_source", label: "Funding source", type: "relation", collection: "funding_sources", matchBy: ["code", "name"], example: "MC" },
+      { name: "description", label: "Description", type: "textarea", example: "Annual member contribution 2026/27" },
+    ],
+    toPayload: (v) => ({ ...v, payer_type: v.payer_type || "other", method: v.method || "bank_transfer" }),
+    validate: (v) => (v.method === "cheque" && String(v.reference || "").trim().length < 3 ? "Enter the cheque number." : null),
+  },
+
   glAccounts: {
     name: "chart-of-accounts",
     title: "Accounts",

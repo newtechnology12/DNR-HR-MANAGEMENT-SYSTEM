@@ -324,7 +324,7 @@ async function seedRoles() {
 async function seedApprovalLimits(roleIds) {
   const LIMITS = [
     ["DAF", "purchase_requisition", 5000000], ["DAF", "purchase_order", 5000000], ["DAF", "payment_voucher", 5000000],
-    ["DAF", "supplier_invoice", 20000000], ["DAF", "contract", 10000000],
+    ["DAF", "supplier_invoice", 20000000], ["DAF", "contract", 10000000], ["DAF", "bank_transfer", 50000000],
     ["SG", "", 0],
   ];
   for (const [code, document_type, max] of LIMITS) {
@@ -334,7 +334,7 @@ async function seedApprovalLimits(roleIds) {
     if (existing) await pb.collection("approval_limits").update(existing.id, data);
     else await pb.collection("approval_limits").create(data);
   }
-  console.log(`  ✓ approval limits: DAF up to RWF 5M on requisitions, POs and vouchers (SG above)`);
+  console.log(`  ✓ approval limits: DAF up to RWF 5M on requisitions, POs and vouchers, RWF 50M on transfers (SG above)`);
 }
 
 const FIRST = ["Jean", "Aline", "Eric", "Diane", "Patrick", "Claudine", "Emmanuel", "Josiane", "Olivier", "Chantal", "Innocent", "Solange", "Fabrice", "Vestine", "Kevin", "Yvonne", "Samuel", "Denise", "Thierry", "Florence", "Didier", "Esperance", "Gilbert", "Beatha", "Moses"];

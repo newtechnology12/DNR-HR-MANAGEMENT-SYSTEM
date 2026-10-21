@@ -19,7 +19,7 @@ const BANK_FIELDS = ["bank_name", "bank_branch", "bank_account_name", "bank_acco
 const VIEWERS = ["view_payment_vouchers", "manage_payment_vouchers", "approve_payment_vouchers", "record_payments", "view_audit_logs"];
 const SYSTEM_FIELDS = [
   "number", "status", "prepared_by", "approval", "pending_approvers", "approver_history", "submitted_at", "approved_at",
-  "paid_by", "paid_at", "payment_date", "payment_reference", "cancel_reason", "budget_override", "actual_amount",
+  "paid_by", "paid_at", "payment_date", "payment_reference", "cancel_reason", "budget_override", "actual_amount", "paid_from", "cash_entry",
 ];
 const r0 = (n) => Math.round(Number(n) || 0);
 const fmt = (n) => core.formatMoney(n, "RWF");
@@ -283,6 +283,14 @@ function execute(dao, id, actor, input, meta) {
     }
   }
 
+  // The money leaves one of RALGA's accounts: the right kind for the method, enough in it, open dates only,
+  // and never restricted donor money for another funding source.
+  const treasury = require("./treasury.js");
+  const payDay = when.toISOString().slice(0, 10);
+  const account = treasury.paymentAccount(dao, String(input.account || ""), method, v);
+  treasury.assertDateOpen(dao, account, payDay, `the payment of ${number}`);
+  treasury.assertFunds(dao, account, v.getInt("net_amount"), payDay, number);
+
   const finance = require("./finance.js");
   const payments = [];
   const whtTotal = v.getInt("wht_amount");
@@ -319,10 +327,17 @@ function execute(dao, id, actor, input, meta) {
   v.set("payment_date", when.toISOString());
   v.set("payment_method", method);
   v.set("payment_reference", reference);
+  for (const p of payments) {
+    p.set("bank_account", account.id);
+    dao.saveRecord(p);
+  }
+  const entry = treasury.recordVoucherPayment(dao, v, account, { date: payDay, method, reference, actor });
+  v.set("paid_from", account.id);
+  v.set("cash_entry", entry ? entry.id : "");
   dao.saveRecord(v);
   core.audit(dao, {
     actor, action: "payment_executed", collection: "payment_vouchers", recordId: v.id, label: number, meta,
-    comment: `${method.replace(/_/g, " ")} ${reference} · net ${fmt(v.getInt("net_amount"))}${whtTotal ? ` · withholding tax ${fmt(whtTotal)}` : ""}`,
+    comment: `${method.replace(/_/g, " ")} ${reference} from ${account.getString("code")} · net ${fmt(v.getInt("net_amount"))}${whtTotal ? ` · withholding tax ${fmt(whtTotal)}` : ""}`,
     changes: { status: { old: "approved", new: "paid" } },
   });
   core.notify(dao, [v.getString("prepared_by")].filter((x) => x && x !== actor.id), {

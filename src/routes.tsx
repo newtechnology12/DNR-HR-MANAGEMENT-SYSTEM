@@ -115,6 +115,21 @@ const VoucherForm = lazy(() => import("./pages/finance/VoucherForm"));
 const VoucherDetail = lazy(() => import("./pages/finance/VoucherDetail"));
 const PayablesReports = lazy(() => import("./pages/finance/PayablesReports"));
 const VOUCHER_USERS = ["view_payment_vouchers", "manage_payment_vouchers", "approve_payment_vouchers", "record_payments"];
+// RALGA IMS — bank and cash (Step 5).
+const TreasuryOverview = lazy(() => import("./pages/treasury/TreasuryOverview"));
+const BankAccounts = lazy(() => import("./pages/treasury/BankAccounts"));
+const AccountDetail = lazy(() => import("./pages/treasury/AccountDetail"));
+const Receipts = lazy(() => import("./pages/treasury/Receipts"));
+const ReceiptDetail = lazy(() => import("./pages/treasury/ReceiptDetail"));
+const Transfers = lazy(() => import("./pages/treasury/Transfers"));
+const TransferDetail = lazy(() => import("./pages/treasury/TransferDetail"));
+const Statements = lazy(() => import("./pages/treasury/Statements"));
+const StatementDetail = lazy(() => import("./pages/treasury/StatementDetail"));
+const Reconcile = lazy(() => import("./pages/treasury/Reconcile"));
+const Reconciliations = lazy(() => import("./pages/treasury/Reconciliations"));
+const ReconciliationDetail = lazy(() => import("./pages/treasury/ReconciliationDetail"));
+const TreasuryReports = lazy(() => import("./pages/treasury/TreasuryReports"));
+const TREASURY_USERS = ["view_treasury", "manage_treasury", "manage_bank_accounts", "approve_treasury", "record_payments", "prepare_bank_reconciliation", "approve_bank_reconciliation", "export_treasury"];
 const INVOICE_USERS = ["view_invoices", "manage_invoices", "resolve_invoice_exceptions", "approve_invoices", "record_payments"];
 const PO_USERS = ["view_purchase_orders", "manage_purchase_orders", "approve_purchase_orders", "receive_goods"];
 const INVENTORY_USERS = ["view_inventory", "manage_inventory"];
@@ -778,6 +793,24 @@ const router = createBrowserRouter([
                     path: "budgets",
                     element: <Navigate to="/dashboard/budget" replace />,
                   },
+                ],
+              },
+              {
+                path: "treasury",
+                children: [
+                  { index: true, element: <ProtectedRoute entity={TREASURY_USERS}><TreasuryOverview /></ProtectedRoute> },
+                  { path: "accounts", element: <ProtectedRoute entity={TREASURY_USERS}><BankAccounts /></ProtectedRoute> },
+                  { path: "accounts/:accountId", element: <ProtectedRoute entity={TREASURY_USERS}><AccountDetail /></ProtectedRoute> },
+                  { path: "receipts", element: <ProtectedRoute entity={TREASURY_USERS}><Receipts /></ProtectedRoute> },
+                  { path: "receipts/:receiptId", element: <ProtectedRoute entity={TREASURY_USERS}><ReceiptDetail /></ProtectedRoute> },
+                  { path: "transfers", element: <ProtectedRoute entity={TREASURY_USERS}><Transfers /></ProtectedRoute> },
+                  { path: "transfers/:transferId", element: <ProtectedRoute entity={TREASURY_USERS}><TransferDetail /></ProtectedRoute> },
+                  { path: "statements", element: <ProtectedRoute entity={TREASURY_USERS}><Statements /></ProtectedRoute> },
+                  { path: "statements/:statementId", element: <ProtectedRoute entity={TREASURY_USERS}><StatementDetail /></ProtectedRoute> },
+                  { path: "reconcile/:accountId", element: <ProtectedRoute entity={TREASURY_USERS}><Reconcile /></ProtectedRoute> },
+                  { path: "reconciliations", element: <ProtectedRoute entity={TREASURY_USERS}><Reconciliations /></ProtectedRoute> },
+                  { path: "reconciliations/:recId", element: <ProtectedRoute entity={TREASURY_USERS}><ReconciliationDetail /></ProtectedRoute> },
+                  { path: "reports", element: <ProtectedRoute entity={TREASURY_USERS}><TreasuryReports /></ProtectedRoute> },
                 ],
               },
               {

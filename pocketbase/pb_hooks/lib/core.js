@@ -205,6 +205,7 @@ const DEFAULT_SEQUENCES = {
   receipt: { name: "Cash / bank receipt", prefix: "RCT" },
   bank_transfer: { name: "Inter-account transfer", prefix: "TRF" },
   bank_reconciliation: { name: "Bank reconciliation", prefix: "REC" },
+  bank_statement: { name: "Bank statement import", prefix: "STM" },
   asset_transfer: { name: "Asset transfer", prefix: "ATR" },
   asset_disposal: { name: "Asset disposal", prefix: "DSP" },
   depreciation_run: { name: "Depreciation run", prefix: "DEP" },

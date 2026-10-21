@@ -66,6 +66,8 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   journal_entry: "Journal entry",
   asset_disposal: "Asset disposal",
   bank_reconciliation: "Bank reconciliation",
+  cash_receipt: "Receipt",
+  bank_transfer: "Inter-account transfer",
 };
 
 /** Where an approval's document opens, by document type. */
@@ -82,6 +84,9 @@ export const DOCUMENT_LINKS: Record<string, (id: string) => string> = {
   budget_revision: (id) => `/dashboard/budget/revisions/${id}`,
   supplier_bank_change: (id) => `/dashboard/procurement/bank-changes/${id}`,
   payment_voucher: (id) => `/dashboard/finance/vouchers/${id}`,
+  cash_receipt: (id) => `/dashboard/treasury/receipts/${id}`,
+  bank_transfer: (id) => `/dashboard/treasury/transfers/${id}`,
+  bank_reconciliation: (id) => `/dashboard/treasury/reconciliations/${id}`,
 };
 
 const qs = (params: Record<string, unknown>) =>

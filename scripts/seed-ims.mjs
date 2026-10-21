@@ -156,6 +156,51 @@ const TAXES = [
   { code: "WHT_SERVICES", name: "Withholding tax — service and professional fees", category: "withholding", rate: 15, effective_from: "2019-01-01", gl: "2108", applies_to: "Consultancy, professional and other service fees, royalties, rent where applicable", legal_reference: "Rwanda income tax law (RRA) — confirm current article and exemptions" },
 ];
 
+/**
+ * Bank accounts and the petty cash book (M5), with opening balances at the start of the fiscal year. Every
+ * cash movement of an earlier demo run is removed first: the purchasing seeds pay vouchers from these
+ * accounts again, and seed-treasury.mjs adds receipts, transfers, statements and reconciliations at the end.
+ */
+async function seedAccounts(daf, byCode, funding, currentStart) {
+  for (const t of ["cash_receipt", "bank_transfer", "bank_reconciliation"]) {
+    for (const a of await admin.collection("approval_requests").getFullList({ fields: "id", filter: `document_type = "${t}"` })) await admin.collection("approval_requests").delete(a.id).catch(() => null);
+  }
+  for (const col of ["bank_reconciliations", "cash_receipts", "bank_transfers", "bank_statements", "cash_book_entries", "bank_accounts"]) {
+    for (const r of await admin.collection(col).getFullList({ fields: "id" })) await admin.collection(col).delete(r.id);
+    for (const r of await admin.collection("audit_logs").getFullList({ fields: "id", filter: `collection_name = "${col}"` })) await admin.collection("audit_logs").delete(r.id).catch(() => null);
+  }
+  for (const key of ["receipt", "bank_transfer", "bank_reconciliation", "bank_statement"]) {
+    const seq = await admin.collection("number_sequences").getFirstListItem(`key = "${key}"`).catch(() => null);
+    if (seq) await admin.collection("number_sequences").update(seq.id, { next_value: 1 });
+  }
+  const cashier = await admin.collection("users").getFirstListItem(`email = "cashier@dnr-hr.rw"`);
+  const opening = `${currentStart}-07-01 12:00:00.000Z`;
+  const ACCOUNTS = [
+    {
+      code: "BK-OPS", name: "Operating account", kind: "bank", bank_name: "Bank of Kigali", branch: "Kigali Main Branch", account_number: "00040-0698741-23",
+      account_name: "Rwandese Association of Local Government Authorities", swift_code: "BKIGRWRW", gl: "1101", opening_balance: 1250000000, is_default: true,
+      signatories: "Any two of: Secretary General, Director of Finance, Head of Corporate Services",
+      notes: "Main account: member contributions and Government transfers in; supplier, payroll and tax payments out.",
+    },
+    {
+      code: "BPR-LED", name: "LED programme account", kind: "bank", bank_name: "BPR Bank Rwanda", branch: "Kigali City Branch", account_number: "4001-2287-6610",
+      account_name: "RALGA — Local Economic Development programme", swift_code: "BPRWRWRW", gl: "1102", fund: "DP-LED", opening_balance: 380000000,
+      signatories: "Secretary General and Director of Finance (both)",
+      notes: "Restricted: money of the Local Economic Development grant only (agreement GA-LED-2025-01).",
+    },
+    {
+      code: "PC-HQ", name: "Petty cash — Head Office", kind: "cash", gl: "1103", opening_balance: 450000, cash_limit: 1000000, is_default: true, custodian: cashier.id,
+      notes: "Petty cash float held by the Cashier in the office safe; replenished from the operating account.",
+    },
+  ];
+  for (const { gl, fund, ...a } of ACCOUNTS) {
+    await daf.collection("bank_accounts").create({ ...a, currency: "RWF", gl_account: byCode[gl].id, funding_source: fund ? funding[fund].id : "", opening_date: opening, status: "active" });
+  }
+  const s = (await admin.collection("settings").getList(1, 1)).items[0];
+  await admin.collection("settings").update(s.id, { bank_match_days: 7, stale_cheque_days: 180 });
+  console.log(`  ✓ ${ACCOUNTS.length} bank & cash accounts (BK operating, BPR restricted LED account, petty cash) with opening balances on 1 Jul ${currentStart}`);
+}
+
 async function upsert(client, collection, filter, data) {
   const existing = await admin.collection(collection).getFirstListItem(filter).catch(() => null);
   return existing ? client.collection(collection).update(existing.id, data) : client.collection(collection).create(data);
@@ -220,6 +265,8 @@ async function main() {
   }
   for (const d of departments) await upsert(daf, "cost_centres", `code = "${d.code}"`, { code: d.code, name: d.name, department: d.id, active: true, description: `Cost centre for ${d.name}` });
   console.log(`  ✓ ${FUNDING.length} funding sources (member contributions + 2 donor programmes), ${PROJECTS.length} projects, ${departments.length} cost centres`);
+
+  await seedAccounts(daf, byCode, funding, currentStart);
 
   for (const t of TAXES) {
     const { gl, effective_from, ...rest } = t;

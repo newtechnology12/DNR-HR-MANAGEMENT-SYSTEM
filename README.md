@@ -5,7 +5,7 @@ Government Authorities): budgets and budget control, procurement and purchase or
 and payment vouchers, bank and cash, payroll, fixed assets, general ledger, financial statements and
 role dashboards — with a configurable approval engine, segregation of duties and a read-only audit trail.
 
-Built by DNR Partners.
+Developed by Infinity Core Solutions Ltd.
 
 ## Build status
 
@@ -15,7 +15,7 @@ Built by DNR Partners.
 | 2 | Budgeting & budget control (M2): budgets by line with monthly phasing and Excel import, revisions (supplementary, reduction, virement, re-phasing), hard-stop control with DAF override, commitments from POs, actuals from invoices, utilisation dashboard, budget vs actual, commitments and overrides reports | **Done** |
 | 3 | Procurement, suppliers, PO, GRN (M3): requisitions, POs and procurement plan lines charged to budget lines (plans cannot exceed a line), supplier bank-detail changes verified by Finance, supplier balances and plan execution reports | **Done** |
 | 4 | Supplier invoices & payment vouchers (M4): duplicate invoice control, payment vouchers for invoices or direct expenses with withholding tax from the dated table, approval Accountant → DAF → SG above limit, execution by the Cashier, supplier ageing, outstanding liabilities, payment register, WHT schedule | **Done** |
-| 5 | Bank & cash, reconciliation (M5) | Planned |
+| 5 | Bank & cash, reconciliation (M5): bank accounts and cash books with opening balances, receipts and inter-account transfers approved by the DAF, voucher payments from a chosen account (no overdraft, restricted donor accounts), cash book, bank statement import from Excel / CSV with column mapping and automatic matching, matching by hand, bank charges recorded from the statement, reconciliation (Accountant prepares, DAF approves, then locked), cash counts, cash position and reports | **Done** |
 | 6 | Payroll (M6) | Existing module — GL posting and funding split to add |
 | 7 | Fixed assets & depreciation (M7) | Planned |
 | 8 | General ledger, period close (M8) | Planned |
@@ -59,14 +59,14 @@ npm run seed:ralga
 # 3. Frontend (http://localhost:5173, proxies /api to the backend)
 npm run dev:frontend
 
-# 4. API tests (must stay green: 152 checks)
+# 4. API tests (must stay green: 281 checks in 11 suites)
 npm run test:api
 ```
 
 ## Demo logins
 
-One account per role. Password for all: **`password123`** (development / demo only — the login page shows
-one-click role cards when `VITE_DEMO_LOGINS=true` or in development).
+One account per role. Password for all: **`password123`** (development / demo only — the login page shows a
+*Demo access* picker that fills the form with any role when `VITE_DEMO_LOGINS=true` or in development).
 
 | Role | E-mail | Person |
 |---|---|---|
@@ -158,6 +158,37 @@ Once a supplier is approved, its bank details are locked. Procurement asks for n
 payments keep going to the verified account. Old and new details stay on the request; every step is
 audited. Bank details are visible only to supplier, payables and audit roles.
 
+## Bank and cash
+
+Bank & cash in the menu (Cashier, Accountant, DAF, SG, Internal Auditor).
+
+- **Accounts:** the DAF sets up each bank account and cash book with its GL cash account, an opening balance on
+  the go-live date (taken from the bank statement or a cash count), and optionally a funding source: a
+  *restricted* donor account only receives and pays that funding source's money. Once an account has
+  transactions its type, GL account and opening balance are locked.
+- **Receipts** (member contributions, Government transfers, donor grants, fees): the Cashier records them; the
+  DAF verifies; only then are they posted to the cash book. Excel import is available for many receipts at once.
+- **Transfers** between RALGA accounts (petty cash replenishment, bank to bank): Cashier prepares, DAF approves
+  (SG too above the DAF transfer limit), then posted out of one account and into the other. Money leaving a
+  restricted account needs a written reason.
+- **Payments:** the Cashier chooses the account a voucher is paid from (cash only from a cash book); the account
+  must hold enough money and must not be a donor account of another funding source.
+- **Bank statements:** the Accountant imports the bank's Excel or CSV file (column mapping remembered per
+  account; a template is provided for PDF-only statements). The lines must add up to the closing balance and
+  follow the running balance; periods already imported are refused. Lines are matched to the cash book
+  automatically (same amount and direction within 7 days — setting `bank_match_days` — the reference first).
+- **Reconciliation screen:** statement lines and cash book entries not yet matched side by side; select items
+  with equal totals and match them, record bank charges and interest from the statement (optionally charged to a
+  budget line), give every open item a follow-up (timing difference, to record, to investigate, error to
+  correct). The reconciliation statement updates live.
+- **Reconciliation:** prepared by the Accountant as of a statement date (difference must be nil, every open item
+  followed up), approved by the DAF — whoever prepares cannot approve. After approval its matches are locked and
+  nothing can be dated on or before that date. Cash books are reconciled by a **cash count**.
+- **Reports:** cash position, bank transaction summary, cash book with running balance, unreconciled items,
+  receipts register, reconciliation register; the reconciliation statement itself exports to Excel / PDF.
+- A posted receipt or transfer that is not yet on a bank statement can be **reversed** by the DAF (reason
+  required): an opposite entry dated today, never an edit.
+
 ## Working with data
 
 - **Excel import** (button *Import* on lists): download the template (Data sheet with the right headers, an
@@ -167,11 +198,12 @@ audited. Bank details are visible only to supplier, payables and audit roles.
   by one through the API, so permissions, business rules and the audit trail apply exactly as in the forms.
   Available on master data (chart of accounts, funding sources, projects, cost centres, tax rates, approval
   limits), departments, designations, offices, suppliers (created as drafts), stock items, equipment
-  (categories, types, register), leave types, public holidays, salary structures, partners and employees.
+  (categories, types, register), leave types, public holidays, salary structures, partners, employees and
+  receipts (created as drafts). Bank statements have their own import with column mapping (Bank and cash).
 - **Export** (button *Export*): Excel, PDF or CSV with the RALGA header, the filters used and who generated it,
   on every list; exports are audited and follow each person's access (staff export only their own records).
-- **Supporting documents** (tab *Documents* on budgets, revisions, purchase orders, invoices, vouchers, returns
-  and bank-detail changes): drag and drop several files (PDF, images, Office, CSV, e-mail, zip; 20 MB each).
+- **Supporting documents** (tab *Documents* on budgets, revisions, purchase orders, invoices, vouchers, returns,
+  bank-detail changes, receipts, transfers, bank statements and reconciliations): drag and drop several files (PDF, images, Office, CSV, e-mail, zip; 20 MB each).
   Files can be added at any stage; they can only be removed while the document is being prepared. Each
   upload and removal is audited.
 
@@ -212,7 +244,8 @@ and press *Confirm* (the source is recorded in the audit log).
 
 | Variable | Where | Purpose |
 |---|---|---|
-| `VITE_DEMO_LOGINS` | frontend build | `true` shows the one-click role cards on the login page (never in production) |
+| `VITE_DEMO_LOGINS` | frontend build | `true` shows the *Demo access* role picker on the login page (never in production) |
+| `VITE_SUPPORT_EMAIL` | frontend build | Address behind *Need access? Contact the RALGA ICT unit* on the login page (without it, the link explains who creates accounts) |
 | `VITE_PRODUCT_NAME`, `VITE_PRODUCT_LONG_NAME`, `VITE_ORG_NAME`, `VITE_ORG_SHORT_NAME`, `VITE_ORG_ADDRESS`, `VITE_VENDOR_NAME` | frontend build | Branding on screens and exported reports |
 | `VITE_LOGO_URL` | frontend build | Another logo file (e.g. `/logo.svg`) instead of the built-in RALGA wordmark |
 | `PB_URL` | seed / test scripts | PocketBase URL (default `http://127.0.0.1:8090`; seeds refuse non-local URLs) |
@@ -246,4 +279,7 @@ self-approval blocked, double approval blocked, admins / auditors cannot approve
 without confirmation, lockout and 2FA, password policy, settings guards, chart-of-accounts rules,
 overlapping tax rates, approval limits and delegations, budget hard stop and override rules, commitments and
 actuals reconciling to the ledger, virement and reduction rules, department scoping of budget figures, supplier
-bank-detail changes (no direct edit, no self-verification, visibility), and plan lines tied to budget lines.
+bank-detail changes (no direct edit, no self-verification, visibility), plan lines tied to budget lines, and
+bank and cash (accounts set up by the DAF only, receipts and transfers verified before posting, no future or
+pre-opening dates, no overdraft, restricted donor accounts, statements that do not add up or overlap refused,
+automatic and manual matching, preparer ≠ approver of reconciliations, locked periods after approval, reversal).

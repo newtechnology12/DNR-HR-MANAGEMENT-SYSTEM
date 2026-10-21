@@ -12,6 +12,9 @@ function approved(dao, type, doc, actor, meta) {
   if (type === "supplier_invoice") return budget.invoiceApproved(dao, doc, actor, meta);
   if (type === "supplier_bank_change") return require("./supplierbank.js").onApproved(dao, doc, actor, meta);
   if (type === "payment_voucher") return require("./vouchers.js").onApproved(dao, doc, actor, meta);
+  if (type === "cash_receipt") return require("./treasury.js").onReceiptApproved(dao, doc, actor, meta);
+  if (type === "bank_transfer") return require("./treasury.js").onTransferApproved(dao, doc, actor, meta);
+  if (type === "bank_reconciliation") return require("./treasury.js").onRecApproved(dao, doc, actor, meta);
 }
 
 /** Rejected or returned by an approver. */

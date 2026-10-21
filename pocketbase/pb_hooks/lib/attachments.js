@@ -22,6 +22,10 @@ const DOCS = {
   contracts: { field: "documents", perms: ["manage_contracts", "approve_contracts"], owners: ["created_by"], open: ["draft", "returned"] },
   purchase_returns: { field: "attachments", perms: ["manage_purchase_orders", "approve_purchase_returns", "receive_goods"], owners: ["created_by", "requested_by"], open: ["draft", "returned"] },
   supplier_bank_changes: { field: "attachments", perms: ["manage_suppliers", "approve_suppliers"], owners: ["requested_by"], open: ["pending_approval", "returned"] },
+  cash_receipts: { field: "attachments", perms: ["manage_treasury", "approve_treasury"], owners: ["recorded_by"], open: ["draft", "returned"] },
+  bank_transfers: { field: "attachments", perms: ["manage_treasury", "approve_treasury"], owners: ["prepared_by"], open: ["draft", "returned"] },
+  bank_statements: { field: "attachments", perms: ["prepare_bank_reconciliation", "approve_bank_reconciliation"], owners: ["imported_by"], open: ["imported"] },
+  bank_reconciliations: { field: "attachments", perms: ["prepare_bank_reconciliation", "approve_bank_reconciliation"], owners: ["prepared_by"], open: ["draft", "returned"] },
 };
 
 function load(dao, collection, id) {

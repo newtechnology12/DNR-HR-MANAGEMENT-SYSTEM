@@ -87,6 +87,7 @@ export const SOURCE_LINK: Record<string, (id: string) => string> = {
   supplier_invoice: (id) => `/dashboard/finance/invoices/${id}`,
   purchase_requisition: (id) => `/dashboard/procurement/requisitions/${id}`,
   payment_voucher: (id) => `/dashboard/finance/vouchers/${id}`,
+  cash_book: () => `/dashboard/treasury/statements`,
 };
 export const MONTHS_FY = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
 
