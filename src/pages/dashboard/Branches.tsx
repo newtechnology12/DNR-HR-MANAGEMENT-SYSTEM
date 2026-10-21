@@ -2,6 +2,7 @@ import DataTable from "@/components/DataTable";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { PlusCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
@@ -15,6 +16,8 @@ import ConfirmModal from "@/components/modals/ConfirmModal";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
 import { BranchFormModal } from "@/components/modals/BranchesFormModal";
+import StatCard from "@/components/StatCard";
+import { Building2, MapPin, Users } from "lucide-react";
 
 export default function Branches() {
   const columns: ColumnDef<any>[] = [
@@ -49,11 +52,13 @@ export default function Branches() {
         <DataTableColumnHeader column={column} title="Name" />
       ),
       cell: ({ row }) => (
-        <div className="w-[80px]- flex items-center gap-2">
-          <span className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600">
-            {row.getValue("name")}
-          </span>
-        </div>
+        <button
+          type="button"
+          onClick={() => editRow.edit(row.original)}
+          className="capitalize hover:text-primary hover:underline"
+        >
+          {row.getValue("name")}
+        </button>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -80,9 +85,15 @@ export default function Branches() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Status" />
       ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("status")}</div>
-      ),
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
+        if (!status) return <span className="text-slate-400">---</span>;
+        return (
+          <Badge variant={status === "active" ? "success" : "secondary"} className="capitalize">
+            {status}
+          </Badge>
+        );
+      },
       filterFn: (__, _, value) => {
         return value;
       },
@@ -204,12 +215,12 @@ export default function Branches() {
                 location: e.location,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -221,6 +232,27 @@ export default function Branches() {
     },
     enabled: true,
   });
+
+  const statsQuery = useQuery({
+    queryKey: ["branches-stats"],
+    queryFn: async () => {
+      const [total, active, inactive, employees] = await Promise.all([
+        pocketbase.collection("branches").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("branches")
+          .getList(1, 1, { filter: `status="active"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("branches")
+          .getList(1, 1, { filter: `status="inactive"` })
+          .then((e) => e.totalItems),
+        pocketbase.collection("users").getList(1, 1, {}).then((e) => e.totalItems),
+      ]);
+      return { total, active, inactive, employees };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
 
   const newRecordModal = useModalState();
 
@@ -236,7 +268,7 @@ export default function Branches() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("branches deleted succesfully");
+        toast.success("Branch deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -246,6 +278,40 @@ export default function Branches() {
 
   return (
     <>
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Branches"
+          icon={Building2}
+          tone="default"
+          loading={statsLoading}
+          value={statsQuery.data?.total}
+          description="Branches across the company"
+        />
+        <StatCard
+          title="Active"
+          icon={MapPin}
+          tone="success"
+          loading={statsLoading}
+          value={statsQuery.data?.active}
+          description="Currently active branches"
+        />
+        <StatCard
+          title="Inactive"
+          icon={MapPin}
+          tone="default"
+          loading={statsLoading}
+          value={statsQuery.data?.inactive}
+          description="Currently inactive branches"
+        />
+        <StatCard
+          title="Total Employees"
+          icon={Users}
+          tone="info"
+          loading={statsLoading}
+          value={statsQuery.data?.employees}
+          description="Employees across all branches"
+        />
+      </div>
       <DataTable
         className="!border-none !p-0"
         isFetching={recordsQuery.isFetching}
@@ -301,8 +367,7 @@ export default function Branches() {
 
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

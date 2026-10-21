@@ -6,7 +6,6 @@ import { Login } from "./pages/Login";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import RootLayout from "./layouts/RootLayout";
 import Dashboard from "./pages/dashboard/Dashboard";
-import Roles from "./pages/dashboard/Roles";
 import Leaves from "./pages/dashboard/Leaves";
 import Payroll from "./pages/dashboard/Payroll";
 import NewPayroll from "./pages/dashboard/NewPayroll";
@@ -20,7 +19,6 @@ import Departments from "./pages/dashboard/Departments";
 import AssetsAllocation from "./pages/dashboard/AssetsAllocation";
 import AttendaceLogs from "./pages/dashboard/AttendanceLogs";
 import AttendanceReport from "./pages/dashboard/AttendanceReport";
-import CreateOrUpdaterRole from "./pages/dashboard/CreateOrUpdaterRole";
 import GeneralSettongs from "./pages/dashboard/GeneralSetting";
 import PayrollSettings from "./pages/dashboard/PayrollSettings";
 import LeavesSettings from "./pages/dashboard/LeavesSettings";
@@ -54,6 +52,85 @@ import CountInventorySession from "./pages/dashboard/CountInventorySession";
 import ExcelStyleLeavePlan from "./pages/dashboard/CountInventorySession";
 // import { DepartmentDashboard } from "./components/DepartmentFile/department-dashboard";
 
+import { lazy, Suspense } from "react";
+import { Navigate } from "react-router-dom";
+import { APPROVER_PERMISSIONS } from "./lib/navigation";
+
+// Procurement is code-split: loaded only when a user opens it.
+const ProcurementDashboard = lazy(() => import("./pages/procurement/ProcurementDashboard"));
+const Requisitions = lazy(() => import("./pages/procurement/Requisitions"));
+const RequisitionForm = lazy(() => import("./pages/procurement/RequisitionForm"));
+const RequisitionDetail = lazy(() => import("./pages/procurement/RequisitionDetail"));
+const ApprovalWorkflows = lazy(() => import("./pages/procurement/ApprovalWorkflows"));
+const ProcurementSettings = lazy(() => import("./pages/procurement/ProcurementSettings"));
+const AuditLog = lazy(() => import("./pages/procurement/AuditLog"));
+const Suppliers = lazy(() => import("./pages/procurement/Suppliers"));
+const SupplierDetail = lazy(() => import("./pages/procurement/SupplierDetail"));
+const Rfqs = lazy(() => import("./pages/procurement/Rfqs"));
+const RfqDetail = lazy(() => import("./pages/procurement/RfqDetail"));
+const RfqPrint = lazy(() => import("./pages/procurement/RfqPrint"));
+const PurchaseOrders = lazy(() => import("./pages/procurement/PurchaseOrders"));
+const PurchaseOrderDetail = lazy(() => import("./pages/procurement/PurchaseOrderDetail"));
+const ReceiveDelivery = lazy(() => import("./pages/procurement/ReceiveDelivery"));
+const GoodsReceipts = lazy(() => import("./pages/procurement/GoodsReceipts"));
+const Inventory = lazy(() => import("./pages/procurement/Inventory"));
+const PoPrint = lazy(() => import("./pages/procurement/PurchasingPrint").then((m) => ({ default: m.PoPrint })));
+const Returns = lazy(() => import("./pages/procurement/Returns"));
+const ReturnDetail = lazy(() => import("./pages/procurement/ReturnDetail"));
+const Contracts = lazy(() => import("./pages/procurement/Contracts"));
+const ContractDetail = lazy(() => import("./pages/procurement/ContractDetail"));
+const Plans = lazy(() => import("./pages/procurement/Plans"));
+const PlanDetail = lazy(() => import("./pages/procurement/PlanDetail"));
+const ProcurementReports = lazy(() => import("./pages/procurement/Reports"));
+const GrnPrint = lazy(() => import("./pages/procurement/PurchasingPrint").then((m) => ({ default: m.GrnPrint })));
+const ActionPlanForm = lazy(() => import("./pages/portal/ActionPlanForm"));
+const ActionPlanDetail = lazy(() => import("./pages/portal/ActionPlanDetail"));
+const ReportForm = lazy(() => import("./pages/portal/ReportForm"));
+const ReportDetail = lazy(() => import("./pages/portal/ReportDetail"));
+const LeavePlan = lazy(() => import("./pages/hr/LeavePlan"));
+const LeavePolicySettings = lazy(() => import("./pages/hr/LeavePolicySettings"));
+const PayrollRuns = lazy(() => import("./pages/hr/payroll/PayrollRuns"));
+const PayrollRun = lazy(() => import("./pages/hr/payroll/PayrollRun"));
+const SalaryStructures = lazy(() => import("./pages/hr/payroll/SalaryStructures"));
+const PayrollTaxSettings = lazy(() => import("./pages/hr/payroll/PayrollTaxSettings"));
+const PerformanceOverview = lazy(() => import("./pages/hr/performance/PerformanceOverview"));
+const AppraisalPage = lazy(() => import("./pages/hr/performance/AppraisalPage"));
+const TemplateEditor = lazy(() => import("./pages/hr/performance/TemplateEditor"));
+const PERFORMANCE_USERS = ["view_employee_perfomances", "evaluate_staff", "manage_appraisals"];
+const Invoices = lazy(() => import("./pages/finance/Invoices"));
+const Payments = lazy(() => import("./pages/finance/Invoices").then((m) => ({ default: m.Payments })));
+const InvoiceDetail = lazy(() => import("./pages/finance/InvoiceDetail"));
+const Budgets = lazy(() => import("./pages/finance/Budgets"));
+const INVOICE_USERS = ["view_invoices", "manage_invoices", "resolve_invoice_exceptions", "approve_invoices", "record_payments"];
+const PO_USERS = ["view_purchase_orders", "manage_purchase_orders", "approve_purchase_orders", "receive_goods"];
+const INVENTORY_USERS = ["view_inventory", "manage_inventory"];
+const SETTINGS_USERS = ["access_general_settings", "manage_procurement_settings", "manage_approval_workflows", "view_security_admin", "manage_payroll_settings", "manage_leave_policy"];
+// RALGA IMS — foundation screens (Step 1).
+const ApprovalsInbox = lazy(() => import("./pages/approvals/ApprovalsInbox"));
+const PermissionMatrix = lazy(() => import("./pages/admin/PermissionMatrix"));
+const UsersSecurity = lazy(() => import("./pages/admin/UsersSecurity"));
+const Delegations = lazy(() => import("./pages/admin/Delegations"));
+const SystemHealth = lazy(() => import("./pages/admin/SystemHealth"));
+const FiscalYears = lazy(() => import("./pages/setup/FiscalYears"));
+const ChartOfAccounts = lazy(() => import("./pages/setup/ChartOfAccounts"));
+const FundingSources = lazy(() => import("./pages/setup/MasterData").then((m) => ({ default: m.FundingSources })));
+const SetupProjects = lazy(() => import("./pages/setup/MasterData").then((m) => ({ default: m.Projects })));
+const CostCentres = lazy(() => import("./pages/setup/MasterData").then((m) => ({ default: m.CostCentres })));
+const TaxRates = lazy(() => import("./pages/setup/TaxRates"));
+const ApprovalLimits = lazy(() => import("./pages/setup/ApprovalLimits"));
+const APPROVAL_USERS = [...APPROVER_PERMISSIONS, "create_purchase_requisition"];
+const DELEGATION_USERS = [...APPROVER_PERMISSIONS, "manage_delegations"];
+const ADMIN_USERS = ["access_general_settings", "view_security_admin"];
+const MATRIX_USERS = ["access_general_settings", "confirm_role_changes", "view_security_admin"];
+const MASTER_DATA_USERS = ["view_master_data"];
+const EmployeeImport = lazy(() => import("./pages/dashboard/EmployeeImport"));
+const PROCUREMENT_USERS = ["view_purchase_requisitions", "create_purchase_requisition", "approve_purchase_requisitions"];
+const SUPPLIER_USERS = ["view_suppliers", "manage_suppliers", "approve_suppliers"];
+const RFQ_USERS = ["view_rfqs", "manage_rfqs", "award_rfqs"];
+const CONTRACT_USERS = ["manage_contracts", "approve_contracts", "view_suppliers", "manage_suppliers", "view_purchase_orders"];
+const PLAN_USERS = ["manage_procurement_plan", "view_procurement_plans", "approve_procurement_plans", "view_procurement_dashboard", "create_purchase_requisition"];
+const REPORT_USERS = ["view_procurement_reports", "view_procurement_dashboard"];
+
 const router = createBrowserRouter([
   {
     element: <App />,
@@ -74,6 +151,36 @@ const router = createBrowserRouter([
       {
         element: <RootLayout />,
         children: [
+          {
+            path: "print/rfq/:rfqId/:supplierId",
+            element: (
+              <ProtectedRoute entity={RFQ_USERS}>
+                <Suspense fallback={null}>
+                  <RfqPrint />
+                </Suspense>
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "print/po/:poId",
+            element: (
+              <ProtectedRoute entity={PO_USERS}>
+                <Suspense fallback={null}>
+                  <PoPrint />
+                </Suspense>
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "print/grn/:grnId",
+            element: (
+              <ProtectedRoute entity={PO_USERS}>
+                <Suspense fallback={null}>
+                  <GrnPrint />
+                </Suspense>
+              </ProtectedRoute>
+            ),
+          },
           {
             path: "dashboard",
             element: <DashboardLayout />,
@@ -96,11 +203,22 @@ const router = createBrowserRouter([
                       </ProtectedRoute>
                     ),
                   },
+                  ...[
+                    ["employee-portal/plans/new", <ActionPlanForm />],
+                    ["employee-portal/plans/:planId", <ActionPlanDetail />],
+                    ["employee-portal/plans/:planId/edit", <ActionPlanForm />],
+                    ["employee-portal/reports/new", <ReportForm />],
+                    ["employee-portal/reports/:reportId", <ReportDetail />],
+                    ["employee-portal/reports/:reportId/edit", <ReportForm />],
+                  ].map(([path, page]) => ({
+                    path: path as string,
+                    element: <ProtectedRoute entity="access_employee_portal">{page}</ProtectedRoute>,
+                  })),
                   {
                     path: "leave-plan",
                     element: (
                       <ProtectedRoute entity="access_employee_portal">
-                        <ExcelStyleLeavePlan />
+                        <Suspense fallback={null}><LeavePlan /></Suspense>
                       </ProtectedRoute>
                     ),
                   },
@@ -161,6 +279,14 @@ const router = createBrowserRouter([
                     ),
                   },
                   {
+                    path: "employees/import",
+                    element: (
+                      <ProtectedRoute entity="create_employee">
+                        <EmployeeImport />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
                     path: "employees/:employeeId",
                     element: (
                       <ProtectedRoute entity="view_employee_profile">
@@ -180,7 +306,7 @@ const router = createBrowserRouter([
                     path: "leave-plan",
                     element: (
                       <ProtectedRoute entity="view_leaves">
-                        <ExcelStyleLeavePlan />
+                        <Suspense fallback={null}><LeavePlan /></Suspense>
                       </ProtectedRoute>
                     ),
                   },
@@ -217,8 +343,24 @@ const router = createBrowserRouter([
                       {
                         index: true,
                         element: (
-                          <ProtectedRoute entity="view_employee_perfomances">
-                            <Performance />
+                          <ProtectedRoute entity={PERFORMANCE_USERS}>
+                            <Suspense fallback={null}><PerformanceOverview /></Suspense>
+                          </ProtectedRoute>
+                        ),
+                      },
+                      {
+                        path: "templates",
+                        element: (
+                          <ProtectedRoute entity="manage_appraisals">
+                            <Suspense fallback={null}><TemplateEditor /></Suspense>
+                          </ProtectedRoute>
+                        ),
+                      },
+                      {
+                        path: "appraisals/:appraisalId",
+                        element: (
+                          <ProtectedRoute entity={PERFORMANCE_USERS}>
+                            <Suspense fallback={null}><AppraisalPage /></Suspense>
                           </ProtectedRoute>
                         ),
                       },
@@ -247,7 +389,7 @@ const router = createBrowserRouter([
                         index: true,
                         element: (
                           <ProtectedRoute entity="view_payrolls">
-                            <Payroll />
+                            <Suspense fallback={null}><PayrollRuns /></Suspense>
                           </ProtectedRoute>
                         ),
                       },
@@ -255,16 +397,24 @@ const router = createBrowserRouter([
                         path: "create",
                         element: (
                           <ProtectedRoute entity="create_payroll">
-                            <NewPayroll />
+                            <Suspense fallback={null}><PayrollRuns /></Suspense>
                           </ProtectedRoute>
                         ),
                       },
 
                       {
+                        path: "salaries",
+                        element: (
+                          <ProtectedRoute entity={["manage_salaries", "create_payroll"]}>
+                            <Suspense fallback={null}><SalaryStructures /></Suspense>
+                          </ProtectedRoute>
+                        ),
+                      },
+                      {
                         path: ":payrollId",
                         element: (
                           <ProtectedRoute entity="view_payroll_details">
-                            <PayrollDetails />
+                            <Suspense fallback={null}><PayrollRun /></Suspense>
                           </ProtectedRoute>
                         ),
                       },
@@ -309,7 +459,7 @@ const router = createBrowserRouter([
                     path: "petty-cash-accounts/:accountId",
                     element: (
                       <ProtectedRoute entity="view_petty_cash_requests">
-                        <AccountTransactions />,
+                        <AccountTransactions />
                       </ProtectedRoute>
                     ),
                   },
@@ -374,6 +524,354 @@ const router = createBrowserRouter([
                 ],
               },
               {
+                path: "procurement",
+                children: [
+                  {
+                    index: true,
+                    element: (
+                      <ProtectedRoute entity="view_procurement_dashboard">
+                        <ProcurementDashboard />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "requisitions",
+                    element: (
+                      <ProtectedRoute entity={PROCUREMENT_USERS}>
+                        <Requisitions />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "requisitions/new",
+                    element: (
+                      <ProtectedRoute entity="create_purchase_requisition">
+                        <RequisitionForm />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "requisitions/:requisitionId",
+                    element: (
+                      <ProtectedRoute entity={PROCUREMENT_USERS}>
+                        <RequisitionDetail />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "requisitions/:requisitionId/edit",
+                    element: (
+                      <ProtectedRoute entity="create_purchase_requisition">
+                        <RequisitionForm />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "approvals",
+                    element: (
+                      <ProtectedRoute entity={PROCUREMENT_USERS}>
+                        <Requisitions defaultView="awaiting" />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "suppliers",
+                    element: (
+                      <ProtectedRoute entity={SUPPLIER_USERS}>
+                        <Suppliers />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "suppliers/:supplierId",
+                    element: (
+                      <ProtectedRoute entity={SUPPLIER_USERS}>
+                        <SupplierDetail />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "rfqs",
+                    element: (
+                      <ProtectedRoute entity={RFQ_USERS}>
+                        <Rfqs />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "rfqs/:rfqId",
+                    element: (
+                      <ProtectedRoute entity={RFQ_USERS}>
+                        <RfqDetail />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "purchase-orders",
+                    element: (
+                      <ProtectedRoute entity={PO_USERS}>
+                        <PurchaseOrders />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "purchase-orders/:poId",
+                    element: (
+                      <ProtectedRoute entity={PO_USERS}>
+                        <PurchaseOrderDetail />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "purchase-orders/:poId/receive",
+                    element: (
+                      <ProtectedRoute entity="receive_goods">
+                        <ReceiveDelivery />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "receipts",
+                    element: (
+                      <ProtectedRoute entity={PO_USERS}>
+                        <GoodsReceipts />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "inventory",
+                    element: (
+                      <ProtectedRoute entity={INVENTORY_USERS}>
+                        <Inventory />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "returns",
+                    element: (
+                      <ProtectedRoute entity={PO_USERS}>
+                        <Returns />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "returns/:returnId",
+                    element: (
+                      <ProtectedRoute entity={PO_USERS}>
+                        <ReturnDetail />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "contracts",
+                    element: (
+                      <ProtectedRoute entity={CONTRACT_USERS}>
+                        <Contracts />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "contracts/:contractId",
+                    element: (
+                      <ProtectedRoute entity={CONTRACT_USERS}>
+                        <ContractDetail />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "plans",
+                    element: (
+                      <ProtectedRoute entity={PLAN_USERS}>
+                        <Plans />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "plans/:planId",
+                    element: (
+                      <ProtectedRoute entity={PLAN_USERS}>
+                        <PlanDetail />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "reports",
+                    element: (
+                      <ProtectedRoute entity={REPORT_USERS}>
+                        <ProcurementReports />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "workflows",
+                    element: (
+                      <ProtectedRoute entity="manage_approval_workflows">
+                        <ApprovalWorkflows />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "settings",
+                    element: (
+                      <ProtectedRoute entity="manage_procurement_settings">
+                        <ProcurementSettings />
+                      </ProtectedRoute>
+                    ),
+                  },
+                ],
+              },
+              {
+                path: "finance",
+                children: [
+                  {
+                    path: "invoices",
+                    element: (
+                      <ProtectedRoute entity={INVOICE_USERS}>
+                        <Invoices />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "invoices/:invoiceId",
+                    element: (
+                      <ProtectedRoute entity={INVOICE_USERS}>
+                        <InvoiceDetail />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "payments",
+                    element: (
+                      <ProtectedRoute entity={INVOICE_USERS}>
+                        <Payments />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "budgets",
+                    element: (
+                      <ProtectedRoute entity={["view_budgets", "manage_budgets"]}>
+                        <Budgets />
+                      </ProtectedRoute>
+                    ),
+                  },
+                ],
+              },
+              {
+                path: "security/audit-log",
+                element: (
+                  <ProtectedRoute entity="view_audit_logs">
+                    <AuditLog />
+                  </ProtectedRoute>
+                ),
+              },
+              {
+                path: "approvals",
+                element: (
+                  <ProtectedRoute entity={APPROVAL_USERS}>
+                    <ApprovalsInbox />
+                  </ProtectedRoute>
+                ),
+              },
+              {
+                path: "admin",
+                children: [
+                  {
+                    path: "users",
+                    element: (
+                      <ProtectedRoute entity={ADMIN_USERS}>
+                        <UsersSecurity />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "permissions",
+                    element: (
+                      <ProtectedRoute entity={MATRIX_USERS}>
+                        <PermissionMatrix />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "delegations",
+                    element: (
+                      <ProtectedRoute entity={DELEGATION_USERS}>
+                        <Delegations />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "health",
+                    element: (
+                      <ProtectedRoute entity={"view_system_health"}>
+                        <SystemHealth />
+                      </ProtectedRoute>
+                    ),
+                  },
+                ],
+              },
+              {
+                path: "setup",
+                children: [
+                  {
+                    path: "fiscal-years",
+                    element: (
+                      <ProtectedRoute entity={MASTER_DATA_USERS}>
+                        <FiscalYears />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "accounts",
+                    element: (
+                      <ProtectedRoute entity={MASTER_DATA_USERS}>
+                        <ChartOfAccounts />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "funding-sources",
+                    element: (
+                      <ProtectedRoute entity={MASTER_DATA_USERS}>
+                        <FundingSources />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "projects",
+                    element: (
+                      <ProtectedRoute entity={MASTER_DATA_USERS}>
+                        <SetupProjects />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "cost-centres",
+                    element: (
+                      <ProtectedRoute entity={MASTER_DATA_USERS}>
+                        <CostCentres />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "tax-rates",
+                    element: (
+                      <ProtectedRoute entity={["view_master_data", "manage_payroll_settings"]}>
+                        <TaxRates />
+                      </ProtectedRoute>
+                    ),
+                  },
+                  {
+                    path: "approval-limits",
+                    element: (
+                      <ProtectedRoute entity={["manage_approval_workflows", "view_master_data", "view_security_admin"]}>
+                        <ApprovalLimits />
+                      </ProtectedRoute>
+                    ),
+                  },
+                ],
+              },
+              {
                 path: "assets",
                 children: [
                   {
@@ -416,50 +914,79 @@ const router = createBrowserRouter([
                   {
                     path: "general-settings",
                     element: (
-                      <ProtectedRoute entity="access_general_settings">
+                      <ProtectedRoute entity={SETTINGS_USERS}>
                         <Settings />
                       </ProtectedRoute>
                     ),
                     children: [
                       {
                         index: true,
-                        element: <GeneralSettongs />,
+                        element: (
+                          <ProtectedRoute entity="access_general_settings">
+                            <GeneralSettongs />
+                          </ProtectedRoute>
+                        ),
                       },
                       {
                         path: "payroll",
-                        element: <PayrollSettings />,
+                        element: (
+                          <ProtectedRoute entity={["manage_payroll_settings", "access_general_settings"]}>
+                            <Suspense fallback={null}><PayrollTaxSettings /></Suspense>
+                          </ProtectedRoute>
+                        ),
                       },
                       {
                         path: "attendance",
-                        element: <AttendaceSettings />,
+                        element: (
+                          <ProtectedRoute entity="access_general_settings">
+                            <AttendaceSettings />
+                          </ProtectedRoute>
+                        ),
                       },
                       {
                         path: "smtp",
-                        element: <SmtpSettings />,
-                      },
-                      {
-                        path: "attendance",
-                        element: <PayrollSettings />,
+                        element: (
+                          <ProtectedRoute entity="access_general_settings">
+                            <SmtpSettings />
+                          </ProtectedRoute>
+                        ),
                       },
                       {
                         path: "branches",
-                        element: <Branches />,
+                        element: (
+                          <ProtectedRoute entity="access_general_settings">
+                            <Branches />
+                          </ProtectedRoute>
+                        ),
                       },
                       {
                         path: "leaves",
-                        element: <LeavesSettings />,
+                        element: (
+                          <ProtectedRoute entity={["manage_leave_policy", "access_general_settings"]}>
+                            <Suspense fallback={null}><LeavePolicySettings /></Suspense>
+                          </ProtectedRoute>
+                        ),
                       },
                       {
-                        path: "roles-permissions",
-                        element: <Roles />,
+                        // Roles are now changed through the permission matrix (two-person confirmation).
+                        path: "roles-permissions/*",
+                        element: <Navigate to="/dashboard/admin/permissions" replace />,
+                      },
+                    {
+                        path: "procurement",
+                        element: (
+                          <ProtectedRoute entity="manage_procurement_settings">
+                            <ProcurementSettings embedded />
+                          </ProtectedRoute>
+                        ),
                       },
                       {
-                        path: "roles-permissions/new",
-                        element: <CreateOrUpdaterRole />,
-                      },
-                      {
-                        path: "roles-permissions/:roleId",
-                        element: <CreateOrUpdaterRole />,
+                        path: "approval-workflows",
+                        element: (
+                          <ProtectedRoute entity={["manage_approval_workflows", "view_security_admin"]}>
+                            <ApprovalWorkflows embedded />
+                          </ProtectedRoute>
+                        ),
                       },
                     ],
                   },

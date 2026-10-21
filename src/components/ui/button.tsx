@@ -5,27 +5,29 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-sm text-[14px] font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 dark:ring-offset-slate-950 dark:focus-visible:ring-slate-300",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-btn text-[14px] font-medium ring-offset-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 dark:ring-offset-slate-950 dark:focus-visible:ring-slate-300",
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-slate-50 hover:bg-primaryDark dark:bg-slate-50 dark:text-slate-900 dark:hover:bg-slate-50/90",
-        destructive:
-          "bg-red-500 text-slate-50 hover:bg-red-500/90 dark:bg-red-900 dark:text-slate-50 dark:hover:bg-red-900/90",
+        default: "bg-primary text-primary-foreground hover:bg-primaryDark",
+        info: "bg-info text-info-foreground hover:bg-info/90",
+        success: "bg-success text-success-foreground hover:bg-success/90",
+        warning: "bg-warning text-warning-foreground hover:bg-warning/90",
+        destructive: "bg-danger text-danger-foreground hover:bg-danger/90",
+        danger: "bg-danger text-danger-foreground hover:bg-danger/90",
         outline:
-          "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-600 dark:hover:text-slate-50",
+          "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-600 dark:hover:text-slate-50",
         secondary:
-          "bg-slate-100 text-slate-900 hover:bg-slate-100/80 dark:bg-slate-800 dark:text-slate-50 dark:hover:bg-slate-800/80",
+          "bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-50 dark:hover:bg-slate-800/80",
         ghost:
           "hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-50",
-        link: "text-slate-900 underline-offset-4 hover:underline dark:text-slate-50",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 text-[13.2px] py-2",
-        sm: "h-8 text-[12.7px] rounded-sm px-3",
-        lg: "h-11 rounded-sm px-8",
-        icon: "h-10 w-10",
+        default: "h-9 px-4 text-[13.5px] py-2",
+        sm: "h-8 text-[12.7px] rounded-btn px-3",
+        lg: "h-11 rounded-btn px-6 text-[15px]",
+        icon: "h-9 w-9",
       },
     },
     defaultVariants: {

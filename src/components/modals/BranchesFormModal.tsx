@@ -79,7 +79,7 @@ export function BranchFormModal({
       .then(async (e) => {
         onComplete();
         toast.error(
-          q ? "Branch updated succesfully" : "Branch created succesfully"
+          q ? "Branch updated successfully" : "Branch created successfully"
         );
         form.reset();
       })
@@ -158,7 +158,7 @@ export function BranchFormModal({
               </div>
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="button"
                   onClick={() => form.reset()}

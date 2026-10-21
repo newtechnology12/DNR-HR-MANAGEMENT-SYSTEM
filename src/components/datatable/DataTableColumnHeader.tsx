@@ -39,7 +39,7 @@ function DataTableColumnHeader<TData, TValue>({
           <Button
             variant="ghost"
             size="sm"
-            className="-ml-3 truncate capitalize h-8 data-[state=open]:bg-accent"
+            className="-ml-3 h-8 truncate px-3 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-800 data-[state=open]:bg-slate-100"
           >
             <span className="truncate">{title}</span>
             {column.getIsSorted() === "desc" ? (

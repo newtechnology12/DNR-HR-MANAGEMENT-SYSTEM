@@ -42,7 +42,8 @@ import {
 import { Button } from "./ui/button";
 import { DataTableToolbar } from "./datatable/DataTableToolbar";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import Loader from "./icons/Loader";
+import { Skeleton } from "./ui/skeleton";
+import { Inbox } from "lucide-react";
 import { cn } from "@/utils";
 
 interface DataTableProps<TData, TValue> {
@@ -126,32 +127,30 @@ function DataTable<TData, TValue>({
   });
 
   return (
-    <Card
-      className={cn("shadow-none relative rounded-[3px] h-full", className)}
-    >
+    <Card className={cn("relative h-full", className)}>
       {isFetching && !isLoading && (
-        <div className="progress-bar h-[3px] opacity-70 absolute top-0 rounded-t-md bg-primary bg-opacity-25 w-full overflow-hidden">
-          <div className="progress-bar-value w-full h-full bg-primary " />
+        <div className="progress-bar absolute top-0 h-[3px] w-full overflow-hidden rounded-t-card bg-primary/25 opacity-70">
+          <div className="progress-bar-value h-full w-full bg-primary" />
         </div>
       )}
 
       {title && (
-        <CardHeader className="p-3- pb-2 pt-[10px] px-4">
+        <CardHeader className="px-4 pb-2 pt-3">
           <CardTitle className="mb-0">
             <span className="text-[15px]">{title}</span>
           </CardTitle>
         </CardHeader>
       )}
-      <CardContent className="p-4 pt-3 h-full">
-        <div className="space-y-4 h-[95%] flex flex-col pb-4- ">
+      <CardContent className="flex h-full flex-col p-4 pt-3">
+        <div className="flex h-full flex-col space-y-4">
           <DataTableToolbar
             Action={Action}
             onSearch={onSearch}
             facets={facets}
             table={table}
           />
-          <div className="rounded-[4px] border flex-1">
-            <Table className="table-fixed-">
+          <div className="flex-1 overflow-hidden rounded-lg border border-slate-200">
+            <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
@@ -175,7 +174,17 @@ function DataTable<TData, TValue>({
                 ))}
               </TableHeader>
               <TableBody>
-                {table.getRowModel().rows?.length ? (
+                {isLoading ? (
+                  Array.from({ length: 6 }).map((_, rowIndex) => (
+                    <TableRow key={rowIndex}>
+                      {columns.map((_, colIndex) => (
+                        <TableCell key={colIndex}>
+                          <Skeleton className="h-4 w-full max-w-[160px]" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : table.getRowModel().rows?.length ? (
                   table.getRowModel().rows.map((row) => (
                     <TableRow
                       key={row.id}
@@ -195,29 +204,16 @@ function DataTable<TData, TValue>({
                     </TableRow>
                   ))
                 ) : (
-                  <>
-                    {isLoading ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={columns.length}
-                          className="h-36 !inline-block= text-center"
-                        >
-                          <div className="flex items-center justify-center">
-                            <Loader className="mr-2 h-5 w-5 text-primary animate-spin" />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={columns.length}
-                          className="h-36 text-center"
-                        >
-                          No results available.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </>
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={columns.length} className="h-56 text-center">
+                      <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
+                        <Inbox size={28} strokeWidth={1.5} />
+                        <span className="text-[13px] font-medium text-slate-500">
+                          No results found
+                        </span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>
@@ -239,14 +235,14 @@ function DataTablePagination<TData>({
   table,
 }: DataTablePaginationProps<TData>) {
   return (
-    <div className="flex items-center justify-between px-2-">
-      <div className="flex-1 text-slate-500 font-medium- text-sm text-muted-foreground">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-sm font-medium text-slate-500">
         {table.getFilteredSelectedRowModel().rows.length} of{" "}
         {table.getFilteredRowModel().rows.length} row(s) selected.
       </div>
-      <div className="flex items-center space-x-6 lg:space-x-8">
-        <div className="flex items-center space-x-2">
-          <p className="text-[13px] text-slate-500 font-medium-">
+      <div className="flex flex-wrap items-center gap-4 sm:gap-6 lg:gap-8">
+        <div className="flex items-center gap-2">
+          <p className="text-[13px] text-slate-500">
             Rows per page
           </p>
           <Select
@@ -259,7 +255,7 @@ function DataTablePagination<TData>({
               <SelectValue placeholder={table.getState().pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side="top" className="bg-white">
-              {[2, 5, 10, 20, 30, 40, 50].map((pageSize) => (
+              {[10, 20, 30, 40, 50].map((pageSize) => (
                 <SelectItem key={pageSize} value={`${pageSize}`}>
                   {pageSize}
                 </SelectItem>
@@ -312,9 +308,4 @@ function DataTablePagination<TData>({
       </div>
     </div>
   );
-}
-
-interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[];
-  data: TData[];
 }

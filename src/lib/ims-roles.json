@@ -1,0 +1,105 @@
+{
+  "$comment": "RALGA IMS roles (spec §1) and one demo login per role. Read by scripts/ims/roles.mjs (seeding) and the login page (demo shortcuts).",
+  "groups": [
+    { "key": "leadership", "title": "Leadership & oversight" },
+    { "key": "finance", "title": "Finance" },
+    { "key": "operations", "title": "Operations" },
+    { "key": "people", "title": "Staff & departments" }
+  ],
+  "roles": [
+    {
+      "code": "SG", "name": "Secretary General", "legacy": ["Director"], "sort": 2, "group": "leadership", "icon": "landmark",
+      "procurement_scope": "all", "hr_scope": "all",
+      "description": "Head of institution: final approval above set limits; sees all dashboards and reports.",
+      "highlights": ["Final approval above limits", "All dashboards and reports", "Approves period re-opening"]
+    },
+    {
+      "code": "DAF", "name": "Director of Finance (DAF)", "legacy": ["Finance Manager"], "sort": 3, "group": "leadership", "icon": "briefcase",
+      "procurement_scope": "all", "hr_scope": "all",
+      "description": "Finance head: approves budgets, payments, payroll and journals; closes periods.",
+      "highlights": ["Approves budgets, POs, vouchers, payroll", "Owns chart of accounts and tax rates", "Closes accounting periods"]
+    },
+    {
+      "code": "INTERNAL_AUDITOR", "name": "Internal Auditor", "legacy": [], "sort": 12, "group": "leadership", "icon": "search-check",
+      "procurement_scope": "all", "hr_scope": "all",
+      "description": "Read-only access to everything, including the audit log. Cannot change anything.",
+      "highlights": ["Read-only access to every module", "Full audit log with export", "Overrides and exceptions"]
+    },
+    {
+      "code": "MGMT_VIEWER", "name": "Management Viewer", "legacy": [], "sort": 13, "group": "leadership", "icon": "presentation",
+      "procurement_scope": "own", "hr_scope": "own",
+      "description": "Board / Executive Committee: read-only dashboards and summary reports.",
+      "highlights": ["Executive dashboard", "Summary financial reports", "Read-only"]
+    },
+    {
+      "code": "ACCOUNTANT", "name": "Accountant", "legacy": ["Accountant"], "sort": 4, "group": "finance", "icon": "calculator",
+      "procurement_scope": "all", "hr_scope": "own",
+      "description": "Invoices, payment vouchers, journals, bank reconciliation and the general ledger.",
+      "highlights": ["Supplier invoices and payment vouchers", "Journals and bank reconciliation", "General ledger"]
+    },
+    {
+      "code": "BUDGET_OFFICER", "name": "Budget Officer", "legacy": [], "sort": 5, "group": "finance", "icon": "pie-chart",
+      "procurement_scope": "all", "hr_scope": "own",
+      "description": "Prepares budgets and revisions, checks budget availability and monitors execution.",
+      "highlights": ["Prepares and revises budgets", "Budget check on requisitions", "Monitors utilisation"]
+    },
+    {
+      "code": "CASHIER", "name": "Cashier / Treasury Officer", "legacy": [], "sort": 6, "group": "finance", "icon": "wallet",
+      "procurement_scope": "all", "hr_scope": "own",
+      "description": "Records receipts, cash payments and transfers; executes approved payments; manages cash books.",
+      "highlights": ["Executes approved payments", "Receipts, transfers, cash books", "Cash position"]
+    },
+    {
+      "code": "PROCUREMENT_OFFICER", "name": "Procurement Officer", "legacy": ["Procurement Manager"], "sort": 7, "group": "operations", "icon": "shopping-cart",
+      "procurement_scope": "all", "hr_scope": "own",
+      "description": "Procurement plan, suppliers and purchase orders.",
+      "highlights": ["Procurement plan and RFQs", "Supplier register", "Purchase orders"]
+    },
+    {
+      "code": "STORE_ASSET", "name": "Store & Asset Officer", "legacy": ["Store Keeper"], "sort": 10, "group": "operations", "icon": "package",
+      "procurement_scope": "all", "hr_scope": "own",
+      "description": "Goods received notes, fixed asset register, transfers and disposals.",
+      "highlights": ["Goods received notes", "Fixed asset register", "Transfers and disposals"]
+    },
+    {
+      "code": "HR_PAYROLL", "name": "HR & Payroll Officer", "legacy": ["HR Manager"], "sort": 9, "group": "operations", "icon": "users",
+      "procurement_scope": "own", "hr_scope": "all",
+      "description": "Employee records, payroll preparation and payslips.",
+      "highlights": ["Employee records", "Prepares payroll", "Payslips and RSSB / RRA schedules"]
+    },
+    {
+      "code": "SYS_ADMIN", "name": "System Administrator", "legacy": ["Admin"], "sort": 1, "group": "operations", "icon": "server-cog",
+      "procurement_scope": "own", "hr_scope": "own",
+      "description": "IT: users, roles, settings, backups and monitoring. Never approves financial transactions.",
+      "highlights": ["Users, roles and security", "Backups and monitoring", "No financial approvals"]
+    },
+    {
+      "code": "HOD", "name": "Head of Department", "legacy": ["Department Head"], "sort": 8, "group": "people", "icon": "building",
+      "procurement_scope": "department", "hr_scope": "department",
+      "description": "First-level approval of requests from their department.",
+      "highlights": ["Approves department requests", "Department budget balance", "Team leave and appraisals"]
+    },
+    {
+      "code": "STAFF", "name": "Staff / Requester", "legacy": ["Employee"], "sort": 11, "group": "people", "icon": "user",
+      "procurement_scope": "own", "hr_scope": "own",
+      "description": "Raises purchase requisitions, tracks own requests and sees own payslips.",
+      "highlights": ["Raises requisitions", "Tracks own requests", "Own payslips and leave"]
+    }
+  ],
+  "demo_password": "password123",
+  "demo_accounts": [
+    { "code": "SYS_ADMIN", "email": "admin@dnr-hr.rw", "name": "Patrick Nshuti", "dept": "ICT and Digital Services", "designation": "Systems Administrator", "salary": 1600000 },
+    { "code": "SG", "email": "director@dnr-hr.rw", "name": "Emmanuel Kayitare", "dept": "Office of the Secretary General", "designation": "Secretary General", "salary": 3500000 },
+    { "code": "DAF", "email": "finance@dnr-hr.rw", "name": "Claudine Mukeshimana", "dept": "Finance and Administration", "designation": "Director of Finance and Administration", "salary": 2600000 },
+    { "code": "ACCOUNTANT", "email": "accountant@dnr-hr.rw", "name": "Eric Habimana", "dept": "Finance and Administration", "designation": "Accountant", "salary": 1400000 },
+    { "code": "BUDGET_OFFICER", "email": "budget@dnr-hr.rw", "name": "Diane Ingabire", "dept": "Finance and Administration", "designation": "Budget Officer", "salary": 1350000 },
+    { "code": "CASHIER", "email": "cashier@dnr-hr.rw", "name": "Olivier Mugisha", "dept": "Finance and Administration", "designation": "Cashier / Treasury Officer", "salary": 1100000 },
+    { "code": "PROCUREMENT_OFFICER", "email": "procurement@dnr-hr.rw", "name": "Jean-Paul Nkusi", "dept": "Procurement", "designation": "Procurement Manager", "salary": 1900000 },
+    { "code": "HOD", "email": "hod@dnr-hr.rw", "name": "Solange Umutoni", "dept": "Capacity Building", "designation": "Head of Capacity Building", "salary": 2200000 },
+    { "code": "HR_PAYROLL", "email": "hr@dnr-hr.rw", "name": "Grace Uwimana", "dept": "Human Resources", "designation": "Human Resources Manager", "salary": 1800000 },
+    { "code": "STORE_ASSET", "email": "stores@dnr-hr.rw", "name": "Innocent Mugabo", "dept": "Finance and Administration", "designation": "Logistics and Stores Officer", "salary": 900000 },
+    { "code": "STAFF", "email": "employee@dnr-hr.rw", "name": "Aline Mukamana", "dept": "Capacity Building", "designation": "Training Coordinator", "salary": 750000 },
+    { "code": "INTERNAL_AUDITOR", "email": "auditor@dnr-hr.rw", "name": "Fabrice Ndayisaba", "dept": "Internal Audit", "designation": "Internal Auditor", "salary": 2000000 },
+    { "code": "MGMT_VIEWER", "email": "board@dnr-hr.rw", "name": "Vestine Uwase", "dept": "Office of the Secretary General", "designation": "Executive Committee Member", "salary": 0 }
+  ]
+}

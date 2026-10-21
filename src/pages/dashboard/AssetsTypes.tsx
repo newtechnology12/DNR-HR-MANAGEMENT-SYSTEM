@@ -16,6 +16,8 @@ import ConfirmModal from "@/components/modals/ConfirmModal";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
 import { AssetsTypesFormModal } from "@/components/modals/AssetsTypesFormModal";
+import StatCard from "@/components/StatCard";
+import { Package, Tags } from "lucide-react";
 
 export default function AssetsTypes() {
   const columns: ColumnDef<any>[] = [
@@ -178,12 +180,12 @@ export default function AssetsTypes() {
                 description: e.description,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -210,7 +212,7 @@ export default function AssetsTypes() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("asset type deleted succesfully");
+        toast.success("Asset type deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -218,10 +220,41 @@ export default function AssetsTypes() {
       });
   };
 
+  const statsQuery = useQuery({
+    queryKey: ["assets-types-stats"],
+    queryFn: async () => {
+      const [total, totalAssets] = await Promise.all([
+        pocketbase.collection("assets_types").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase.collection("assets").getList(1, 1, {}).then((e) => e.totalItems),
+      ]);
+      return { total, totalAssets };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   return (
     <>
       <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard
+            title="Total Types"
+            icon={Tags}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="Asset types defined"
+          />
+          <StatCard
+            title="Total Assets"
+            icon={Package}
+            tone="info"
+            loading={statsLoading}
+            value={statsQuery.data?.totalAssets}
+            description="Assets across all types"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-base font-semibold tracking-tight">
               All assets Types.
@@ -266,8 +299,7 @@ export default function AssetsTypes() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

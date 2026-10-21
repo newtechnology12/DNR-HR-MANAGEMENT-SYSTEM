@@ -2,7 +2,7 @@ import DataTable from "@/components/DataTable";
 import { ColumnDef} from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { PlusCircle, CheckCircle, Edit2, Eye, PieChart, X } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import pocketbase from "@/lib/pocketbase";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "react-query";
@@ -76,14 +76,7 @@ const columns: ColumnDef<Project>[] = [
     accessorKey: "name",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
     cell: ({ row }) => (
-      <div className="w-[80px]- flex items-center gap-2">
-        <Link
-          to={""}
-          className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-        >
-          {row.getValue("name")}
-        </Link>
-      </div>
+      <span className="capitalize">{row.getValue("name")}</span>
     ),
     enableSorting: true,
     enableHiding: true,
@@ -376,7 +369,7 @@ export default function Projects() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

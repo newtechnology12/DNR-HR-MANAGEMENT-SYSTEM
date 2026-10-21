@@ -249,7 +249,7 @@ export default function PerfomanceForm() {
   return (
     <>
       <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-lg font-semibold tracking-tight">
               {performance ? "Update" : " Create a"} Perfomance Evaluation
@@ -843,8 +843,7 @@ export default function PerfomanceForm() {
       </div>
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={() => deleteMutation.mutate()}
         isLoading={deleteMutation.isLoading}

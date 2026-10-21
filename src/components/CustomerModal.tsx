@@ -95,8 +95,7 @@ function Customers({ onSelect }: any) {
                   No Customer Found
                 </h4>
                 <p className="text-[15px] max-w-sm leading-8 text-slate-500">
-                  Lorem ipsum dolor, sit amet consectetur adipisicing elit.
-                  Vitae temporibus.
+                  No customers match your search. Try a different name.
                 </p>
               </div>
             </>

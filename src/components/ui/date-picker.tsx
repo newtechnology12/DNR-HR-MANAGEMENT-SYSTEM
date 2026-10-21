@@ -19,10 +19,10 @@ export function DatePicker({ value, setValue, placeholder, error = false }) {
         <Button
           variant={"outline"}
           className={cn(
-            "w-full rounded-[3px] h-[40px] justify-start text-left font-normal",
+            "h-[38px] w-full justify-start rounded-md border-slate-300 px-3 text-left text-[13.5px] font-normal text-slate-900 shadow-sm hover:border-slate-400 hover:bg-white focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15 focus-visible:ring-offset-0",
             !value && "text-muted-foreground",
             {
-              "border-red-500": error,
+              "border-red-500 ring-[3px] ring-red-500/15": error,
             }
           )}
         >

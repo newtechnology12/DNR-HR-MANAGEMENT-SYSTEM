@@ -82,7 +82,7 @@ export function PettryCashRequestModal({
       .then(() => {
         onComplete();
         toast.error(
-          q ? "request updated succesfully" : "request created succesfully"
+          q ? "request updated successfully" : "request created successfully"
         );
         form.reset();
         setError(undefined);
@@ -167,7 +167,7 @@ export function PettryCashRequestModal({
                 </div>
               </div>
               <DialogFooter>
-                <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+                <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                   <Button
                     type="button"
                     onClick={() => {

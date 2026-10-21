@@ -20,12 +20,16 @@ import { z } from "zod";
 const formSchema = z.object({
   name: z.string().min(1, { message: "Names is a required field" }),
   status: z.string().min(1, { message: "Status is a required field" }),
+  procurement_scope: z.string().min(1, { message: "Choose what this role can see" }),
+  hr_scope: z.string().min(1, { message: "Choose whose HR records this role can see" }),
 });
 
 const getDefaultValues = (data?: any) => {
   return {
     name: data?.name || "",
     status: data?.status || "active",
+    procurement_scope: data?.procurement_scope || "own",
+    hr_scope: data?.hr_scope || "own",
   };
 };
 
@@ -51,6 +55,16 @@ const basePermissions = [
     ],
   },
   {
+    parent: "Employee documents",
+    children: [
+      {
+        access: false,
+        name: "delete_employee_documents",
+        title: "Delete employee documents (staff can never delete their own)",
+      },
+    ],
+  },
+  {
     parent: "Leaves",
     children: [
       {
@@ -67,6 +81,11 @@ const basePermissions = [
         access: false,
         name: "update_leave",
         title: "Update leave",
+      },
+      {
+        access: false,
+        name: "manage_leave_policy",
+        title: "Manage leave types, public holidays and entitlement rules",
       },
     ],
   },
@@ -122,6 +141,16 @@ const basePermissions = [
         access: false,
         name: "update_employee_perfomance",
         title: "Update perfomance",
+      },
+      {
+        access: false,
+        name: "evaluate_staff",
+        title: "Evaluate colleagues in own department (appraisals)",
+      },
+      {
+        access: false,
+        name: "manage_appraisals",
+        title: "Manage appraisal templates and cycles, finalise results",
       },
     ],
   },
@@ -232,6 +261,21 @@ const basePermissions = [
         access: false,
         name: "create_payroll",
         title: "Create payroll",
+      },
+      {
+        access: false,
+        name: "manage_salaries",
+        title: "Edit salary structures and allowances",
+      },
+      {
+        access: false,
+        name: "manage_payroll_settings",
+        title: "Configure PAYE bands and statutory contributions",
+      },
+      {
+        access: false,
+        name: "mark_payroll_paid",
+        title: "Record payroll payment (not the preparer)",
       },
       {
         access: false,
@@ -427,6 +471,84 @@ const basePermissions = [
       },
     ],
   },
+  {
+    parent: "Procurement",
+    children: [
+      {
+        access: false,
+        name: "view_procurement_dashboard",
+        title: "View procurement dashboard",
+      },
+      {
+        access: false,
+        name: "view_purchase_requisitions",
+        title: "View purchase requisitions",
+      },
+      {
+        access: false,
+        name: "create_purchase_requisition",
+        title: "Create purchase requisitions",
+      },
+      {
+        access: false,
+        name: "manage_approval_workflows",
+        title: "Manage approval workflows",
+      },
+      {
+        access: false,
+        name: "manage_procurement_settings",
+        title: "Manage procurement settings (numbering, categories, units)",
+      },
+    ],
+  },
+  {
+    parent: "Suppliers & sourcing",
+    children: [
+      { access: false, name: "view_suppliers", title: "View suppliers" },
+      { access: false, name: "manage_suppliers", title: "Add and edit suppliers, contacts and documents" },
+      { access: false, name: "approve_suppliers", title: "Approve supplier registrations and reactivate suppliers" },
+      { access: false, name: "manage_contracts", title: "Create, submit and terminate procurement contracts" },
+      { access: false, name: "evaluate_suppliers", title: "Evaluate supplier performance" },
+      { access: false, name: "view_rfqs", title: "View RFQs and quotations" },
+      { access: false, name: "manage_rfqs", title: "Create and send RFQs, record quotations" },
+      { access: false, name: "award_rfqs", title: "Select the winning supplier" },
+    ],
+  },
+  {
+    parent: "Purchase orders & inventory",
+    children: [
+      { access: false, name: "view_purchase_orders", title: "View purchase orders and receipts" },
+      { access: false, name: "manage_purchase_orders", title: "Create, submit, send and close purchase orders" },
+      { access: false, name: "receive_goods", title: "Record deliveries (goods receipts / service confirmations)" },
+      { access: false, name: "authorize_over_receipt", title: "Accept deliveries above the ordered quantity (within tolerance)" },
+      { access: false, name: "amend_purchase_orders", title: "Amend approved purchase orders (re-approval required)" },
+      { access: false, name: "manage_procurement_plan", title: "Prepare and submit annual procurement plans" },
+      { access: false, name: "view_procurement_reports", title: "View and export procurement reports" },
+      { access: false, name: "view_inventory", title: "View warehouses and stock" },
+      { access: false, name: "manage_inventory", title: "Manage warehouses, items and stock adjustments" },
+    ],
+  },
+  {
+    parent: "Finance: invoices, payments & budgets",
+    children: [
+      { access: false, name: "view_invoices", title: "View supplier invoices and payments" },
+      { access: false, name: "manage_invoices", title: "Record, correct and submit supplier invoices" },
+      { access: false, name: "resolve_invoice_exceptions", title: "Resolve three-way match exceptions" },
+      { access: false, name: "record_payments", title: "Record supplier payments" },
+      { access: false, name: "view_budgets", title: "View budgets and utilisation" },
+      { access: false, name: "manage_budgets", title: "Create and change budgets" },
+    ],
+  },
+  {
+    parent: "Security",
+    children: [
+      {
+        access: false,
+        name: "view_audit_logs",
+        title: "View the audit log",
+      },
+    ],
+  },
 ];
 
 export default function CreateOrUpdaterRole() {
@@ -482,7 +604,6 @@ export default function CreateOrUpdaterRole() {
 
     const perms = permissions.map((parent) => parent.children).flat();
 
-    console.log(perms);
     return (
       roleId
         ? pocketbase.collection("roles").update(roleId, {
@@ -494,7 +615,7 @@ export default function CreateOrUpdaterRole() {
             .create({ ...data, permitions: perms, created_by: user.id })
     )
       .then((e) => {
-        toast.success("Role created/updated succesfully");
+        toast.success("Role created/updated successfully");
         resetPermitions(e);
         navigate(
           `/dashboard/settings/general-settings/roles-permissions/${e.id}`
@@ -520,7 +641,6 @@ export default function CreateOrUpdaterRole() {
     },
     onError: (error: any) => {
       toast.error(error.message);
-      console.log(error);
     },
   });
 
@@ -579,7 +699,7 @@ export default function CreateOrUpdaterRole() {
                   <form onSubmit={form.handleSubmit(onSubmit)}>
                     <div className="border-b border-dashed">
                       <div className="grid pb-3 px-4 max-w-3xl gap-2">
-                        <div className="grid gap-2 grid-cols-3">
+                        <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                           <AppFormField
                             form={form}
                             label={"Roles name"}
@@ -596,9 +716,31 @@ export default function CreateOrUpdaterRole() {
                               { label: "Inactive", value: "inactive" },
                             ]}
                           />
+                          <AppFormSelect
+                            form={form}
+                            label={"Procurement visibility"}
+                            placeholder={"Select scope"}
+                            name={"procurement_scope"}
+                            options={[
+                              { label: "Own requests only", value: "own" },
+                              { label: "Own department", value: "department" },
+                              { label: "Whole organisation", value: "all" },
+                            ]}
+                          />
+                          <AppFormSelect
+                            form={form}
+                            label={"HR records visibility"}
+                            placeholder={"Select scope"}
+                            name={"hr_scope"}
+                            options={[
+                              { label: "Own records only", value: "own" },
+                              { label: "Own department", value: "department" },
+                              { label: "Whole organisation", value: "all" },
+                            ]}
+                          />
                         </div>
                       </div>
-                      <div className="flex px-4 pb-4 justify-between- w-full items-center space-x-2">
+                      <div className="flex px-4 pb-4 w-full items-center space-x-2">
                         <Checkbox
                           onCheckedChange={(checked) => {
                             const newP: any[] = permissions.map((e) => {
@@ -641,10 +783,10 @@ export default function CreateOrUpdaterRole() {
                       </div>
                       <div className="py-4">
                         <div>
-                          <div className="grid grid-cols-2- gap-y-5 gap-x-7">
+                          <div className="grid grid-cols-1 gap-y-5 gap-x-7 sm:grid-cols-2">
                             {permissions.map((permissionP, i) => (
                               <div className="pb-2" key={i}>
-                                <div className="flex mb-3 gap-3 items-center justify-between-">
+                                <div className="flex mb-3 gap-3 items-center">
                                   <h4 className="font-semibold text-sm">
                                     {permissionP.parent}
                                   </h4>
@@ -653,7 +795,7 @@ export default function CreateOrUpdaterRole() {
                                   {permissionP.children.map((permission) => {
                                     return (
                                       <div key={permission.name}>
-                                        <div className="flex justify-between- w-full items-center space-x-2">
+                                        <div className="flex w-full items-center space-x-2">
                                           <Checkbox
                                             onCheckedChange={(checked) => {
                                               const newP: any[] =
@@ -716,8 +858,7 @@ export default function CreateOrUpdaterRole() {
       </div>
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={() => deleteMutation.mutate()}
         isLoading={deleteMutation.isLoading}

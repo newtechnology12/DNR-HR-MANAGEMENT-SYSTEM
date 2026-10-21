@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "react-query";
-import { Link } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { addDays } from "date-fns";
@@ -132,14 +131,13 @@ export default function EmployeeReports({ employeeId }) {
       accessorKey: "employee",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
       cell: ({ row }) => (
-        <div className="w-[80px] flex items-center gap-2">
-          <Link
-            to={""}
-            className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("employee")}
-          </Link>
-        </div>
+        <button
+          type="button"
+          onClick={() => editRow.edit(row.original)}
+          className="capitalize hover:text-primary hover:underline"
+        >
+          {row.getValue("employee")}
+        </button>
       ),
       enableSorting: true,
       enableHiding: true,
@@ -172,7 +170,7 @@ export default function EmployeeReports({ employeeId }) {
         <div className="capitalize">
           {new Date(row.getValue("reportDate")).toLocaleDateString("en-US", {
             day: "2-digit",
-            month: "long",
+            month: "short",
             year: "numeric",
           })}
         </div>
@@ -187,7 +185,7 @@ export default function EmployeeReports({ employeeId }) {
         <div className="capitalize">
           {new Date(row.getValue("dateHappened")).toLocaleDateString("en-US", {
             day: "2-digit",
-            month: "long",
+            month: "short",
             year: "numeric",
           })}
         </div>
@@ -263,7 +261,7 @@ export default function EmployeeReports({ employeeId }) {
         <div className="capitalize">
           {new Date(row.getValue("created")).toLocaleDateString("en-US", {
             day: "2-digit",
-            month: "long",
+            month: "short",
             year: "numeric",
           })}
         </div>

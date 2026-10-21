@@ -1,4 +1,9 @@
 import { useState, useEffect } from "react";
+import BreadCrumb from "@/components/breadcrumb";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 export function getDatePresets() {
   const today = new Date();
   const startOfWeek = new Date(today);
@@ -102,100 +107,150 @@ export default function TimesheetReport() {
   };
 
   return (
-    <div className="p-6">
-      <div className="mb-4 flex space-x-4">
-        <div>
-          <label htmlFor="employeeFilter" className="block mb-1">
-            Employee:
-          </label>
-          <input
-            type="text"
-            id="employeeFilter"
-            value={employeeFilter}
-            onChange={(e) => setEmployeeFilter(e.target.value)}
-            className="border rounded p-1"
-            placeholder="Filter by employee"
-          />
-        </div>
-        <div>
-          <label htmlFor="datePreset" className="block mb-1">
-            Date Preset:
-          </label>
-          <select
-            id="datePreset"
-            onChange={handlePresetChange}
-            className="border rounded p-1"
-            defaultValue="Current Week"
-          >
-            {datePresets.map((preset) => (
-              <option key={preset.label} value={preset.label}>
-                {preset.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="startDate" className="block mb-1">
-            Start Date:
-          </label>
-          <input
-            type="date"
-            id="startDate"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="border rounded p-1"
-          />
-        </div>
-        <div>
-          <label htmlFor="endDate" className="block mb-1">
-            End Date:
-          </label>
-          <input
-            type="date"
-            id="endDate"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="border rounded p-1"
-          />
-        </div>
+    <div className="space-y-6 px-4 py-4 sm:px-6">
+      <div className="flex flex-col items-start gap-1">
+        <h2 className="text-xl font-bold tracking-tight text-slate-900">
+          Timesheet Report
+        </h2>
+        <BreadCrumb items={[{ title: "Timesheet Report", link: "/dashboard" }]} />
       </div>
-      <div className="mb-8 grid grid-cols-3 gap-4">
-        <div className="bg-blue-100 p-4 rounded">
-          <h3 className="text-lg font-bold mb-2">Total Hours Logged</h3>
-          <p className="text-2xl">{totalHours.toFixed(1)}</p>
-        </div>
-        <div className="bg-green-100 p-4 rounded">
-          <h3 className="text-lg font-bold mb-2">Completed Tasks</h3>
-          <p className="text-2xl">{completedTasks}</p>
-        </div>
-        <div className="bg-yellow-100 p-4 rounded">
-          <h3 className="text-lg font-bold mb-2">Pending Tasks</h3>
-          <p className="text-2xl">{pendingTasks}</p>
-        </div>
+
+      <Card>
+        <CardContent className="flex flex-wrap items-end gap-4 pt-4">
+          <div>
+            <label htmlFor="employeeFilter" className="mb-1.5 block text-[13px] font-medium text-slate-600">
+              Employee
+            </label>
+            <input
+              type="text"
+              id="employeeFilter"
+              value={employeeFilter}
+              onChange={(e) => setEmployeeFilter(e.target.value)}
+              className="rounded-input border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              placeholder="Filter by employee"
+            />
+          </div>
+          <div>
+            <label htmlFor="datePreset" className="mb-1.5 block text-[13px] font-medium text-slate-600">
+              Date Preset
+            </label>
+            <select
+              id="datePreset"
+              onChange={handlePresetChange}
+              className="rounded-input border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              defaultValue="Current Week"
+            >
+              {datePresets.map((preset) => (
+                <option key={preset.label} value={preset.label}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="startDate" className="mb-1.5 block text-[13px] font-medium text-slate-600">
+              Start Date
+            </label>
+            <input
+              type="date"
+              id="startDate"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="rounded-input border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+          </div>
+          <div>
+            <label htmlFor="endDate" className="mb-1.5 block text-[13px] font-medium text-slate-600">
+              End Date
+            </label>
+            <input
+              type="date"
+              id="endDate"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="rounded-input border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[13.5px] font-medium text-slate-600">
+              Total Hours Logged
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-slate-900">{totalHours.toFixed(1)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[13.5px] font-medium text-slate-600">
+              Completed Tasks
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-success">{completedTasks}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[13.5px] font-medium text-slate-600">
+              Pending Tasks
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-warning">{pendingTasks}</p>
+          </CardContent>
+        </Card>
       </div>
-      <h3 className="text-xl font-bold mb-4">Detailed Activity Report</h3>
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="border p-2">Employee</th>
-            <th className="border p-2">Date</th>
-            <th className="border p-2">Task</th>
-            <th className="border p-2">Hours</th>
-            <th className="border p-2">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredActivities.map((activity, index) => (
-            <tr key={index} className="border">
-              <td className="border p-2">{activity.employee}</td>
-              <td className="border p-2">{activity.date}</td>
-              <td className="border p-2">{activity.task}</td>
-              <td className="border p-2">{activity.hours}</td>
-              <td className="border p-2">{activity.status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Detailed Activity Report</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Task</TableHead>
+                <TableHead>Hours</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredActivities.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-32 text-center text-slate-500">
+                    No activity logged for this period.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredActivities.map((activity, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="capitalize">{activity.employee}</TableCell>
+                    <TableCell>{activity.date}</TableCell>
+                    <TableCell>{activity.task}</TableCell>
+                    <TableCell>{activity.hours}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={activity.status === "completed" ? "success" : "warning"}
+                        className="capitalize"
+                      >
+                        {activity.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

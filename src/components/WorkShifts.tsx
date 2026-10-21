@@ -288,12 +288,12 @@ export default function WorkShifts() {
                   ) || "---",
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,

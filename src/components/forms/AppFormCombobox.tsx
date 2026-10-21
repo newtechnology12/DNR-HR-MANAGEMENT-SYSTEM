@@ -9,6 +9,7 @@ import { Label } from "../ui/label";
 import { Combobox } from "../ui/combobox";
 
 export default function AppFormCombobox({
+  required = false,
   name,
   form,
   label,
@@ -23,8 +24,9 @@ export default function AppFormCombobox({
       render={({ field, fieldState }) => (
         <FormItem className="flex flex-col gap-1 mt-1">
           <FormLabel>
-            <Label className="text-[13px] mb-1 text-slate-600" htmlFor={label}>
+            <Label className="mb-1 text-[12.5px] font-medium text-slate-700" htmlFor={label}>
               {label}
+              {required && <span className="ml-0.5 text-red-600">*</span>}
             </Label>
           </FormLabel>
           <FormControl>

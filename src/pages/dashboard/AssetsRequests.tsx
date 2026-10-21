@@ -2,6 +2,7 @@ import DataTable from "@/components/DataTable";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { PlusCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
@@ -36,6 +37,8 @@ import { useRoles } from "@/context/roles.context";
 import formatFilter from "@/utils/formatFilter";
 import { PettryCashRequestModal } from "@/components/modals/PettryCashRequestModal";
 import { AssetRequestModal } from "@/components/modals/AssetRequestModal";
+import StatCard from "@/components/StatCard";
+import { CheckCircle2, ClipboardList, Clock, XCircle } from "lucide-react";
 
 export default function AssetsRequests() {
   const { canPerform } = useRoles();
@@ -99,9 +102,19 @@ export default function AssetsRequests() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Status" />
       ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("status")}</div>
-      ),
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
+        return (
+          <Badge
+            variant={
+              status === "approved" ? "success" : status === "rejected" ? "danger" : "warning"
+            }
+            className="capitalize"
+          >
+            {status}
+          </Badge>
+        );
+      },
       filterFn: (__, _, value) => {
         return value;
       },
@@ -227,7 +240,7 @@ export default function AssetsRequests() {
                 requested_by: e.expand?.requested_by?.name,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -249,12 +262,12 @@ export default function AssetsRequests() {
   const handleDelete = (e) => {
     confirmModal.setIsLoading(true);
     return pocketbase
-      .collection("petty_cash_requests")
+      .collection("assets_requests")
       .delete(e.id)
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("credit deleted succesfully");
+        toast.success("Asset request deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -262,18 +275,76 @@ export default function AssetsRequests() {
       });
   };
 
+  const statsQuery = useQuery({
+    queryKey: ["assets-requests-stats"],
+    queryFn: async () => {
+      const [total, pending, approved, rejected] = await Promise.all([
+        pocketbase.collection("assets_requests").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("assets_requests")
+          .getList(1, 1, { filter: `status="pending"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("assets_requests")
+          .getList(1, 1, { filter: `status="approved"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("assets_requests")
+          .getList(1, 1, { filter: `status="rejected"` })
+          .then((e) => e.totalItems),
+      ]);
+      return { total, pending, approved, rejected };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   return (
     <>
       <div className="px-4">
-        <div className="flex pb-2 items-start justify-between space-y-2">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Requests"
+            icon={ClipboardList}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="All asset requests"
+          />
+          <StatCard
+            title="Pending"
+            icon={Clock}
+            tone="warning"
+            loading={statsLoading}
+            value={statsQuery.data?.pending}
+            description="Awaiting approval"
+          />
+          <StatCard
+            title="Approved"
+            icon={CheckCircle2}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.approved}
+            description="Approved requests"
+          />
+          <StatCard
+            title="Rejected"
+            icon={XCircle}
+            tone="danger"
+            loading={statsLoading}
+            value={statsQuery.data?.rejected}
+            description="Rejected requests"
+          />
+        </div>
+        <div className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-[17px] font-semibold capitalize tracking-tight">
-              Petty Cash Requests.
+              Asset Requests
             </h2>
             <BreadCrumb
               items={[
                 {
-                  title: `Petty Cash Requests.`,
+                  title: `Asset Requests`,
                   link: `/dashboard`,
                 },
               ]}
@@ -380,8 +451,7 @@ export default function AssetsRequests() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}
@@ -440,7 +510,7 @@ function ApproveOrRejectModal({ type, open, setOpen, request, onCompleted }) {
 
       setOpen(false);
       toast.success(
-        `Request ${type === "approve" ? "approved" : "rejected"} succesfully`
+        `Request ${type === "approve" ? "approved" : "rejected"} successfully`
       );
       onCompleted();
       form.reset();
@@ -478,7 +548,7 @@ function ApproveOrRejectModal({ type, open, setOpen, request, onCompleted }) {
               </div>
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="submit"
                   onClick={() => form.handleSubmit(onSubmit)}

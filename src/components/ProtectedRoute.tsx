@@ -3,23 +3,25 @@ import { useAuth } from "@/context/auth.context";
 import { Button } from "./ui/button";
 import { useRoles } from "@/context/roles.context";
 
-export function ProtectedRoute({ entity, children }: any) {
+/** `entity` may be one permission name or a list — any one of them grants access. */
+export function ProtectedRoute({ entity, children }: { entity: string | string[]; children: any }) {
   const { user } = useAuth();
-  const { roles = 0 } = useRoles();
+  const { roles = [] } = useRoles();
+  const entities = Array.isArray(entity) ? entity : [entity];
+  const grants = (e: any) => entities.includes(e?.name) && e?.access === true;
 
-  const allowedRoles = roles?.filter((e) =>
-    e?.permitions?.find((e) => e.name === entity && e.access === true)
-  );
+  const allowedRoles = roles?.filter((e) => e?.permitions?.find(grants));
 
-  const allowed = allowedRoles?.find((e) => e?.id === user?.role?.id);
+  const allowed =
+    user?.role?.permitions?.some(grants) ||
+    allowedRoles?.find((e) => e?.id === user?.role?.id);
 
   const location = useLocation();
+  const navigate = useNavigate();
 
   if (!user) {
-    return <Navigate to={`/auth/login?redirect=${location.pathname}`} />;
+    return <Navigate to={`/?redirect=${location.pathname}`} />;
   }
-
-  const navigate = useNavigate();
 
   if (allowed) {
     return <>{children}</>;

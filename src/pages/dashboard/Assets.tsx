@@ -2,6 +2,7 @@ import DataTable from "@/components/DataTable";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useRef, useState } from "react";
@@ -12,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import ConfirmModal from "@/components/modals/ConfirmModal";
 import useEditRow from "@/hooks/use-edit-row";
 import useConfirmModal from "@/hooks/useConfirmModal";
+import StatCard from "@/components/StatCard";
+import { AlertTriangle, Package, PackageCheck } from "lucide-react";
 import useModalState from "@/hooks/useModalState";
 import { toast } from "sonner";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
@@ -144,9 +147,23 @@ export default function Assets() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Status" />
       ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("status")}</div>
-      ),
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
+        if (!status) return <span className="text-slate-400">---</span>;
+        const tone =
+          status === "returned" || status === "in_stock"
+            ? "success"
+            : status === "lost" || status === "damaged"
+            ? "danger"
+            : status === "in_transit"
+            ? "warning"
+            : "info";
+        return (
+          <Badge variant={tone} className="capitalize">
+            {status.replace(/[-_]/g, " ")}
+          </Badge>
+        );
+      },
       filterFn: (__, _, value) => {
         return value;
       },
@@ -261,12 +278,12 @@ export default function Assets() {
                 assigned_to: e?.expand?.assigned_to?.name,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -282,12 +299,12 @@ export default function Assets() {
   const handleDelete = (e) => {
     confirmModal.setIsLoading(true);
     return pocketbase
-      .collection("roles")
+      .collection("assets")
       .delete(e.id)
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("Roles deleted succesfully");
+        toast.success("Asset deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -302,11 +319,69 @@ export default function Assets() {
 
   const [recordToShowBarcode, setrecordToShowBarcode] = useState(undefined);
 
+  const statsQuery = useQuery({
+    queryKey: ["assets-stats"],
+    queryFn: async () => {
+      const [total, inUse, inStock, lostOrDamaged] = await Promise.all([
+        pocketbase.collection("assets").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("assets")
+          .getList(1, 1, { filter: `status="in-use" || status="assigned"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("assets")
+          .getList(1, 1, { filter: `status="in_stock"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("assets")
+          .getList(1, 1, { filter: `status="lost" || status="damaged"` })
+          .then((e) => e.totalItems),
+      ]);
+      return { total, inUse, inStock, lostOrDamaged };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   return (
     <>
       {" "}
       <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Assets"
+            icon={Package}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="All company assets"
+          />
+          <StatCard
+            title="In Use"
+            icon={PackageCheck}
+            tone="info"
+            loading={statsLoading}
+            value={statsQuery.data?.inUse}
+            description="Assigned to employees"
+          />
+          <StatCard
+            title="In Stock"
+            icon={Package}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.inStock}
+            description="Available in inventory"
+          />
+          <StatCard
+            title="Lost / Damaged"
+            icon={AlertTriangle}
+            tone="danger"
+            loading={statsLoading}
+            value={statsQuery.data?.lostOrDamaged}
+            description="Needs attention"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-lg font-semibold tracking-tight">All Assets</h2>
             <BreadCrumb items={[{ title: "Assets", link: "/dashboard" }]} />
@@ -426,8 +501,7 @@ export default function Assets() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}
@@ -502,7 +576,7 @@ function BarcodeModal({ open, setOpen, code, name }) {
         </div>
 
         <DialogFooter>
-          <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
             <Button
               type="button"
               onClick={() => setOpen(false)}

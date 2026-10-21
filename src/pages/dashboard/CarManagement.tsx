@@ -3,7 +3,6 @@ import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle } from "lucide-react";
-import { Link } from "react-router-dom";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
@@ -35,6 +34,8 @@ import { useAuth } from "@/context/auth.context";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/utils/cn";
 import formatFilter from "@/utils/formatFilter";
+import StatCard from "@/components/StatCard";
+import { Car, CheckCircle2, Clock, XCircle } from "lucide-react";
 
 // const capitalizeFirstLetter = (str) => {
 //   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -73,14 +74,13 @@ export default function CarManagement() {
         <DataTableColumnHeader column={column} title="Employee" />
       ),
       cell: ({ row }) => (
-        <div className="w-[80px]- flex items-center gap-2">
-          <Link
-            to={""}
-            className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("employee")}
-          </Link>
-        </div>
+        <button
+          type="button"
+          onClick={() => editRow.edit(row.original)}
+          className="capitalize hover:text-primary hover:underline"
+        >
+          {row.getValue("employee")}
+        </button>
       ),
       enableSorting: true,
       enableHiding: true,
@@ -317,12 +317,12 @@ export default function CarManagement() {
                 created_by: e.expand?.created_by?.name,
                 startTime: new Date(e.start).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 endTime: new Date(e.end).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 purpose: e.purpose,
@@ -335,7 +335,7 @@ export default function CarManagement() {
                 status: e.status,
                 approved_at: new Date(e.start).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 reason: e.reason,
@@ -343,12 +343,12 @@ export default function CarManagement() {
                 rejected_by: e.rejected_by || "---",
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -375,7 +375,7 @@ export default function CarManagement() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("CarRequests deleted successfully");
+        toast.success("Car request deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -383,11 +383,68 @@ export default function CarManagement() {
       });
   };
 
+  const statsQuery = useQuery({
+    queryKey: ["car-requests-stats"],
+    queryFn: async () => {
+      const [total, pending, approved, rejected] = await Promise.all([
+        pocketbase.collection("CarRequests").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("CarRequests")
+          .getList(1, 1, { filter: `status="pending"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("CarRequests")
+          .getList(1, 1, { filter: `status="approved"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("CarRequests")
+          .getList(1, 1, { filter: `status="rejected"` })
+          .then((e) => e.totalItems),
+      ]);
+      return { total, pending, approved, rejected };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
 
   return (
     <>
       <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Requests"
+            icon={Car}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="All car requests"
+          />
+          <StatCard
+            title="Pending"
+            icon={Clock}
+            tone="warning"
+            loading={statsLoading}
+            value={statsQuery.data?.pending}
+            description="Awaiting approval"
+          />
+          <StatCard
+            title="Approved"
+            icon={CheckCircle2}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.approved}
+            description="Approved car requests"
+          />
+          <StatCard
+            title="Rejected"
+            icon={XCircle}
+            tone="danger"
+            loading={statsLoading}
+            value={statsQuery.data?.rejected}
+            description="Rejected car requests"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-lg font-semibold tracking-tight">
               Car Requests
@@ -479,7 +536,6 @@ export default function CarManagement() {
               ],
             }
           ]}
-          filterKey="status"  // Add this prop to specify which column to filter
         />
       </div>
 
@@ -495,7 +551,7 @@ export default function CarManagement() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}
@@ -589,7 +645,7 @@ function ApproveOrRejectModal({ type, open, setOpen, car, onCompleted }) {
 
 
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="submit"
                   onClick={() => form.handleSubmit(onSubmit)}

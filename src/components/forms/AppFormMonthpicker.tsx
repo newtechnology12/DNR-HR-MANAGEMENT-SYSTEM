@@ -10,7 +10,9 @@ import "react-month-picker/css/month-picker.css";
 import { cn } from "@/utils";
 import { useState } from "react";
 
-export default function AppFormMonthPicker({ name, form, label }) {
+export default function AppFormMonthPicker({
+  required = false,
+  name, form, label }) {
   return (
     <FormField
       control={form.control}
@@ -18,8 +20,9 @@ export default function AppFormMonthPicker({ name, form, label }) {
       render={({ field, fieldState }) => (
         <FormItem>
           <FormLabel>
-            <Label className="text-[13px] mb-1 text-slate-600" htmlFor={label}>
+            <Label className="mb-1 text-[12.5px] font-medium text-slate-700" htmlFor={label}>
               {label}
+              {required && <span className="ml-0.5 text-red-600">*</span>}
             </Label>
           </FormLabel>
           <FormControl>

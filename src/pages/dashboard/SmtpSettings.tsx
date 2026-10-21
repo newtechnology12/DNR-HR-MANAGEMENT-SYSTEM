@@ -58,14 +58,8 @@ function SmtpSettings() {
             <h4 className="font-semibold dark:text-slate-200 text-sm">
               Update SMPT Settings
             </h4>
-            <p
-              onClick={async () => {
-                const settings = await pocketbase.settings.getAll();
-                console.log(settings);
-              }}
-              className="text-[13.5px] leading-7 dark:text-slate-400 mt-1 text-slate-500"
-            >
-              Lorem ipsum, dolor sit amet consectetur adipisicing elit.
+            <p className="text-[13.5px] leading-7 dark:text-slate-400 mt-1 text-slate-500">
+              Configure the email server used to send system notifications.
             </p>
           </div>
           <div className="mb-0">

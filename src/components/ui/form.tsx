@@ -156,12 +156,15 @@ const FormMessage = React.forwardRef<
     <p
       ref={ref}
       id={formMessageId}
-      className={cn(
-        "text-[13px] font-medium text-red-500 dark:text-red-500",
-        className
-      )}
+      role={error ? "alert" : undefined}
+      className={cn("flex items-start gap-1 text-[12px] font-medium text-red-600", className)}
       {...props}
     >
+      {error && (
+        <svg aria-hidden viewBox="0 0 16 16" className="mt-[2px] h-3 w-3 shrink-0 fill-current">
+          <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm-.75 3.5h1.5v4.25h-1.5V4.5Zm0 5.75h1.5v1.5h-1.5v-1.5Z" />
+        </svg>
+      )}
       {body}
     </p>
   );

@@ -71,8 +71,8 @@ export function DesignationFormModal({
         onComplete();
         toast.error(
           q
-            ? "Designation updated succesfully"
-            : "Designation created succesfully"
+            ? "Designation updated successfully"
+            : "Designation created successfully"
         );
         form.reset();
       })
@@ -135,7 +135,7 @@ export function DesignationFormModal({
               </div>
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="button"
                   onClick={() => form.reset()}

@@ -50,7 +50,7 @@ function LeavesSettings() {
               Update Leaves Settings
             </h4>
             <p className="text-[14px] leading-7 dark:text-slate-400 mt-1 text-slate-500">
-              Lorem ipsum, dolor sit amet consectetur adipisicing elit.
+              Configure leave types, balances, and approval rules.
             </p>
           </div>
           <div className="mb-0">

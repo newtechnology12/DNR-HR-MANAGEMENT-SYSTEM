@@ -80,7 +80,7 @@ function PayrollSettings() {
       .then(() => {
         deductionsQuery.refetch();
         confirmModal.close();
-        toast.success("departments deleted succesfully");
+        toast.success("departments deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -97,7 +97,7 @@ function PayrollSettings() {
                 Update Payroll Settings
               </h4>
               <p className="text-[14px] leading-7 dark:text-slate-400 mt-1 text-slate-500">
-                Lorem ipsum, dolor sit amet consectetur adipisicing elit.
+                Configure how employee payroll is calculated and processed.
               </p>
             </div>
             <div className="mb-0">
@@ -268,8 +268,7 @@ function PayrollSettings() {
       />{" "}
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

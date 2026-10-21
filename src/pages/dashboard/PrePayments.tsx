@@ -39,6 +39,8 @@ import { useRoles } from "@/context/roles.context";
 import jsPDF from "jspdf";
 import autoTable from 'jspdf-autotable';
 import * as XLSX from "xlsx";
+import StatCard from "@/components/StatCard";
+import { Banknote, CheckCircle2, Clock, XCircle } from "lucide-react";
 
 export default function Prepayments() {
   const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState(false);
@@ -241,15 +243,14 @@ export default function Prepayments() {
         const fileName = row.getValue("attachment");
         const recordId = row.original.id;
         const collectionName = "prepayments";
-        const pocketBaseUrl = "https://pocketbase-production-f0b0.up.railway.app";
-        
+        const fileUrl = pocketbase.buildUrl(`/api/files/${collectionName}/${recordId}/${fileName}`);
+
         if (!fileName) {
           return <div className="text-gray-500">No attachment</div>;
         }
         
         const handleView = async () => {
           try {
-            const fileUrl = `${pocketBaseUrl}/api/files/${collectionName}/${recordId}/${fileName}`;
             const response = await fetch(fileUrl, {
               headers: {
                 // 'Authorization': `Bearer ${localStorage.getItem('pocketbase_auth')}`
@@ -269,7 +270,6 @@ export default function Prepayments() {
         
         const handleDownload = async () => {
           try {
-            const fileUrl = `${pocketBaseUrl}/api/files/${collectionName}/${recordId}/${fileName}`;
             const response = await fetch(fileUrl, {
               headers: {
                 // 'Authorization': `Bearer ${localStorage.getItem('pocketbase_auth')}`
@@ -516,18 +516,18 @@ export default function Prepayments() {
                   "en-US",
                   {
                     day: "2-digit",
-                    month: "long",
+                    month: "short",
                     year: "numeric",
                   }
                 ),
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -686,6 +686,32 @@ export default function Prepayments() {
 
   const totalAmount = recordsQuery?.data?.items?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
 
+  const statsQuery = useQuery({
+    queryKey: ["prepayments-stats"],
+    queryFn: async () => {
+      const [total, pending, approved, rejected, all] = await Promise.all([
+        pocketbase.collection("prepayments").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("prepayments")
+          .getList(1, 1, { filter: `status="pending"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("prepayments")
+          .getList(1, 1, { filter: `status="approved"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("prepayments")
+          .getList(1, 1, { filter: `status="rejected"` })
+          .then((e) => e.totalItems),
+        pocketbase.collection("prepayments").getFullList({ fields: "amount" }),
+      ]);
+      const totalRequested = all.reduce((acc, e: any) => acc + (Number(e.amount) || 0), 0);
+      return { total, pending, approved, rejected, totalRequested };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-[1400px] mx-auto p-6">
@@ -711,6 +737,42 @@ export default function Prepayments() {
               New Expense Request
             </Button>
           </div>
+        </div>
+
+        {/* Stats */}
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Requests"
+            icon={Banknote}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="All expense requests"
+          />
+          <StatCard
+            title="Pending"
+            icon={Clock}
+            tone="warning"
+            loading={statsLoading}
+            value={statsQuery.data?.pending}
+            description="Awaiting approval"
+          />
+          <StatCard
+            title="Approved"
+            icon={CheckCircle2}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.approved}
+            description="Approved expense requests"
+          />
+          <StatCard
+            title="Rejected"
+            icon={XCircle}
+            tone="danger"
+            loading={statsLoading}
+            value={statsQuery.data?.rejected}
+            description="Rejected expense requests"
+          />
         </div>
 
         {/* Control Panel */}
@@ -958,11 +1020,20 @@ function ApproveOrRejectModal({
   });
 
   const { user } = useAuth();
+  const [payAccount, setPayAccount] = useState("");
+  const accountsQ = useQuery(["expense-accounts"], () => pocketbase.collection("accounts").getFullList({ sort: "name" }), { enabled: open && type === "approve" && !expense?.account });
+  const accountId = expense?.account || payAccount;
 
   const onSubmit = async (values) => {
     try {
+      if (type === "approve") {
+        if (!accountId) return toast.error("Choose the account the expense is paid from.");
+        const acc = await pocketbase.collection("accounts").getOne(accountId);
+        if (acc.currentBalance < expense.amount) return toast.error(`Not enough money on ${acc.name}.`);
+      }
       await pocketbase.collection("prepayments").update(expense.id, {
         status: type === "approve" ? "approved" : "rejected",
+        ...(type === "approve" ? { account: accountId } : {}),
         [type === "approve" ? "approved_by" : "rejected_by"]: user?.id,
         [type === "approve" ? "approved_at" : "rejected_at"]: new Date(),
         [type === "approve" ? "approved_reason" : "rejected_reason"]:
@@ -972,14 +1043,14 @@ function ApproveOrRejectModal({
       if (type === "approve") {
         const account = await pocketbase
           .collection("accounts")
-          .getOne(expense.account);
+          .getOne(accountId);
 
         const transaction = await pocketbase
           .collection("accounts_transactions")
           .create({
             amount: expense.amount,
             date: expense.date || expense.created || new Date().toLocaleString(),
-            account: expense.account,
+            account: accountId,
             expense: expense.id,
             transactionType: "expense",
             notes: expense.notes,
@@ -1024,6 +1095,17 @@ function ApproveOrRejectModal({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <div className="grid px-2 gap-2">
+              {type === "approve" && !expense?.account && (
+                <label className="block text-[13px] font-medium text-slate-700">
+                  Pay from account <span className="text-red-600">*</span>
+                  <select className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13.5px]" value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
+                    <option value="">Choose an account</option>
+                    {(accountsQ.data || []).map((a: any) => (
+                      <option key={a.id} value={a.id}>{a.name} · RWF {Math.round(a.currentBalance).toLocaleString()}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <AppFormTextArea
                 form={form}
                 label="Enter a reason"
@@ -1032,7 +1114,7 @@ function ApproveOrRejectModal({
               />
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="submit"
                   disabled={form.formState.disabled || form.formState.isSubmitting}

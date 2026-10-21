@@ -29,6 +29,8 @@ import AppFormAsyncSelect from "@/components/forms/AppFormAsyncSelect";
 import Loader from "@/components/icons/Loader";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "react-feather";
+import StatCard from "@/components/StatCard";
+import { Banknote, FileStack, TrendingUp, Wallet } from "lucide-react";
 
 const formatYearAndMonth = (month, year) => {
   return (
@@ -225,7 +227,7 @@ export default function Payroll() {
     keepPreviousData: true,
     queryFn: () => {
       const searchQ = searchText
-        ? `month~"${searchText}" || yeah.name~"${searchText}"`
+        ? `month~"${searchText}" || branch.name~"${searchText}"`
         : "";
       const filters = columnFilters
         .map((e) => {
@@ -295,18 +297,80 @@ export default function Payroll() {
     },
     enabled: true,
   });
+
+  const statsQuery = useQuery({
+    queryKey: ["payroll-stats"],
+    queryFn: async () => {
+      const startOfMonth = new Date(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        1
+      ).toISOString();
+
+      const [total, thisMonth, all] = await Promise.all([
+        pocketbase.collection("payrolls").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("payrolls")
+          .getList(1, 1, { filter: `created >= "${startOfMonth}"` })
+          .then((e) => e.totalItems),
+        pocketbase.collection("payrolls").getFullList({ fields: "total_gross,total_net" }),
+      ]);
+
+      const totalGross = all.reduce((acc, e: any) => acc + (Number(e.total_gross) || 0), 0);
+      const totalNet = all.reduce((acc, e: any) => acc + (Number(e.total_net) || 0), 0);
+
+      return { total, thisMonth, totalGross, totalNet };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   const newRecordModal = useModalState();
 
   return (
     <>
-      <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
+      <div className="space-y-4 px-4 py-4 sm:px-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Payrolls"
+            icon={FileStack}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="All payroll runs"
+          />
+          <StatCard
+            title="This Month"
+            icon={TrendingUp}
+            tone="info"
+            loading={statsLoading}
+            value={statsQuery.data?.thisMonth}
+            description="Payrolls created this month"
+          />
+          <StatCard
+            title="Total Gross"
+            icon={Banknote}
+            tone="warning"
+            loading={statsLoading}
+            value={statsQuery.data?.totalGross?.toLocaleString() + " FRW"}
+            description="Sum of all gross payroll"
+          />
+          <StatCard
+            title="Total Net"
+            icon={Wallet}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.totalNet?.toLocaleString() + " FRW"}
+            description="Sum of all net payroll"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col items-start gap-1">
+            <h2 className="text-xl font-bold tracking-tight text-slate-900">
               Employees Payroll
             </h2>
             <BreadCrumb
-              items={[{ title: "Cashier Reports", link: "/dashboard" }]}
+              items={[{ title: "Payroll", link: "/dashboard" }]}
             />
           </div>
           <Button
@@ -315,8 +379,8 @@ export default function Payroll() {
             }}
             size="sm"
           >
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create a new Payroll</span>
+            <PlusCircle size={16} />
+            <span>Create Payroll</span>
           </Button>
         </div>
         <DataTable
@@ -397,13 +461,10 @@ export function PayrollFormModal({ open, setOpen }: any) {
   function branchesLoader({ search }) {
     return pocketbase
       .collection("branches")
-      .getList(0, 5, {
+      .getFullList({
         filter: search ? `name~"${search}"` : "",
-        perPage: 10,
       })
-      .then((e) =>
-        e.items.map((e) => ({ label: e.names || e.name, value: e.id }))
-      );
+      .then((e) => e.map((e) => ({ label: e.names || e.name, value: e.id })));
   }
 
   return (
@@ -412,7 +473,7 @@ export function PayrollFormModal({ open, setOpen }: any) {
         <DialogHeader>
           <DialogTitle>
             <span className="text-[15px] px-1 font-semibold py-2">
-              Create a new payroll.
+              Create a new payroll
             </span>
           </DialogTitle>
           <DialogDescription>
@@ -424,7 +485,7 @@ export function PayrollFormModal({ open, setOpen }: any) {
         {error && (
           <Alert
             variant="destructive"
-            className="rounded-[3px] !mt-4-  h-fit p-2 my-3-"
+            className="!mt-4 h-fit p-2 my-3"
           >
             <AlertCircle className="h-4 -mt-[6px] w-4" />
             <AlertTitle className=" ml-2 !text-left">
@@ -486,7 +547,7 @@ export function PayrollFormModal({ open, setOpen }: any) {
               />
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="button"
                   onClick={() => form.reset()}
@@ -498,7 +559,6 @@ export function PayrollFormModal({ open, setOpen }: any) {
                 </Button>
                 <Button
                   type="submit"
-                  onClick={() => form.handleSubmit(onSubmit)}
                   disabled={
                     form.formState.disabled || form.formState.isSubmitting
                   }
@@ -508,7 +568,7 @@ export function PayrollFormModal({ open, setOpen }: any) {
                   {form.formState.isSubmitting && (
                     <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
                   )}
-                  Create new payroll
+                  Create Payroll
                 </Button>
               </div>
             </DialogFooter>

@@ -3,7 +3,6 @@ import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle } from "lucide-react";
-import { Link } from "react-router-dom";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
@@ -17,6 +16,8 @@ import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
 import BreadCrumb from "@/components/breadcrumb";
 import ReasonFormModal from "@/components/modals/ReasonFormModel";
+import StatCard from "@/components/StatCard";
+import { ListChecks } from "lucide-react";
 
 export default function Reason() {
   const columns: ColumnDef<any>[] = [
@@ -51,14 +52,13 @@ export default function Reason() {
         <DataTableColumnHeader column={column} title="Name" />
       ),
       cell: ({ row }) => (
-        <div className="w-[80px]- flex items-center gap-2">
-          <Link
-            to={""}
-            className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("name")}
-          </Link>
-        </div>
+        <button
+          type="button"
+          onClick={() => editRow.edit(row.original)}
+          className="capitalize hover:text-primary hover:underline"
+        >
+          {row.getValue("name")}
+        </button>
       ),
       enableSorting: true,
       enableHiding: true,
@@ -187,7 +187,7 @@ export default function Reason() {
                 description: e.description,
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -214,7 +214,7 @@ export default function Reason() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("reason deleted succesfully");
+        toast.success("Reason deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -222,10 +222,33 @@ export default function Reason() {
       });
   };
 
+  const statsQuery = useQuery({
+    queryKey: ["reasons-stats"],
+    queryFn: async () => {
+      const total = await pocketbase
+        .collection("reason")
+        .getList(1, 1, {})
+        .then((e) => e.totalItems);
+      return { total };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   return (
     <>
       <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard
+            title="Total Reasons"
+            icon={ListChecks}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="Reasons defined in the system"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-lg font-semibold tracking-tight">All reason</h2>
             <BreadCrumb
@@ -279,8 +302,7 @@ export default function Reason() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

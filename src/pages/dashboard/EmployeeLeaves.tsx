@@ -2,7 +2,6 @@ import DataTable from "@/components/DataTable";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Link } from "react-router-dom";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
@@ -11,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
-import { LeaveFormModal } from "@/components/modals/LeaveFormModal";
+import { LeaveFormModal, leaveTypeLabel } from "@/components/modals/LeaveFormModal";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/modals/ConfirmModal";
@@ -53,14 +52,13 @@ export default function EmployeeLeaves({ employeeId }) {
         <DataTableColumnHeader column={column} title="Employee" />
       ),
       cell: ({ row }) => (
-        <div className="w-[80px]- flex items-center gap-2">
-          <Link
-            to={""}
-            className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("employee")}
-          </Link>
-        </div>
+        <button
+          type="button"
+          onClick={() => editRow.edit(row.original)}
+          className="capitalize hover:text-primary hover:underline"
+        >
+          {row.getValue("employee")}
+        </button>
       ),
       enableSorting: true,
       enableHiding: true,
@@ -168,7 +166,7 @@ export default function EmployeeLeaves({ employeeId }) {
         <DataTableColumnHeader column={column} title="Type" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("type")}</div>
+        <div className="capitalize">{leaveTypeLabel(row.original)}</div>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -228,7 +226,7 @@ export default function EmployeeLeaves({ employeeId }) {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("Leaves deleted succesfully");
+        toast.success("Leaves deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -316,12 +314,12 @@ export default function EmployeeLeaves({ employeeId }) {
                 created_by: e.expand?.created_by?.name,
                 start: new Date(e.start).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 end: new Date(e.end).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 days: e.Leaveduration,
@@ -331,12 +329,12 @@ export default function EmployeeLeaves({ employeeId }) {
                 rejected_by: e.rejected_by || "---",
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -357,8 +355,7 @@ export default function EmployeeLeaves({ employeeId }) {
     <>
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

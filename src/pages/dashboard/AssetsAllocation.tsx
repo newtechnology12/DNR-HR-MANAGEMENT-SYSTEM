@@ -2,6 +2,7 @@ import DataTable from "@/components/DataTable";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
@@ -17,6 +18,8 @@ import useEditRow from "@/hooks/use-edit-row";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import useModalState from "@/hooks/useModalState";
 import { toast } from "sonner";
+import StatCard from "@/components/StatCard";
+import { AlertTriangle, ClipboardList, PackageCheck, RotateCcw } from "lucide-react";
 import DataTableRowActions from "@/components/datatable/DataTableRowActions";
 
 export default function AssetsAllocation() {
@@ -121,9 +124,22 @@ export default function AssetsAllocation() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Status" />
       ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("status")}</div>
-      ),
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
+        const tone =
+          status === "returned" || status === "in_stock"
+            ? "success"
+            : status === "lost" || status === "damaged"
+            ? "danger"
+            : status === "in_transit" || status === "maintenance"
+            ? "warning"
+            : "info";
+        return (
+          <Badge variant={tone} className="capitalize">
+            {status?.replace("_", " ")}
+          </Badge>
+        );
+      },
       filterFn: (__, _, value) => {
         return value;
       },
@@ -275,7 +291,7 @@ export default function AssetsAllocation() {
                   "en-US",
                   {
                     day: "2-digit",
-                    month: "long",
+                    month: "short",
                     year: "numeric",
                   }
                 ),
@@ -283,18 +299,18 @@ export default function AssetsAllocation() {
                   "en-US",
                   {
                     day: "2-digit",
-                    month: "long",
+                    month: "short",
                     year: "numeric",
                   }
                 ),
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -315,7 +331,7 @@ export default function AssetsAllocation() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("Roles deleted succesfully");
+        toast.success("Roles deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -328,11 +344,69 @@ export default function AssetsAllocation() {
   const confirmModal = useConfirmModal();
   const newRecordModal = useModalState();
 
+  const statsQuery = useQuery({
+    queryKey: ["assets-allocation-stats"],
+    queryFn: async () => {
+      const [total, assigned, returned, lostOrDamaged] = await Promise.all([
+        pocketbase.collection("assets_allocations").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("assets_allocations")
+          .getList(1, 1, { filter: `status="assigned"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("assets_allocations")
+          .getList(1, 1, { filter: `status="returned"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("assets_allocations")
+          .getList(1, 1, { filter: `status="lost" || status="damaged"` })
+          .then((e) => e.totalItems),
+      ]);
+      return { total, assigned, returned, lostOrDamaged };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   return (
     <>
       {" "}
       <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Allocations"
+            icon={ClipboardList}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="All asset allocations"
+          />
+          <StatCard
+            title="Assigned"
+            icon={PackageCheck}
+            tone="info"
+            loading={statsLoading}
+            value={statsQuery.data?.assigned}
+            description="Currently assigned to employees"
+          />
+          <StatCard
+            title="Returned"
+            icon={RotateCcw}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.returned}
+            description="Returned to inventory"
+          />
+          <StatCard
+            title="Lost / Damaged"
+            icon={AlertTriangle}
+            tone="danger"
+            loading={statsLoading}
+            value={statsQuery.data?.lostOrDamaged}
+            description="Needs attention"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-lg font-semibold tracking-tight">
               Assets Allocation
@@ -434,8 +508,7 @@ export default function AssetsAllocation() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

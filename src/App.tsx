@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "react-query";
 import { Toaster } from "@/components/ui/sonner";
 import { RolesProvider } from "./context/roles.context";
 import { AuthProvider } from "./context/auth.context";
+import { I18nProvider } from "./i18n";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,11 +17,13 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <RolesProvider>
-          <Outlet />
-        </RolesProvider>
-      </AuthProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <RolesProvider>
+            <Outlet />
+          </RolesProvider>
+        </AuthProvider>
+      </I18nProvider>
 
       <Toaster
         duration={1000}

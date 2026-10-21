@@ -8,8 +8,8 @@ import { useAuth } from "@/context/auth.context";
 import { cn } from "@/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Layout, LogOut, Phone, TypeIcon } from "lucide-react";
-import { useMemo, useState } from "react";
-import { AlertCircle, CheckCircle, Mail } from "react-feather";
+import { useState } from "react";
+import { Mail } from "react-feather";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -23,16 +23,19 @@ import {
 } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import pocketbase from "@/lib/pocketbase";
-import { Alert, AlertTitle } from "@/components/ui/alert";
+import authService from "@/services/auth.service";
 import useModalState from "@/hooks/useModalState";
 import LogoutModal from "@/components/modals/LogoutModal";
+import { useSearchParams } from "react-router-dom";
+import SecuritySettings from "@/pages/account/SecuritySettings";
 
 export default function AccountSettings() {
   const { user } = useAuth();
-  const [activeTab, setactiveTab] = useState("personal details");
+  const [params] = useSearchParams();
+  const [activeTab, setactiveTab] = useState(params.get("tab") === "security" ? "security" : "personal details");
   return (
     <div className="px-3">
-      <div className="flex items-start justify-between space-y-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 flex-col">
           <h2 className="text-lg font-semibold tracking-tight">
             Account Settings
@@ -42,8 +45,8 @@ export default function AccountSettings() {
           />
         </div>
       </div>
-      <div className="grid grid-cols-10 gap-3">
-        <div className="col-span-3">
+      <div className="grid grid-cols-1 lg:grid-cols-10 gap-3">
+        <div className="col-span-1 lg:col-span-3">
           <div className="bg-white rounded-[3px] px-3 border py-4">
             <div className="flex items-center pb-5 text-center flex-col justify-center gap-2">
               <Avatar
@@ -55,9 +58,13 @@ export default function AccountSettings() {
                 <h2 className="text-[15px] font-semibold tracking-tight">
                   {user?.names}
                 </h2>
-                <p className="text-[12.5px] w-fit px-3 py-[2px] rounded-[3px] text-primary bg-primary bg-opacity-20 capitalize font-medium">
-                  {user?.role?.name}
-                </p>
+                <div className="flex flex-wrap justify-center gap-1">
+                  {(user?.roles?.length ? user.roles : [{ id: "main", name: user?.role?.name }]).map((r: any) => (
+                    <p key={r.id} className="text-[12px] w-fit px-2.5 py-[2px] rounded-md text-primaryDark bg-primary/10 font-medium">
+                      {r.name}
+                    </p>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="mt-2">
@@ -123,11 +130,12 @@ export default function AccountSettings() {
             </div>
           </div>
         </div>
-        <div className="col-span-7">
+        <div className="col-span-1 lg:col-span-7">
           <Card>
-            <div className="flex px-2 gap-4 w-full border-b items-center justify-start">
+            <div className="flex px-2 gap-2 sm:gap-4 w-full border-b items-center justify-start overflow-x-auto">
               {[
                 "personal details",
+                "security",
                 "Reset password",
                 // "notification settings",
                 "logout",
@@ -136,7 +144,7 @@ export default function AccountSettings() {
                   <a
                     key={i}
                     className={cn(
-                      "cursor-pointer px-6 capitalize text-center relative w-full- text-slate-700 text-[13px] sm:text-sm py-3  font-medium",
+                      "cursor-pointer px-3 sm:px-6 capitalize text-center relative whitespace-nowrap text-slate-700 text-[13px] sm:text-sm py-3  font-medium",
                       {
                         "text-primary ": activeTab === e,
                       }
@@ -157,6 +165,7 @@ export default function AccountSettings() {
               {activeTab === "logout" && <Logout />}
               {activeTab === "Reset password" && <ResetPassword />}
               {activeTab === "personal details" && <Personal />}
+              {activeTab === "security" && <SecuritySettings required={params.get("required") === "1"} />}
               {activeTab === "notification settings" && <Notifications />}
             </div>
           </Card>
@@ -189,7 +198,7 @@ function Notifications() {
               Notification Settings
             </h4>
             <p className="text-[13.5px] leading-7 dark:text-slate-400 mt-1 text-slate-500">
-              Lorem ipsum, dolor sit amet consectetur adipisicing elit.
+              Choose which email and system notifications you want to receive.
             </p>
           </div>
         </div>
@@ -287,70 +296,97 @@ function Logout() {
   );
 }
 
+const passwordSchema = z
+  .object({
+    oldPassword: z.string().min(1, { message: "Enter your current password" }),
+    password: z
+      .string()
+      .min(10, { message: "Use at least 10 characters" })
+      .regex(/[A-Za-z]/, { message: "Include at least one letter" })
+      .regex(/[0-9]/, { message: "Include at least one number" }),
+    passwordConfirm: z.string().min(1, { message: "Repeat the new password" }),
+  })
+  .refine((v) => v.password === v.passwordConfirm, { message: "The passwords do not match", path: ["passwordConfirm"] })
+  .refine((v) => v.password !== v.oldPassword, { message: "Choose a password different from the current one", path: ["password"] });
+
+/** Change password (current password required), with an emailed reset link as a fallback. */
 function ResetPassword() {
-  const [error, setError] = useState("");
-  const [success, setsuccess] = useState("");
-  const [isLoading, setisLoading] = useState(false);
   const { user } = useAuth();
-  const handle = async () => {
-    setisLoading(true);
-    setError("");
-    setsuccess("");
+  const [linkState, setLinkState] = useState<"idle" | "sending" | "sent" | string>("idle");
+  const form = useForm<z.infer<typeof passwordSchema>>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { oldPassword: "", password: "", passwordConfirm: "" },
+  });
+
+  async function onSubmit(values: z.infer<typeof passwordSchema>) {
+    try {
+      await authService.changePassword(values as { oldPassword: string; password: string; passwordConfirm: string });
+      toast.success("Password changed. Use your new password next time you sign in.");
+      form.reset();
+    } catch (e: any) {
+      const field = e?.response?.data?.oldPassword ? "oldPassword" : e?.response?.data?.password ? "password" : null;
+      const message = field === "oldPassword" ? "The current password is incorrect" : e?.response?.data?.password?.message || e?.message || "Could not change the password";
+      if (field) form.setError(field as any, { message });
+      else toast.error(message);
+    }
+  }
+
+  const sendLink = async () => {
+    setLinkState("sending");
     try {
       await pocketbase.collection("users").requestPasswordReset(user.email);
-      setsuccess("Password reset link sent to your email");
-      setisLoading(false);
-    } catch (error) {
-      setError(error.message);
-      setisLoading(false);
+      setLinkState("sent");
+    } catch (e: any) {
+      setLinkState(e?.message || "The reset email could not be sent. Ask an administrator to check the email (SMTP) settings.");
     }
   };
+
+  const strength = (() => {
+    const v = form.watch("password") || "";
+    let score = 0;
+    if (v.length >= 10) score++;
+    if (v.length >= 14) score++;
+    if (/[a-z]/.test(v) && /[A-Z]/.test(v)) score++;
+    if (/[0-9]/.test(v)) score++;
+    if (/[^A-Za-z0-9]/.test(v)) score++;
+    return v ? score : -1;
+  })();
+
   return (
-    <div className="max-w-md py-4 px-4">
-      <div className="dark:border-slate-700 border-slate-300">
-        <div className="border-b- dark:border-b-slate-700 border-slate-300 mb-0 pb-3 ">
-          <h4 className="font-semibold dark:text-slate-200 text-sm">
-            Reset Password
-          </h4>
-          <p className="text-sm py-3- mt-2 text-slate-600 leading-7">
-            Click the button below to reset your password, a reset link will be
-            sent to your email.
-          </p>
-        </div>
-        {error && (
-          <Alert
-            variant={"destructive"}
-            className="rounded-[3px] !mt-2  h-fit p-2 my-3"
-          >
-            <AlertCircle className="h-4 -mt-[6px] w-4" />
-            <AlertTitle className=" ml-2 !text-left">
-              <span className="text-[13.8px] leading-5">{error}</span>
-            </AlertTitle>
-          </Alert>
-        )}
-        {success && (
-          <Alert
-            variant="default"
-            className="rounded-[3px] !mt-2  h-fit p-2 my-3 !border-green-500"
-          >
-            <CheckCircle className="h-4 -mt-[6px] w-4 !text-green-500" />
-            <AlertTitle className=" ml-2 text-green-500 !font-medium- !text-left">
-              <span className="text-[13.8px] leading-5">{success}</span>
-            </AlertTitle>
-          </Alert>
-        )}
-        <Button
-          onClick={handle}
-          size="sm"
-          type="submit"
-          className="mt-1"
-          disabled={isLoading}
-        >
-          {isLoading && (
-            <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
+    <div className="grid max-w-3xl gap-6 px-4 py-4 md:grid-cols-[1fr_260px]">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+          <div>
+            <h4 className="text-[14px] font-semibold text-slate-900">Change password</h4>
+            <p className="text-[12.5px] text-slate-500">You will stay signed in on this device.</p>
+          </div>
+          <AppFormField form={form} required type="password" autoComplete="current-password" label="Current password" name="oldPassword" placeholder="" />
+          <AppFormField form={form} required type="password" autoComplete="new-password" label="New password" name="password" placeholder="At least 10 characters, letters and numbers" />
+          {strength >= 0 && (
+            <div aria-live="polite">
+              <div className="flex gap-1">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <span key={i} className={cn("h-1 flex-1 rounded-full", i < strength ? (strength <= 2 ? "bg-amber-500" : "bg-emerald-500") : "bg-slate-200")} />
+                ))}
+              </div>
+              <p className="mt-1 text-[11.5px] text-slate-500">{strength <= 2 ? "Weak — add length, capitals, numbers or symbols" : strength <= 3 ? "Good" : "Strong"}</p>
+            </div>
           )}
-          Reset Password
+          <AppFormField form={form} required type="password" autoComplete="new-password" label="Confirm new password" name="passwordConfirm" placeholder="" />
+          <Button type="submit" size="sm" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting && <Loader className="mr-2 h-4 w-4 animate-spin text-white" />}
+            Change password
+          </Button>
+        </form>
+      </Form>
+      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-[12.5px] text-slate-600">
+        <p className="font-medium text-slate-800">Forgot your current password?</p>
+        <p className="mt-1">We can email a reset link to {user?.email}.</p>
+        <Button size="sm" variant="outline" className="mt-2" onClick={sendLink} disabled={linkState === "sending"}>
+          {linkState === "sending" ? "Sending…" : "Email me a reset link"}
         </Button>
+        {linkState === "sent" && <p className="mt-2 text-emerald-700">Reset link sent — check your inbox.</p>}
+        {!["idle", "sending", "sent"].includes(linkState) && <p className="mt-2 text-red-700">{linkState}</p>}
       </div>
     </div>
   );
@@ -391,7 +427,7 @@ function Personal() {
               Update Personal Details
             </h4>
             <p className="text-[13.5px] leading-7 dark:text-slate-400 mt-1 text-slate-500">
-              Lorem ipsum, dolor sit amet consectetur adipisicing elit.
+              Update your personal and contact information.
             </p>
           </div>
           <div className="mb-0">

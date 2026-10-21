@@ -1,307 +1,263 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Controller, useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-// import { read, utils, writeFile } from 'xlsx';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "../ui/button";
-import { Form } from "../ui/form";
-import Loader from "../icons/Loader";
-import pocketbase from "@/lib/pocketbase";
+import * as React from "react";
+import { useQuery } from "react-query";
 import { toast } from "sonner";
-import AppFormAsyncSelect from "../forms/AppFormAsyncSelect";
-import AppFormSelect from "../forms/AppFormSelect";
-import AppFormDatePicker from "../forms/AppFormDatepicker";
-import { useAuth } from "@/context/auth.context";
-import AppFormTextArea from "../forms/AppFormTextArea";
-import AppFileUpload from "../forms/AppFileUpload";
-import { Alert, AlertTitle } from "@/components/ui/alert";
-import { AlertCircleIcon } from "lucide-react";
-import calculateRemainingLeaves from "@/utils/calculateRemainingLeaves";
+import { AlertCircle, CalendarDays, CalendarRange, FileText, Phone, User } from "lucide-react";
+import pocketbase from "@/lib/pocketbase";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import AsyncSelectField from "@/components/AsyncSelectField";
 import useSettings from "@/hooks/useSettings";
+import { leaveApi } from "@/lib/hr";
+import { errorMessage } from "@/lib/procurement";
+import { cn } from "@/utils";
+import { AutoValue, Field, FileDrop, fileUrl, displayName, inputCls, showDate, textareaCls, toFormData, toInputDate, toPbDate, useMe, workingDays } from "@/components/portal/kit";
 
-function capitalizeFirstLetter(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
+export const LEAVE_TYPES = [
+  { value: "Annual Leave", description: "Paid holiday from your yearly entitlement" },
+  { value: "Sick Leave", description: "Illness or medical treatment — attach a medical note" },
+  { value: "Maternity Leave", description: "Before and after giving birth" },
+  { value: "Paternity Leave", description: "Following the birth of your child" },
+  { value: "Compassionate Leave", description: "Bereavement or serious family emergency" },
+  { value: "Study Leave", description: "Examinations or approved training" },
+  { value: "Unpaid Leave", description: "Time off without pay" },
+  { value: "Other", description: "Any other reason — you will be asked to specify" },
+];
 
-const formSchema = z.object({
-  employee: z.string().min(1, { message: "Please choose an employee" }),
-  type: z.string().min(1, { message: "Please choose a leave type" }),
-  status: z.string().min(1, { message: "Please choose a leave status" }),
-  start: z.date({ required_error: "Please choose a start date" }),
-  end: z.date({ required_error: "Please choose a start date" }),
-  Leaveduration: z.number(),
-  reason: z.string().min(1, { message: "Please enter a reason for leave" }),
-  attachment: z.any(),
-});
+/** "Other — Civic duty" when the type was specified. */
+export const leaveTypeLabel = (l: any) => (l?.type === "Other" && l?.other_type ? `Other — ${l.other_type}` : l?.type || "—");
 
-const calculateLeaveDuration = (start, end) => {
-  if (!start || !end) return 0;
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const timeDiff = endDate.getTime() - startDate.getTime();
-  const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-  return daysDiff;
-};
+const PHONE = /^\+?[0-9 ]{9,15}$/;
+const today = () => new Date().toISOString().slice(0, 10);
 
-
-const getDefaultValues = (data?: any) => {
-  const start = data?.start ? new Date(data.start) : new Date();
-  const end = data?.end ? new Date(data.end) : new Date();
-  console.log(data);
-  return {
-    employee: data?.employee || "",
-    type: data?.type || "",
-    status: data?.status || "pending",
-    start,
-    end,
-    Leaveduration: calculateLeaveDuration(start, end),
-    reason: data?.reason || "",
-    attachment: data?.attachment || undefined,
-  };
-};
-
-export function LeaveFormModal({
-  open,
-  setOpen,
-  record,
-  onComplete,
-  employeeId,
-}: any) {
-  console.log(record);
-  
-  const values = useMemo(
-    () =>
-      getDefaultValues({ ...record, employee: employeeId || record?.employee }),
+export function LeaveFormModal({ open, setOpen, record, onComplete, employeeId }: any) {
+  const me = useMe();
+  const { settings } = useSettings();
+  const working: string[] = settings?.working_days?.length ? settings.working_days : undefined;
+  const blank = React.useCallback(
+    () => ({
+      employee: employeeId || record?.employee || "",
+      type: record?.type || "",
+      other_type: record?.other_type || "",
+      start: toInputDate(record?.start) || today(),
+      end: toInputDate(record?.end) || today(),
+      reason: record?.reason || "",
+      contact_during_leave: record?.contact_during_leave || "",
+      emergency_contact: record?.emergency_contact || "",
+    }),
     [record, employeeId]
   );
+  const [v, setV] = React.useState(blank);
+  const [files, setFiles] = React.useState<File[]>([]);
+  const [tried, setTried] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: values,
-  });
-    const { watch, setValue, handleSubmit, reset } = form;
-    const startDate = watch('start');
-    const endDate = watch('end');
-    const { user } = useAuth();
-    const [error, setError] = useState("");
-    const { settings } = useSettings();
+  React.useEffect(() => {
+    if (open) {
+      setV(blank());
+      setFiles([]);
+      setTried(false);
+    }
+  }, [open, blank]);
 
-     useEffect(() => {
-        if (startDate && endDate) {
-          const duration = calculateLeaveDuration(startDate, endDate);
-          setValue('Leaveduration', duration);
-        }
-      }, [startDate, endDate, setValue]);
+  // Staff file their own leave; HR (or a head, from the HR pages) can choose the employee.
+  const lockedEmployee = employeeId || (me.data && me.data.hrScope === "own" ? me.data.id : "");
+  React.useEffect(() => {
+    if (open && lockedEmployee && !v.employee) setV((x) => ({ ...x, employee: lockedEmployee }));
+  }, [open, lockedEmployee, v.employee]);
 
-  useEffect(() => {
-    form.reset(values);
-  }, [record, values]);
+  const employeeQ = useQuery(["leave-employee", v.employee], () => pocketbase.collection("users").getOne(v.employee, { expand: "department,designation" }), { enabled: Boolean(v.employee) && open });
+  const year = Number((v.start || "").slice(0, 4)) || new Date().getFullYear();
+  const balanceQ = useQuery(["leave-balance", v.employee, year], () => leaveApi.balances(year, { employee: v.employee }).then((r) => r.items[0]), { enabled: Boolean(v.employee) && open });
+  const typesQ = useQuery(["leave-types"], () => pocketbase.collection("leave_types").getFullList({ filter: "active = true", sort: "sort,name" }), { enabled: open, staleTime: 5 * 60_000 });
+  const gender = String((employeeQ.data as any)?.gender || "").toLowerCase();
+  const types = (typesQ.data as any[] | undefined)?.filter((t) => !t.eligible_gender || t.eligible_gender === "any" || !gender || t.eligible_gender === gender).map((t) => ({ value: t.name, description: t.description, meta: t })) || LEAVE_TYPES.map((t) => ({ ...t, meta: null as any }));
+  const selected: any = types.find((t) => t.value === v.type)?.meta;
+  const needsSpecify = v.type === "Other" || Boolean(selected?.requires_specify);
+  const countQ = useQuery(["leave-count", v.start, v.end, v.type], () => leaveApi.count(v.start, v.end, v.type || "Annual Leave"), { enabled: open && Boolean(v.start && v.end) && v.end >= v.start, keepPreviousData: true });
 
+  const days = countQ.data?.days ?? workingDays(v.start, v.end, working);
+  const holidaysIn = countQ.data?.holidays || [];
+  const calendarDays = v.start && v.end && v.end >= v.start ? Math.round((new Date(v.end).getTime() - new Date(v.start).getTime()) / 864e5) + 1 : 0;
+  const balance = balanceQ.data;
+  const errors = {
+    employee: !v.employee && "Choose the employee.",
+    type: !v.type && "Choose the type of leave.",
+    other_type: needsSpecify && v.other_type.trim().length < 3 && "Say what kind of leave this is (at least 3 characters).",
+    end: v.end < v.start ? "The last day cannot be before the first day." : days === 0 ? "The selected period has no working days." : days > 180 ? "A single request cannot exceed 180 working days." : false,
+    reason: v.reason.trim().length < 5 && "Give a short reason (at least 5 characters).",
+    contact: v.contact_during_leave && !PHONE.test(v.contact_during_leave.trim()) && "Enter a valid phone number, e.g. +250 788 123 456.",
+    balance: selected?.deducts_annual && balance && days > balance.available - (record && record.status === "pending" ? Number(record.days) || 0 : 0) && `Only ${Math.max(0, balance.available)} annual leave day${balance.available === 1 ? "" : "s"} available; you asked for ${days}.`,
+    max: selected?.max_per_request > 0 && days > selected.max_per_request && `${v.type} is limited to ${selected.max_per_request} days per request.`,
+    attachment: selected?.requires_attachment && days > (selected.attachment_after_days || 0) && !files.length && !record?.attachment && `Attach a supporting document for ${v.type.toLowerCase()} of more than ${selected.attachment_after_days || 0} day(s).`,
+  };
+  const invalid = Object.values(errors).some(Boolean);
+  const set = (k: keyof ReturnType<typeof blank>) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setV((x) => ({ ...x, [k]: e.target.value }));
 
-
-  async function onSubmit(values: z.infer<typeof formSchema>) {
-    setError(undefined);
-    // Calculate leaveDuration using the original Date objects
-    const Leaveduration = calculateLeaveDuration(values.start, values.end);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setTried(true);
+    if (invalid) return;
+    setSaving(true);
     const data = {
-      ...values,
-      start: new Date(values.start).toISOString(),
-      end: new Date(values.end).toISOString(),
-      Leaveduration,
+      employee: v.employee,
+      type: v.type,
+      other_type: needsSpecify ? v.other_type.trim() : "",
+      start: toPbDate(v.start),
+      end: toPbDate(v.end),
+      days,
+      Leaveduration: days,
+      reason: v.reason.trim(),
+      contact_during_leave: v.contact_during_leave.trim(),
+      emergency_contact: v.emergency_contact.trim(),
     };
-
-    const days = calculateLeaveDuration(data.start, data.end);
-    console.log(days);
-    // check if days is greater than 0
-    if (days <= 0) {
-      return setError("End date must be greater than start date");
-    }
-
-   // Check annual leave balance
-   if (data.type === "Annual Leave") {
-    const employee_data = await pocketbase.collection("users").getOne(data.employee);
-    const { remaining } = await calculateRemainingLeaves({
-      employee: employee_data,
-      joined_at: employee_data.joined_at,
-      leaves_per_year: settings?.leaves_per_year,
-    });
-
-    if (remaining < Leaveduration) {
-      setError("You do not have enough annual leaves remaining");
-      return;
+    try {
+      const fd = toFormData(data, files.length ? { attachment: files } : {});
+      if (record) await pocketbase.collection("leaves").update(record.id, fd);
+      else await pocketbase.collection("leaves").create(fd);
+      toast.success(record ? "Leave request updated" : "Leave request sent for approval");
+      onComplete?.();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSaving(false);
     }
   }
-   // Submit data to PocketBase
-    const q = !record
-      ? pocketbase
-          .collection("leaves")
-          .create({ ...data, created_by: user.id, days, status: "pending" })
-      : pocketbase.collection("leaves").update(record.id, data);
 
-    return q
-      .then(async (e) => {
-        onComplete();
-        toast.success(
-          record ? "Leave updated successfully" : "Leave created successfully"
-        );
-        form.reset();
-        setError(undefined);
-      })
-      .catch((e) => {
-        toast.error(e.message);
-      });
-  }
-
-  function employeesLoader({ search }) {
-    return pocketbase
-      .collection("users")
-      .getFullList({
-        filter: `name~"${search}"`,
-      })
-      .then((e) => e.map((e) => ({ label: e.names || e.name, value: e.id })));
-  }
-
-  function calculateLeaveDuration(start, end) {
-    return Math.ceil(
-      (new Date(end).getTime() - new Date(start).getTime()) /
-        (1000 * 3600 * 24)
-    );
-  }
-
+  const emp: any = employeeQ.data;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[650px]">
-        <DialogHeader>
-          <DialogTitle>
-            <span className="text-base px-2 font-semibold py-2">
-              {record ? "Update leave" : "Create a new leave"}
-            </span>
-          </DialogTitle>
-          <DialogDescription>
-            <span className="px-2 py-0 text-sm text-slate-500 leading-7">
-              Fill in the fields to {record ? "update" : "create"} a leave.
-            </span>
-          </DialogDescription>
+      <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-2xl flex-col gap-0 bg-white p-0 sm:h-auto sm:max-h-[94vh] sm:rounded-xl">
+        <DialogHeader className="border-b border-slate-100 px-4 py-3.5 text-left sm:px-6">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primaryDark"><CalendarDays size={19} /></span>
+            <div className="min-w-0">
+              <DialogTitle className="text-[16px]">{record ? "Edit leave request" : "Request leave"}</DialogTitle>
+              <DialogDescription className="text-[12.5px]">Your request goes to your manager for approval. <span className="text-red-600">*</span> required</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            {error && (
-              <div className="mb-3 px-2">
-                <Alert
-                  variant="destructive"
-                  className="py-2 mt-3- rounded-[4px] flex items-center"
-                >
-                  <AlertCircleIcon className="h-4 -mt-[5px] mr-3 w-4" />
-                  <AlertTitle className="text-[13px] font-medium fon !m-0">
-                    {error}
-                  </AlertTitle>
-                </Alert>
+
+        <form id="leave-form" onSubmit={submit} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-5 sm:px-6">
+          {/* Employee */}
+          <section className="space-y-3">
+            <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-900"><User size={15} className="text-slate-400" /> Employee</h3>
+            {lockedEmployee ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <AutoValue label="Name" value={emp?.name || me.data?.name} />
+                <AutoValue label="Department" value={emp?.expand?.department?.name} />
+              </div>
+            ) : (
+              <Field label="Employee" required error={tried && errors.employee}>
+                <AsyncSelectField
+                  name="leave-employee"
+                  value={v.employee}
+                  placeholder="Search employee by name"
+                  onChange={(o: any) => setV((x) => ({ ...x, employee: o?.value || "" }))}
+                  loader={({ search }: any) =>
+                    pocketbase.collection("users").getList(1, 30, { filter: search ? `name ~ "${String(search).replace(/"/g, "")}"` : "", sort: "name", fields: "id,name" }).then((r) => r.items.map((u: any) => ({ label: u.name, value: u.id })))
+                  }
+                />
+              </Field>
+            )}
+          </section>
+
+          {/* Type */}
+          <section className="space-y-3">
+            <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-900"><FileText size={15} className="text-slate-400" /> Type of leave <span className="text-red-600">*</span></h3>
+            <div role="radiogroup" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {types.map((t) => {
+                const active = v.type === t.value;
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setV((x) => ({ ...x, type: t.value }))}
+                    className={cn("flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left", active ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-slate-200 hover:border-slate-300")}
+                  >
+                    <span className={cn("mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border", active ? "border-primary" : "border-slate-300")}>{active && <span className="h-2 w-2 rounded-full bg-primary" />}</span>
+                    <span>
+                      <span className="block text-[13.5px] font-medium text-slate-900">{t.value}</span>
+                      <span className="block text-[12px] leading-snug text-slate-500">{t.description}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {tried && errors.type && <p className="flex items-center gap-1 text-[12px] text-red-600"><AlertCircle size={12} /> {errors.type}</p>}
+            {needsSpecify && (
+              <Field label="Specify the type of leave" required error={tried && errors.other_type} hint="Saved with your request, e.g. civic duty, religious holiday, marriage.">
+                <input className={inputCls} value={v.other_type} onChange={set("other_type")} autoFocus placeholder="What kind of leave?" aria-invalid={Boolean(tried && errors.other_type)} />
+              </Field>
+            )}
+            {selected?.deducts_annual && v.employee && (
+              <div className="grid grid-cols-3 divide-x divide-blue-100 rounded-lg border border-blue-100 bg-blue-50/70 text-center">
+                {[
+                  ["Entitlement", balanceQ.isLoading ? "…" : balance?.entitlement ?? "—"],
+                  ["Taken this year", balanceQ.isLoading ? "…" : balance?.taken ?? "—"],
+                  ["Available", balanceQ.isLoading ? "…" : balance?.available ?? "—"],
+                ].map(([k, n]) => (
+                  <div key={k as string} className="px-2 py-2">
+                    <p className="text-[17px] font-semibold tabular-nums text-blue-900">{n}</p>
+                    <p className="text-[11.5px] text-blue-700">{k}</p>
+                  </div>
+                ))}
               </div>
             )}
-          
-              <div className="grid gap-2 grid-cols-2">
-                <AppFormAsyncSelect
-                  form={form}
-                  label={"Choose employee"}
-                  placeholder={"Choose employee"}
-                  name={"employee"}
-                  loader={employeesLoader}
-                  isDisabled={!!employeeId}
-                />
-                <AppFormSelect
-                  form={form}
-                  label={"Choose type"}
-                  placeholder={"Enter leave type"}
-                  name={"type"}
-                  options={[
-                    "annual",
-                    "maternity",
-                    "paternity",
-                    "sick",
-                    "study",
-                    "unpaid",
-                    "other",
-                  ].map((e) => ({ label: capitalizeFirstLetter(e), value: e }))}
-                />
-              </div>
+          </section>
 
-              <div className="grid gap-2 grid-cols-2">
-                <AppFormDatePicker
-                  form={form}
-                  label={"Choose start date"}
-                  placeholder={"Choose start date"}
-                  name={"start"}
-                />
-                <AppFormDatePicker
-                  form={form}
-                  label={"Choose end date"}
-                  placeholder={"Choose end date"}
-                  name={"end"}
-                />
-              </div>
-              <div className="grid gap-2 grid-cols-2">
-                <div>
-                  <Controller
-                    name="Leaveduration"
-                    control={form.control}
-                    render={({ field }) => (
-                      <div>
-                        <label className="text-sm font-medium">Leave Duration (Days)</label>
-                        <input
-                          {...field}
-                          type="number"
-                          disabled
-                          className="w-full h-10 px-3 text-sm border rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-50"
-                          placeholder="Leave Duration"
-                        />
-                      </div>
-                    )}
-                  />
-                </div>
-              <div className="mb-2">
-                <AppFormTextArea
-                  form={form}
-                  label={"Reason"}
-                  placeholder={"Enter reason for leave"}
-                  name={"reason"}
-                />
-              </div>
-              <AppFileUpload
-                form={form}
-                label={"Drag & Drop attachment file here"}
-                name={"attachment"}
-                preview={pocketbase.files.getUrl(record, record?.attachment)}
-              />
+          {/* Period */}
+          <section className="space-y-3">
+            <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-900"><CalendarRange size={15} className="text-slate-400" /> Period</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="First day" required>
+                <input type="date" className={inputCls} value={v.start} onChange={(e) => setV((x) => ({ ...x, start: e.target.value, end: x.end < e.target.value ? e.target.value : x.end }))} />
+              </Field>
+              <Field label="Last day" required>
+                <input type="date" className={inputCls} value={v.end} min={v.start} onChange={set("end")} aria-invalid={Boolean(errors.end)} />
+              </Field>
             </div>
-            <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
-                <Button
-                  type="button"
-                  onClick={() => form.reset()}
-                  className="w-full text-slate-600"
-                  size="sm"
-                  variant="outline"
-                >
-                  Reset Form
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={form.formState.isSubmitting}
-                  className="w-full"
-                  size="sm"
-                >
-                  {form.formState.isSubmitting && (
-                    <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
-                  )}
-                  {record ? "Update leave" : "Create new leave"}
-                </Button>
-                
-               
-              </div>
-            </DialogFooter>
-          </form>
-        </Form>
+            <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg px-3 py-2.5 text-[13px]", errors.end || errors.balance || errors.max ? "bg-red-50 text-red-800" : "bg-slate-50 text-slate-700")}>
+              <span><span className="text-[18px] font-semibold tabular-nums text-slate-900">{days}</span> working day{days === 1 ? "" : "s"}</span>
+              <span className="text-slate-500">{calendarDays} calendar day{calendarDays === 1 ? "" : "s"} · {showDate(v.start, "EEE d MMM")} → {showDate(v.end, "EEE d MMM yyyy")}</span>
+              {(errors.end || errors.balance || errors.max) && <span className="basis-full text-[12px]">{errors.end || errors.balance || errors.max}</span>}
+              {holidaysIn.length > 0 && <span className="basis-full text-[12px] text-slate-500">Public holiday{holidaysIn.length > 1 ? "s" : ""} not counted: {holidaysIn.map((h) => `${h.name} (${showDate(h.date, "d MMM")})`).join(", ")}</span>}
+            </div>
+            <div className="flex items-center gap-2 text-[12.5px] text-slate-500">
+              Status after sending: <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-800 ring-1 ring-amber-200">Pending approval</span>
+            </div>
+          </section>
+
+          {/* Details */}
+          <section className="space-y-3">
+            <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-900"><Phone size={15} className="text-slate-400" /> Details and contacts</h3>
+            <Field label="Reason" required error={tried && errors.reason}>
+              <textarea className={textareaCls} rows={3} value={v.reason} onChange={set("reason")} placeholder="Briefly explain the reason for your leave" aria-invalid={Boolean(tried && errors.reason)} />
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Phone while on leave" error={tried && errors.contact}>
+                <input type="tel" inputMode="tel" className={inputCls} value={v.contact_during_leave} onChange={set("contact_during_leave")} placeholder={emp?.phone || "+250 7XX XXX XXX"} />
+              </Field>
+              <Field label="Emergency contact" hint="Name and phone number">
+                <input className={inputCls} value={v.emergency_contact} onChange={set("emergency_contact")} placeholder="e.g. Jean Habimana, +250 788 000 000" />
+              </Field>
+            </div>
+            <Field label="Supporting document" error={tried && errors.attachment} hint={selected?.requires_attachment ? `Required for more than ${selected.attachment_after_days || 0} day(s).` : "Optional (e.g. invitation, certificate)."}>
+              {record?.attachment && !files.length && (
+                <a href={fileUrl(record, record.attachment, true)} className="mb-2 block truncate text-[12.5px] text-primaryDark hover:underline">Current file: {displayName(record.attachment)}</a>
+              )}
+              <FileDrop files={files} onChange={setFiles} multiple={false} label={record?.attachment ? "Replace the file" : "Attach a file"} />
+            </Field>
+          </section>
+        </form>
+
+        <DialogFooter className="flex-row gap-2 border-t border-slate-100 px-4 py-3 sm:px-6">
+          <Button type="button" variant="outline" className="h-10 flex-1 sm:flex-none" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button type="submit" form="leave-form" className="h-10 flex-1 sm:flex-none" disabled={saving}>
+            {saving ? "Sending…" : record ? "Save changes" : `Send request${days ? ` (${days} day${days === 1 ? "" : "s"})` : ""}`}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

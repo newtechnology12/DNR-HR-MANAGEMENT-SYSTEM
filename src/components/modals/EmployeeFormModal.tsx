@@ -22,15 +22,20 @@ import AppFormSelect from "../forms/AppFormSelect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 
 
+function generateTemporaryPassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  return `Dnr-${Array.from(crypto.getRandomValues(new Uint32Array(10)), (b) => chars[b % chars.length]).join("")}`;
+}
+
 const formSchema = z.object({
-  first_name: z.string().optional(),
-  last_name: z.string().optional(),
+  first_name: z.string().trim().min(1, { message: "First name is required" }),
+  last_name: z.string().trim().min(1, { message: "Last name is required" }),
   names: z.string().optional(),
   other_names: z.string().optional(),
   nationality: z.string().optional(),
   id_passport_number: z.string().optional(),
   personal_telephone: z.string().optional(),
-  personal_email: z.string().optional(),
+  personal_email: z.string().trim().min(1, { message: "Email is required — it is used to log in" }).email({ message: "Enter a valid email address" }),
   father_name: z.string().optional(),
   mother_name: z.string().optional(),
   place_of_birth: z.string().optional(),
@@ -39,7 +44,7 @@ const formSchema = z.object({
   status: z.string().min(1, { message: "Status is required" }),
   certified_academic_documents: z.string().optional(),
   previous_employers: z.string().optional(),
-  number_of_dependents: z.string().optional(),
+  number_of_dependents: z.coerce.string().optional(),
   spouse_name: z.string().optional(),
   spouse_telephone: z.string().optional(),
   spouse_email: z.string().optional(),
@@ -64,13 +69,13 @@ const formSchema = z.object({
   branch: z.string().optional(),
   employment_type: z.string().optional(),
   gender: z.string().optional(),
-  birth: z.date(),
+  birth: z.date().optional(),
   country: z.string().optional(),
   national_id: z.string().optional(),
   salary: z.string().optional(),
   bank_name: z.string().optional(),
   bank_account_number: z.string().optional(),
-  joined_at: z.date(),
+  joined_at: z.date().optional(),
 });
 
 const getDefaultValues = (data?: any) => ({
@@ -87,10 +92,10 @@ const getDefaultValues = (data?: any) => ({
   place_of_birth: data?.place_of_birth || "",
   full_address: data?.address || "", // Map to database column `address`
   department: data?.department || "",
-  status: data?.status || "",
+  status: data?.status || "Active",
   certified_academic_documents: data?.certified_academic_documents || "",
   previous_employers: data?.previous_employers || "",
-  number_of_dependents: data?.number_of_dependents || 0,
+  number_of_dependents: String(data?.number_of_dependents ?? ""),
   spouse_name: data?.spouse_name || "",
   spouse_telephone: data?.spouse_telephone || "",
   spouse_email: data?.spouse_email || "",
@@ -317,11 +322,14 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
       }
   
       // If user does not exist or we're updating an existing employee
+      // The database requires 8+ character passwords, so the old fixed "123456" default always failed.
+      // Each new employee gets a unique temporary password, shown once to the person creating the account.
+      const temporaryPassword = employee ? "" : generateTemporaryPassword();
       const q = !employee
         ? pocketbase.collection("users").create({
             emailVisibility: true,
-            password: "123456", // Default password
-            passwordConfirm: "123456", // Default password confirmation
+            password: temporaryPassword,
+            passwordConfirm: temporaryPassword,
             ...data,
           })
         : pocketbase.collection("users").update(employee.id, {
@@ -331,11 +339,14 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
       await q;
   
       onComplete();
-      toast.success(
-        employee
-          ? "Employee updated successfully"
-          : "Employee created successfully"
-      );
+      if (employee) {
+        toast.success("Employee updated successfully");
+      } else {
+        toast.success("Employee created successfully", {
+          description: `Temporary password: ${temporaryPassword} — share it privately; it will not be shown again.`,
+          duration: 60000,
+        });
+      }
       form.reset();
   
       // Handle department changes if updating an employee
@@ -432,6 +443,12 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
+            {Object.keys(form.formState.errors).length > 0 && (
+              <div role="alert" className="mx-2 mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800">
+                <p className="font-medium">Please complete the highlighted fields:</p>
+                <p>{Object.values(form.formState.errors).map((e: any) => e?.message).filter(Boolean).join(" · ")}</p>
+              </div>
+            )}
             <Tabs defaultValue="personal" className="w-full">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="personal">Personal Info</TabsTrigger>
@@ -448,19 +465,21 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
                       form={form}
                       label={"First Name"}
                       placeholder={"Enter first name"}
+                      required
                       name={"first_name"}
                     />
                     <AppFormField
                       form={form}
                       label={"Last Name"}
                       placeholder={"Enter last name"}
+                      required
                       name={"last_name"}
                     />
                   </div>
                   <div className="grid grid-cols-1 gap-2">
                     <AppFormField
                     form={form}
-                    label={"names"}
+                    label={"Full name (as on ID)"}
                     placeholder={"Enter Full Name"}
                     name={"name"}                 
                   />
@@ -497,9 +516,10 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
                   <div className="grid grid-cols-2 gap-2">
                     <AppFormField
                       form={form}
-                      label={"Personal Email"}
+                      required
+                      label={"Email (used to log in)"}
                       placeholder={"Enter email"}
-                      name={"email"}
+                      name={"personal_email"}
                     />
                     <AppFormField
                       form={form}
@@ -611,6 +631,7 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
                       form={form}
                       label={"Role"}
                       placeholder={"Choose role"}
+                      required
                       name={"role"}
                       loader={rolesLoader}
                     />
@@ -657,6 +678,7 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
                       form={form}
                       label={"Employee Status"}
                       placeholder={"Choose employee status"}
+                      required
                       name={"status"}
                       options={[
                         { label: "Active", value: "Active" },
@@ -748,7 +770,7 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
             </Tabs>
 
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   onClick={() => form.reset()}
                   className="w-full text-slate-600"

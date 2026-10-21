@@ -3,7 +3,7 @@ import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
@@ -17,6 +17,8 @@ import ConfirmModal from "@/components/modals/ConfirmModal";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
 import { AccountFormModal } from "@/components/modals/AccountFormModal";
+import StatCard from "@/components/StatCard";
+import { Wallet, Landmark } from "lucide-react";
 
 export default function Accounts() {
   const navigate = useNavigate();
@@ -53,14 +55,13 @@ export default function Accounts() {
         <DataTableColumnHeader column={column} title="Name" />
       ),
       cell: ({ row }) => (
-        <div className="w-[80px]- flex items-center gap-2">
-          <Link
-            to={""}
-            className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("name")}
-          </Link>
-        </div>
+        <button
+          type="button"
+          onClick={() => editRow.edit(row.original)}
+          className="capitalize hover:text-primary hover:underline"
+        >
+          {row.getValue("name")}
+        </button>
       ),
       enableSorting: true,
       enableHiding: true,
@@ -204,7 +205,7 @@ export default function Accounts() {
                 feeType: e.feeType,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                   hour: "2-digit",
                   minute: "2-digit",
@@ -233,7 +234,7 @@ export default function Accounts() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("price type deleted succesfully");
+        toast.success("Account deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -241,13 +242,45 @@ export default function Accounts() {
       });
   };
 
+  const statsQuery = useQuery({
+    queryKey: ["petty-cash-accounts-stats"],
+    queryFn: async () => {
+      const [total, all] = await Promise.all([
+        pocketbase.collection("accounts").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase.collection("accounts").getFullList({ fields: "currentBalance" }),
+      ]);
+      const totalBalance = all.reduce((acc, e: any) => acc + (Number(e.currentBalance) || 0), 0);
+      return { total, totalBalance };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   return (
     <>
       <div className="sm:px-4 px-2">
-        <div className="flex items-start justify-between space-y-2 mb-3">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard
+            title="Total Accounts"
+            icon={Landmark}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="Petty cash accounts"
+          />
+          <StatCard
+            title="Total Balance"
+            icon={Wallet}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.totalBalance?.toLocaleString() + " FRW"}
+            description="Sum across all accounts"
+          />
+        </div>
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-base font-semibold tracking-tight">
-              All Petty Cah account.
+              All Petty Cash Accounts
             </h2>
             <BreadCrumb
               items={[{ title: "All accounts", link: "/dashboard" }]}
@@ -300,8 +333,7 @@ export default function Accounts() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

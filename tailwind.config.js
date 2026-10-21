@@ -22,11 +22,41 @@ module.exports = {
         ms: "500px",
       },
       fontFamily: {
-        sans: ["Outfit", "sans-serif"],
+        sans: ["InterVariable", "Inter", "sans-serif"],
       },
       colors: {
-        primary: "#242364",
-        primaryDark: "#56187d",
+        primary: {
+          DEFAULT: "#16A34A",
+          foreground: "#FFFFFF",
+        },
+        primaryDark: "#15803D",
+        info: {
+          DEFAULT: "#2563EB",
+          foreground: "#FFFFFF",
+        },
+        success: {
+          DEFAULT: "#22C55E",
+          foreground: "#FFFFFF",
+        },
+        warning: {
+          DEFAULT: "#F59E0B",
+          foreground: "#1F2937",
+        },
+        danger: {
+          DEFAULT: "#EF4444",
+          foreground: "#FFFFFF",
+        },
+      },
+      borderRadius: {
+        btn: "10px",
+        input: "10px",
+        card: "14px",
+        modal: "16px",
+      },
+      boxShadow: {
+        card: "0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.06)",
+        "card-hover": "0 4px 12px 0 rgb(0 0 0 / 0.08)",
+        modal: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
       },
       keyframes: {
         "accordion-down": {

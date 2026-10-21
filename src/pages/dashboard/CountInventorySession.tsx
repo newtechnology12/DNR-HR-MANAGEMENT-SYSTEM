@@ -1,456 +1,147 @@
-
-// import React, { useState, useEffect } from 'react';
-// import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-// import { Save, FileDown, AlertCircle, Edit } from 'lucide-react';
-// import { Button } from '@/components/ui/button';
-// import { toast } from 'sonner';
-// import pocketbase from '@/lib/pocketbase';
-
-// const LeaveCell = ({ value, onChange, isEditable, className = "" }) => (
-//   <input
-//     type="number"
-//     min="0"
-//     value={value || ""}
-//     onChange={(e) => onChange(e.target.value)}
-//     disabled={!isEditable} // Disable input when not editable
-//     className={`w-full h-8 px-2 text-sm border-0 focus:ring-2 focus:ring-blue-500 focus:outline-none text-center disabled:bg-gray-50 disabled:text-gray-500 ${className}`}
-//   />
-// );
-
-// export default function ExcelStyleLeavePlan() {
-//   const [staffData, setStaffData] = useState([]);
-//   const [departments, setDepartments] = useState({}); // Store department names
-//   const [saving, setSaving] = useState(false);
-//   const [editable, setEditable] = useState(false); // Track edit mode
-//   const currentYear = new Date().getFullYear();
-//   const totalLeaveDaysPerYear = 18; // Default total leave days per year
-
-//   // Fetch all necessary data from PocketBase
-//   useEffect(() => {
-//     const fetchData = async () => {
-//       try {
-//         // Fetch departments
-//         const departmentRecords = await pocketbase.collection('departments').getFullList();
-//         const departmentMap = departmentRecords.reduce((acc, department) => {
-//           acc[department.id] = department.name; // Map department ID to name
-//           return acc;
-//         }, {});
-//         setDepartments(departmentMap);
-
-//         // Fetch active users
-//         const activeUsers = await pocketbase.collection('users').getFullList({
-//           filter: 'status = "Active"',
-//         });
-
-//         // Fetch LeavePlaneReport data
-//         const leavePlaneReports = await pocketbase.collection('LeavePlaneReport').getFullList();
-
-//         // Format staff data
-//         const formattedUsers = activeUsers.map(user => {
-//           // Find the user's LeavePlaneReport (if it exists)
-//           const userReport = leavePlaneReports.find(report => report.userId === user.id);
-
-//           // Initialize monthly leave data
-//           const months = ['april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-//           const monthlyLeaveData = months.reduce((acc, month) => {
-//             acc[month] = userReport?.[month] || 0; // Use data from LeavePlaneReport if available
-//             return acc;
-//           }, {});
-
-//           // Calculate total leave days taken in the current year
-//           const totalLeaveTaken = Object.values(monthlyLeaveData).reduce((acc, days) => acc + (Number(days) || 0), 0);
-
-//           // Calculate balance
-//           const balance = totalLeaveDaysPerYear - totalLeaveTaken;
-
-//           return {
-//             id: user.id,
-//             name: user.name,
-//             departmentId: user.department, // Store department ID
-//             totalLeaveDays: totalLeaveDaysPerYear, // Default total leave days
-//             totalLeaveTaken,
-//             balance,
-//             ...monthlyLeaveData, // Populate monthly leave data
-//           };
-//         });
-
-//         setStaffData(formattedUsers);
-//       } catch (error) {
-//         toast.error('Failed to fetch data');
-//       }
-//     };
-
-//     fetchData();
-//   }, []);
-
-//   // Handle cell changes (for requesting leave)
-//   const handleCellChange = (staffId, month, value) => {
-//     setStaffData(prev => 
-//       prev.map(staff => {
-//         if (staff.id === staffId) {
-//           const requestedDays = parseInt(value) || 0;
-
-//           // Calculate new total leave taken
-//           const newMonthlyLeaveData = { ...staff, [month]: requestedDays };
-//           const newTotalLeaveTaken = ['april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
-//             .reduce((acc, m) => acc + (Number(newMonthlyLeaveData[m]) || 0), 0);
-
-//           // Calculate new balance
-//           const newBalance = totalLeaveDaysPerYear - newTotalLeaveTaken;
-
-//           // Prevent over-requesting
-//           if (newBalance < 0) {
-//             toast.error('Cannot request more than available leave days');
-//             return staff; // Return unchanged staff data
-//           }
-
-//           return {
-//             ...staff,
-//             [month]: requestedDays,
-//             totalLeaveTaken: newTotalLeaveTaken,
-//             balance: newBalance,
-//           };
-//         }
-//         return staff;
-//       })
-//     );
-//   };
-
-//   // Save data to LeavePlaneReport table
-//   const handleSave = async () => {
-//     setSaving(true);
-//     try {
-//       await Promise.all(
-//         staffData.map(async (staff) => {
-//           // Prepare the data to save
-//           const dataToSave = {
-//             userId: staff.id,
-//             totalLeaveDays: staff.totalLeaveDays,
-//             totalLeaveTaken: staff.totalLeaveTaken,
-//             balance: staff.balance,
-//             april: staff.april || 0,
-//             may: staff.may || 0,
-//             june: staff.june || 0,
-//             july: staff.july || 0,
-//             august: staff.august || 0,
-//             september: staff.september || 0,
-//             october: staff.october || 0,
-//             november: staff.november || 0,
-//             december: staff.december || 0,
-//           };
-
-//           // Check if the record already exists
-//           const existingRecord = await pocketbase.collection('LeavePlaneReport').getFirstListItem(`userId="${staff.id}"`);
-
-//           if (existingRecord) {
-//             // Update the existing record
-//             await pocketbase.collection('LeavePlaneReport').update(existingRecord.id, dataToSave);
-//           } else {
-//             // Create a new record
-//             await pocketbase.collection('LeavePlaneReport').create(dataToSave);
-//           }
-//         })
-//       );
-//       toast.success('Leave plan saved successfully');
-//       setEditable(false); // Disable edit mode after saving
-//     } catch (error) {
-//       toast.error('Failed to save leave plan');
-//     } finally {
-//       setSaving(false);
-//     }
-//   };
-
-//   return (
-//     <div className="max-w-[95vw] mx-auto">
-//       <Card className="shadow-lg">
-//         <CardHeader className="bg-white border-b">
-//           <div className="flex items-center justify-between">
-//             <div>
-//               <CardTitle className="text-xl font-bold text-gray-800">
-//                 DNR PARTNERS CPA
-//               </CardTitle>
-//               <p className="text-sm text-gray-600 mt-1">
-//                 Annual Staff Leave Plan {currentYear}
-//               </p>
-//             </div>
-//             <div className="flex gap-2">
-//               <Button variant="outline" size="sm">
-//                 <FileDown className="w-4 h-4 mr-2" />
-//                 Export Excel
-//               </Button>
-//               <Button 
-//                 size="sm" 
-//                 onClick={() => setEditable(!editable)} // Toggle edit mode
-//               >
-//                 <Edit className="w-4 h-4 mr-2" />
-//                 {editable ? "Cancel Edit" : "Edit"}
-//               </Button>
-//               <Button 
-//                 size="sm" 
-//                 onClick={handleSave} 
-//                 disabled={saving || !editable} // Disable save button when not in edit mode
-//               >
-//                 {saving ? (
-//                   <>
-//                     <span className="animate-spin mr-2">⭘</span>
-//                     Saving...
-//                   </>
-//                 ) : (
-//                   <>
-//                     <Save className="w-4 h-4 mr-2" />
-//                     Save Changes
-//                   </>
-//                 )}
-//               </Button>
-//             </div>
-//           </div>
-//         </CardHeader>
-
-//         <div className="overflow-x-auto">
-//           <table className="w-full border-collapse">
-//             <thead>
-//               <tr className="bg-gray-100">
-//                 <th className="border px-4 py-2 text-sm font-semibold text-gray-700 sticky left-0 bg-gray-100">Staff Name</th>
-//                 <th className="border px-4 py-2 text-sm font-semibold text-gray-700">Department</th>
-//                 <th className="border px-4 py-2 text-sm font-semibold text-gray-700">Total Leave Days</th>
-//                 {['april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
-//                   <th key={month} className="border px-4 py-2 text-sm font-semibold text-blue-700">
-//                     {month.charAt(0).toUpperCase() + month.slice(1)}-{currentYear}
-//                   </th>
-//                 ))}
-//                 <th className="border px-4 py-2 text-sm font-semibold text-gray-700">Balance</th>
-//               </tr>
-//             </thead>
-//             <tbody>
-//               {staffData.map((staff, index) => {
-//                 const isFirstRow = index === 0;
-//                 const isLastRow = index === staffData.length - 1;
-                
-//                 return (
-//                   <tr 
-//                     key={staff.id}
-//                     className={`
-//                       hover:bg-blue-50/40 
-//                       ${isFirstRow ? 'border-t-2 border-t-gray-300' : ''}
-//                       ${isLastRow ? 'border-b-2 border-b-gray-300' : ''}
-//                     `}
-//                   >
-//                     <td className="border px-4 py-1 text-sm sticky left-0 bg-white">
-//                       {staff.name}
-//                     </td>
-//                     <td className="border px-4 py-1 text-sm text-center">
-//                       {departments[staff.departmentId] || "Unknown Department"}
-//                     </td>
-//                     <td className="border px-4 py-1 text-sm text-center bg-gray-50">
-//                       {staff.totalLeaveDays}
-//                     </td>
-//                     {['april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
-//                       <td key={month} className="border px-0 py-1">
-//                         {editable ? (
-//                           <LeaveCell
-//                             value={staff[month] || 0}
-//                             onChange={(value) => handleCellChange(staff.id, month, value)}
-//                             isEditable={editable} // Editable only in edit mode
-//                           />
-//                         ) : (
-//                           <input
-//                             type="number"
-//                             min="0"
-//                             value={staff[month] || 0} // Display real data
-//                             disabled
-//                             className="w-full h-8 px-2 text-sm border-0 text-center bg-gray-50 text-gray-500"
-//                           />
-//                         )}
-//                       </td>
-//                     ))}
-//                     <td className="border px-4 py-1 text-sm font-medium text-center bg-gray-50">
-//                       {staff.balance}
-//                     </td>
-//                   </tr>
-//                 );
-//               })}
-//             </tbody>
-//           </table>
-//         </div>
-
-//         <div className="p-4 bg-gray-50 border-t">
-//           <div className="flex items-start gap-3">
-//             <AlertCircle className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
-//             <div className="text-sm text-gray-600">
-//               <p className="font-medium text-gray-900 mb-1">Important Notes:</p>
-//               <ul className="list-disc ml-4 space-y-1">
-//                 <li>Each staff member has a total of 18 leave days per year.</li>
-//                 <li>Leave requests cannot exceed the available balance.</li>
-//               </ul>
-//             </div>
-//           </div>
-//         </div>
-//       </Card>
-//     </div>
-//   );
-// }
-
-
-import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Save, FileDown, AlertCircle, Edit } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Save, AlertCircle, Edit, Loader2, Building, Users, Calendar, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import pocketbase from '@/lib/pocketbase';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
-const LeaveCell = ({ value, onChange, isEditable, className = "" }) => (
+const MONTHS = ['april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+const MONTH_LABELS = {
+  april: 'April', may: 'May', june: 'June', july: 'July',
+  august: 'August', september: 'September', october: 'October',
+  november: 'November', december: 'December'
+};
+
+const LeaveCell = ({ value, onChange, isEditable, hasError }) => (
   <input
     type="number"
     min="0"
-    value={value || ""}
-    onChange={(e) => onChange(e.target.value)}
-    disabled={!isEditable} // Disable input when not editable
-    className={`w-full h-8 px-2 text-sm border-0 focus:ring-2 focus:ring-blue-500 focus:outline-none text-center disabled:bg-gray-50 disabled:text-gray-500 ${className}`}
+    max="31"
+    value={value ?? ""}
+    onChange={(e) => onChange(e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value) || 0))}
+    disabled={!isEditable}
+    className={`w-full h-9 px-1 text-sm border-0 focus:ring-2 focus:ring-primary/40 focus:outline-none text-center transition-colors
+      ${isEditable
+        ? 'bg-white hover:bg-blue-50/50 focus:bg-white'
+        : 'bg-slate-50/70 text-slate-500 cursor-not-allowed'
+      }
+      ${hasError ? 'bg-red-50 text-red-600' : ''}
+    `}
   />
 );
 
 export default function ExcelStyleLeavePlan() {
   const [staffData, setStaffData] = useState([]);
-  const [departments, setDepartments] = useState({}); // Store department names
+  const [departmentMap, setDepartmentMap] = useState({});
   const [saving, setSaving] = useState(false);
-  const [editable, setEditable] = useState(false); // Track edit mode
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
-  const [annualLeaveDays, setAnnualLeaveDays] = useState(18); // Default annual leave days
+  const [loading, setLoading] = useState(true);
+  const [editable, setEditable] = useState(false);
+  const [annualLeaveDays, setAnnualLeaveDays] = useState(18);
   const currentYear = new Date().getFullYear();
-  const totalLeaveDaysPerYear = annualLeaveDays; // Default total leave days per year
 
-  // Fetch all necessary data from PocketBase
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
-        // Fetch departments
-        const departmentRecords = await pocketbase.collection('departments').getFullList();
-        const departmentMap = departmentRecords.reduce((acc, department) => {
-          acc[department.id] = department.name; // Map department ID to name
+        const [departmentRecords, activeUsers, leavePlaneReports, settingsRecords] = await Promise.all([
+          pocketbase.collection('departments').getFullList(),
+          pocketbase.collection('users').getFullList({ filter: 'status = "Active"' }),
+          pocketbase.collection('LeavePlaneReport').getFullList(),
+          pocketbase.collection('settings').getList(1, 1)
+        ]);
+
+        const dMap = departmentRecords.reduce((acc, d) => {
+          acc[d.id] = d.name;
           return acc;
         }, {});
-        setDepartments(departmentMap);
+        setDepartmentMap(dMap);
 
-        // Fetch active users
-        const activeUsers = await pocketbase.collection('users').getFullList({
-          filter: 'status = "Active"',
-        });
+        if (settingsRecords?.items?.[0]?.leaves_per_year) {
+          setAnnualLeaveDays(settingsRecords.items[0].leaves_per_year);
+        }
 
-        // Fetch LeavePlaneReport data
-        const leavePlaneReports = await pocketbase.collection('LeavePlaneReport').getFullList();
-
-        // Format staff data
         const formattedUsers = activeUsers.map(user => {
-          // Find the user's LeavePlaneReport (if it exists)
           const userReport = leavePlaneReports.find(report => report.userId === user.id);
-
-          // Initialize monthly leave data
-          const months = ['april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-          const monthlyLeaveData = months.reduce((acc, month) => {
-            acc[month] = userReport?.[month] || 0; // Use data from LeavePlaneReport if available
+          const monthlyLeaveData = MONTHS.reduce((acc, month) => {
+            acc[month] = userReport?.[month] || 0;
             return acc;
           }, {});
-
-          // Calculate total leave days taken in the current year
-          const totalLeaveTaken = Object.values(monthlyLeaveData).reduce((acc, days) => acc + (Number(days) || 0), 0);
-
-          // Calculate balance
-          const balance = totalLeaveDaysPerYear - totalLeaveTaken;
+          const totalLeaveTaken = MONTHS.reduce((acc, m) => acc + (Number(monthlyLeaveData[m]) || 0), 0);
+          const openingBalance = userReport?.openingBalance ?? annualLeaveDays;
 
           return {
             id: user.id,
             name: user.name,
-            departmentId: user.department, // Store department ID
-            totalLeaveDays: totalLeaveDaysPerYear, // Default total leave days
+            departmentId: user.department,
+            openingBalance,
+            totalLeaveDays: annualLeaveDays,
             totalLeaveTaken,
-            balance,
-            ...monthlyLeaveData, // Populate monthly leave data
+            balance: openingBalance - totalLeaveTaken,
+            ...monthlyLeaveData,
           };
         });
 
         setStaffData(formattedUsers);
       } catch (error) {
-        toast.error('Failed to fetch data');
+        toast.error('Failed to load leave plan data');
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchData();
   }, []);
 
-  // Handle cell changes (for requesting leave)
-  const handleCellChange = (staffId, month, value) => {
-    setStaffData(prev => 
+  const handleCellChange = useCallback((staffId, month, value) => {
+    setStaffData(prev =>
       prev.map(staff => {
-        if (staff.id === staffId) {
-          const requestedDays = parseInt(value) || 0;
+        if (staff.id !== staffId) return staff;
+        const requestedDays = Number(value) || 0;
+        const newMonthlyData = { ...staff, [month]: requestedDays };
+        const newTotalTaken = MONTHS.reduce((acc, m) => acc + (Number(newMonthlyData[m]) || 0), 0);
+        const newBalance = staff.openingBalance - newTotalTaken;
 
-          // Calculate new total leave taken
-          const newMonthlyLeaveData = { ...staff, [month]: requestedDays };
-          const newTotalLeaveTaken = ['april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
-            .reduce((acc, m) => acc + (Number(newMonthlyLeaveData[m]) || 0), 0);
-
-          // Calculate new balance
-          const newBalance = totalLeaveDaysPerYear - newTotalLeaveTaken;
-
-          // Prevent over-requesting
-          if (newBalance < 0) {
-            toast.error('Cannot request more than available leave days');
-            return staff; // Return unchanged staff data
-          }
-
-          return {
-            ...staff,
-            [month]: requestedDays,
-            totalLeaveTaken: newTotalLeaveTaken,
-            balance: newBalance,
-          };
+        if (newBalance < 0) {
+          toast.error(`${staff.name}: Cannot exceed available balance`);
+          return staff;
         }
-        return staff;
+
+        return {
+          ...staff,
+          [month]: requestedDays,
+          totalLeaveTaken: newTotalTaken,
+          balance: newBalance,
+        };
       })
     );
-  };
+  }, []);
 
-  // Save data to LeavePlaneReport table
   const handleSave = async () => {
     setSaving(true);
     try {
       await Promise.all(
         staffData.map(async (staff) => {
-          // Prepare the data to save
           const dataToSave = {
             userId: staff.id,
             totalLeaveDays: staff.totalLeaveDays,
             totalLeaveTaken: staff.totalLeaveTaken,
-            openingBalance: staff.totalLeaveDays,
+            openingBalance: staff.openingBalance,
             balance: staff.balance,
-            april: staff.april || 0,
-            may: staff.may || 0,
-            june: staff.june || 0,
-            july: staff.july || 0,
-            august: staff.august || 0,
-            september: staff.september || 0,
-            october: staff.october || 0,
-            november: staff.november || 0,
-            december: staff.december || 0,
+            ...MONTHS.reduce((acc, m) => ({ ...acc, [m]: staff[m] || 0 }), {}),
           };
 
-          // Check if the record already exists
-          const existingRecord = await pocketbase.collection('LeavePlaneReport').getFirstListItem(`userId="${staff.id}"`);
-
-          if (existingRecord) {
-            // Update the existing record
+          try {
+            const existingRecord = await pocketbase.collection('LeavePlaneReport').getFirstListItem(`userId="${staff.id}"`);
             await pocketbase.collection('LeavePlaneReport').update(existingRecord.id, dataToSave);
-          } else {
-            // Create a new record
+          } catch {
             await pocketbase.collection('LeavePlaneReport').create(dataToSave);
           }
         })
       );
       toast.success('Leave plan saved successfully');
-      setEditable(false); // Disable edit mode after saving
+      setEditable(false);
     } catch (error) {
       toast.error('Failed to save leave plan');
     } finally {
@@ -458,148 +149,252 @@ export default function ExcelStyleLeavePlan() {
     }
   };
 
-  const calculateLeaveDays = () => {
-    if (startDate && endDate) {
-      const diffTime = Math.abs(endDate - startDate);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays;
+  const handleExportExcel = () => {
+    try {
+      const excelData: Record<string, any>[] = staffData.map((staff, idx) => {
+        const row = {
+          '#': idx + 1,
+          'Staff Name': staff.name,
+          'Department': departmentMap[staff.departmentId] || 'N/A',
+          'Opening Balance': staff.openingBalance,
+          'Total Leave Days': staff.totalLeaveDays,
+          ...MONTHS.reduce((acc, m) => ({
+            ...acc,
+            [`${MONTH_LABELS[m]}-${currentYear}`]: staff[m] || 0
+          }), {}),
+          'Balance': staff.balance,
+        };
+        return row;
+      });
+
+      const totals: Record<string, any> = {
+        '#': '',
+        'Staff Name': 'TOTAL',
+        'Department': '',
+        'Opening Balance': staffData.reduce((s, st) => s + st.openingBalance, 0),
+        'Total Leave Days': staffData.reduce((s, st) => s + st.totalLeaveDays, 0),
+        ...MONTHS.reduce((acc, m) => ({
+          ...acc,
+          [`${MONTH_LABELS[m]}-${currentYear}`]: staffData.reduce((s, st) => s + (Number(st[m]) || 0), 0)
+        }), {}),
+        'Balance': staffData.reduce((s, st) => s + st.balance, 0),
+      };
+      excelData.push(totals);
+
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wscols = [
+        { wch: 4 }, { wch: 30 }, { wch: 20 },
+        { wch: 16 }, { wch: 16 },
+        ...MONTHS.map(() => ({ wch: 16 })),
+        { wch: 12 },
+      ];
+      ws['!cols'] = wscols;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Leave Plan');
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `Annual_Leave_Plan_${currentYear}.xlsx`);
+      toast.success('Excel file exported successfully');
+    } catch (error) {
+      toast.error('Failed to export Excel');
     }
-    
-    return 0;
   };
-  console.log("calculateLeaveDays" ,calculateLeaveDays());
+
+  const totalOpeningBalance = staffData.reduce((s, st) => s + st.openingBalance, 0);
+  const totalLeaveDays = staffData.reduce((s, st) => s + st.totalLeaveDays, 0);
+  const totalBalance = staffData.reduce((s, st) => s + st.balance, 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-3 text-sm text-slate-500">Loading leave plan data...</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-[95vw] mx-auto">
-      <Card className="shadow-lg">
-        <CardHeader className="bg-white border-b">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xl font-bold text-gray-800">
-                DNR PARTNERS CPA
-              </CardTitle>
-              <p className="text-sm text-gray-600 mt-1">
-                Annual Staff Leave Plan {currentYear}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                <FileDown className="w-4 h-4 mr-2" />
-                Export Excel
-              </Button>
-              <Button 
-                size="sm" 
-                onClick={() => setEditable(!editable)} // Toggle edit mode
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                {editable ? "Cancel Edit" : "Edit"}
-              </Button>
-              <Button 
-                size="sm" 
-                onClick={handleSave} 
-                disabled={saving || !editable} // Disable save button when not in edit mode
-              >
-                {saving ? (
-                  <>
-                    <span className="animate-spin mr-2">⭘</span>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
-                  </>
-                )}
-              </Button>
+    <div className="px-4 sm:px-6 py-4 max-w-[98vw] mx-auto">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+          <div className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Building className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
+                    DNR PARTNERS CPA
+                  </h1>
+                  <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Annual Staff Leave Plan {currentYear}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleExportExcel} className="gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                  Export Excel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setEditable(!editable)}
+                  variant={editable ? "destructive" : "default"}
+                  className="gap-2"
+                >
+                  <Edit className="h-4 w-4" />
+                  {editable ? "Cancel Edit" : "Edit"}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving || !editable}
+                  className="gap-2"
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
             </div>
           </div>
-        </CardHeader>
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-gray-100">
-                <th className="border px-4 py-2 text-sm font-semibold text-gray-700 sticky left-0 bg-gray-100">Staff Name</th>
-                <th className="border px-4 py-2 text-sm font-semibold text-gray-700">Department</th>
-                <th className="border px-4 py-2 text-sm font-semibold text-gray-700">Opening Balance</th>
-                <th className="border px-4 py-2 text-sm font-semibold text-gray-700">Total Leave Days</th>
-                {['april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
-                  <th key={month} className="border px-4 py-2 text-sm font-semibold text-blue-700">
-                    {month.charAt(0).toUpperCase() + month.slice(1)}-{currentYear}
+              <tr>
+                <th className="sticky left-0 z-20 bg-slate-100 border-r border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[200px]">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5" />
+                    Staff Name
+                  </div>
+                </th>
+                <th className="bg-slate-100 border-r border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[140px]">
+                  Department
+                </th>
+                <th className="bg-slate-100 border-r border-b border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[100px]">
+                  Opening
+                  <br />Balance
+                </th>
+                <th className="bg-slate-100 border-r border-b border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[90px]">
+                  Total
+                  <br />Leave Days
+                </th>
+                {MONTHS.map(month => (
+                  <th key={month} className="bg-slate-100 border-r border-b border-slate-200 px-2 py-3 text-center text-xs font-semibold text-primary uppercase tracking-wider min-w-[100px]">
+                    {MONTH_LABELS[month]}
+                    <br />
+                    <span className="text-[10px] font-normal text-slate-400">{currentYear}</span>
                   </th>
                 ))}
-                <th className="border px-4 py-2 text-sm font-semibold text-gray-700">Balance</th>
+                <th className="bg-slate-100 border-b border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[80px]">
+                  Balance
+                </th>
               </tr>
             </thead>
             <tbody>
-              {staffData.map((staff, index) => {
-                const isFirstRow = index === 0;
-                const isLastRow = index === staffData.length - 1;
-                
-                return (
-                  <tr 
-                    key={staff.id}
-                    className={`
-                      hover:bg-blue-50/40 
-                      ${isFirstRow ? 'border-t-2 border-t-gray-300' : ''}
-                      ${isLastRow ? 'border-b-2 border-b-gray-300' : ''}
-                    `}
-                  >
-                    <td className="border px-4 py-1 text-sm sticky left-0 bg-white">
-                      {staff.name}
+              {staffData.map((staff, index) => (
+                <tr
+                  key={staff.id}
+                  className={`transition-colors hover:bg-blue-50/40 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
+                >
+                  <td className="sticky left-0 z-10 bg-inherit border-r border-b border-slate-100 px-4 py-2.5">
+                    <span className="text-sm font-medium text-slate-800">{staff.name}</span>
+                  </td>
+                  <td className="border-r border-b border-slate-100 px-3 py-2.5">
+                    <span className="text-sm text-slate-600">{departmentMap[staff.departmentId] || "N/A"}</span>
+                  </td>
+                  <td className="border-r border-b border-slate-100 px-3 py-2.5 text-center">
+                    <span className="text-sm font-semibold text-slate-700">{staff.openingBalance}</span>
+                  </td>
+                  <td className="border-r border-b border-slate-100 px-3 py-2.5 text-center">
+                    <span className="text-sm font-semibold text-slate-700">{staff.totalLeaveDays}</span>
+                  </td>
+                  {MONTHS.map(month => (
+                    <td key={month} className="border-r border-b border-slate-100 p-0">
+                      <LeaveCell
+                        value={staff[month]}
+                        onChange={(value) => handleCellChange(staff.id, month, value)}
+                        isEditable={editable}
+                        hasError={false}
+                      />
                     </td>
-                    <td className="border px-4 py-1 text-sm text-center">
-                      {departments[staff.departmentId] || "Unknown Department"}
-                    </td>
-                    <td className="border px-4 py-1 text-sm text-center bg-gray-50">
-                      {staff.openingBalance}
-                    </td>
-                   
-                    <td className="border px-4 py-1 text-sm text-center bg-gray-50">
-                      {staff.totalLeaveDays}
-                    </td>
-                    {['april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
-                      <td key={month} className="border px-0 py-1">
-                        {editable ? (
-                          <LeaveCell
-                            value={staff[month] || 0}
-                            onChange={(value) => handleCellChange(staff.id, month, value)}
-                            isEditable={editable} // Editable only in edit mode
-                          />
-                        ) : (
-                          <input
-                            type="number"
-                            min="0"
-                            value={staff[month] || 0} // Display real data
-                            disabled
-                            className="w-full h-8 px-2 text-sm border-0 text-center bg-gray-50 text-gray-500"
-                          />
-                        )}
-                      </td>
-                    ))}
-                    <td className="border px-4 py-1 text-sm font-medium text-center bg-gray-50">
+                  ))}
+                  <td className="border-b border-slate-100 px-3 py-2.5 text-center">
+                    <span className={`text-sm font-bold ${staff.balance < 3 ? 'text-red-600' : staff.balance < 6 ? 'text-amber-600' : 'text-green-600'}`}>
                       {staff.balance}
-                    </td>
-                  </tr>
-                );
-              })}
+                    </span>
+                  </td>
+                </tr>
+              ))}
             </tbody>
+            <tfoot>
+              <tr className="bg-slate-100/80">
+                <td className="sticky left-0 z-10 bg-slate-100/80 border-r border-t border-slate-200 px-4 py-3">
+                  <span className="text-sm font-bold text-slate-800">TOTAL</span>
+                  <span className="text-xs text-slate-500 ml-2">({staffData.length} employees)</span>
+                </td>
+                <td className="border-r border-t border-slate-200 px-3 py-3 text-center text-sm font-bold text-slate-700">
+                  -
+                </td>
+                <td className="border-r border-t border-slate-200 px-3 py-3 text-center text-sm font-bold text-slate-700">
+                  {totalOpeningBalance}
+                </td>
+                <td className="border-r border-t border-slate-200 px-3 py-3 text-center text-sm font-bold text-slate-700">
+                  {totalLeaveDays}
+                </td>
+                {MONTHS.map(month => (
+                  <td key={month} className="border-r border-t border-slate-200 px-2 py-3 text-center text-sm font-bold text-primary">
+                    {staffData.reduce((s, st) => s + (Number(st[month]) || 0), 0)}
+                  </td>
+                ))}
+                <td className="border-t border-slate-200 px-3 py-3 text-center">
+                  <span className={`text-sm font-bold ${totalBalance < 10 ? 'text-red-600' : totalBalance < 30 ? 'text-amber-600' : 'text-green-600'}`}>
+                    {totalBalance}
+                  </span>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
 
-        <div className="p-4 bg-gray-50 border-t">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-gray-600">
-              <p className="font-medium text-gray-900 mb-1">Important Notes:</p>
-              <ul className="list-disc ml-4 space-y-1">
-                <li>Each staff member has a total of {annualLeaveDays} leave days per year.</li>
-                <li>Leave requests cannot exceed the available balance.</li>
-              </ul>
+        <div className="border-t border-slate-200 bg-amber-50/50">
+          <div className="p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800 mb-2">Important Notes</h4>
+                <ul className="space-y-1.5 text-sm text-slate-600">
+                  <li className="flex items-start gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                    Each staff member has a total of <strong className="text-slate-800">{annualLeaveDays}</strong> leave days per year.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                    Leave requests cannot exceed the available balance.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                    The leave year runs from <strong className="text-slate-800">April 1st</strong> to <strong className="text-slate-800">December 31st</strong>.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                    Any unused leave days do not carry over to the next year unless approved by management.
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

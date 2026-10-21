@@ -12,6 +12,7 @@ import "react-time-picker/dist/TimePicker.css";
 import "react-clock/dist/Clock.css";
 
 export default function AppFormTimePicker({
+  required = false,
   form,
   name,
   label,
@@ -30,6 +31,7 @@ export default function AppFormTimePicker({
               htmlFor={label}
             >
               {label}
+              {required && <span className="ml-0.5 text-red-600">*</span>}
             </Label>
           </FormLabel>
           <FormControl>

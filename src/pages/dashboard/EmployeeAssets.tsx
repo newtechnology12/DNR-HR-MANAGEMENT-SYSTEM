@@ -221,7 +221,7 @@ export default function EmployeeAssets({ employeeId }) {
                   "en-US",
                   {
                     day: "2-digit",
-                    month: "long",
+                    month: "short",
                     year: "numeric",
                   }
                 ),
@@ -229,18 +229,18 @@ export default function EmployeeAssets({ employeeId }) {
                   "en-US",
                   {
                     day: "2-digit",
-                    month: "long",
+                    month: "short",
                     year: "numeric",
                   }
                 ),
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,

@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import pocketbase from "@/lib/pocketbase";
+import { Badge } from "@/components/ui/badge";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
 import { useQuery } from "react-query";
@@ -16,7 +17,7 @@ import DataTableRowActions from "@/components/datatable/DataTableRowActions";
 import ConfirmModal from "@/components/modals/ConfirmModal";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
-import { LeaveFormModal } from "@/components/modals/LeaveFormModal";
+import { LeaveFormModal, leaveTypeLabel } from "@/components/modals/LeaveFormModal";
 import { addDays } from "date-fns";
 import {
   Dialog,
@@ -36,6 +37,8 @@ import { useAuth } from "@/context/auth.context";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/utils/cn";
 import formatFilter from "@/utils/formatFilter";
+import StatCard from "@/components/StatCard";
+import { CalendarDays, CheckCircle2, Clock, XCircle } from "lucide-react";
 
 const capitalizeFirstLetter = (str) => {
   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -74,14 +77,12 @@ export default function Leaves() {
         <DataTableColumnHeader column={column} title="Employee" />
       ),
       cell: ({ row }) => (
-        <div className="w-[80px]- flex items-center gap-2">
-          <Link
-            to={""}
-            className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("employee")}
-          </Link>
-        </div>
+        <Link
+          to={`/dashboard/hr/employees/${row.original.original?.employee}`}
+          className="hover:underline flex items-center gap-2 capitalize hover:text-primary"
+        >
+          {row.getValue("employee")}
+        </Link>
       ),
       enableSorting: true,
       enableHiding: true,
@@ -130,9 +131,19 @@ export default function Leaves() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Status" />
       ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("status")}</div>
-      ),
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
+        return (
+          <Badge
+            variant={
+              status === "approved" ? "success" : status === "rejected" ? "danger" : "warning"
+            }
+            className="capitalize"
+          >
+            {status}
+          </Badge>
+        );
+      },
       enableSorting: true,
       filterFn: (__, _, value) => {
         return value;
@@ -188,7 +199,7 @@ export default function Leaves() {
         <DataTableColumnHeader column={column} title="Type" />
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("type")}</div>
+        <div className="capitalize">{leaveTypeLabel(row.original)}</div>
       ),
       filterFn: (__, _, value) => {
         return value;
@@ -319,12 +330,12 @@ export default function Leaves() {
                 created_by: e.expand?.created_by?.name,
                 start: new Date(e.start).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 end: new Date(e.end).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 Leaveduration: e.Leaveduration,
@@ -334,12 +345,12 @@ export default function Leaves() {
                 rejected_by: e.rejected_by || "---",
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -351,6 +362,30 @@ export default function Leaves() {
     },
     enabled: true,
   });
+
+  const statsQuery = useQuery({
+    queryKey: ["leaves-stats"],
+    queryFn: async () => {
+      const [total, pending, approved, rejected] = await Promise.all([
+        pocketbase.collection("leaves").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("leaves")
+          .getList(1, 1, { filter: `status="pending"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("leaves")
+          .getList(1, 1, { filter: `status="approved"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("leaves")
+          .getList(1, 1, { filter: `status="rejected"` })
+          .then((e) => e.totalItems),
+      ]);
+      return { total, pending, approved, rejected };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
 
   const newRecordModal = useModalState();
 
@@ -366,7 +401,7 @@ export default function Leaves() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("Leaves deleted succesfully");
+        toast.success("Leave deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -376,10 +411,44 @@ export default function Leaves() {
 
   return (
     <>
-      <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
+      <div className="px-4 py-4 sm:px-6">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Leaves"
+            icon={CalendarDays}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="All leave requests"
+          />
+          <StatCard
+            title="Pending"
+            icon={Clock}
+            tone="warning"
+            loading={statsLoading}
+            value={statsQuery.data?.pending}
+            description="Awaiting approval"
+          />
+          <StatCard
+            title="Approved"
+            icon={CheckCircle2}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.approved}
+            description="Approved leave requests"
+          />
+          <StatCard
+            title="Rejected"
+            icon={XCircle}
+            tone="danger"
+            loading={statsLoading}
+            value={statsQuery.data?.rejected}
+            description="Rejected leave requests"
+          />
+        </div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col items-start gap-1">
+            <h2 className="text-xl font-bold tracking-tight text-slate-900">
               Leaves & Holidays
             </h2>
             <BreadCrumb
@@ -387,25 +456,26 @@ export default function Leaves() {
             />
           </div>
           <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create new leave.</span>
+            <PlusCircle size={16} />
+            <span>Request Leave</span>
           </Button>
         </div>
-        <div className=" bg-white scroller border-t border-l border-r rounded-t">
-          <ScrollArea className="w-full  whitespace-nowrap">
-            <div className="flex px-2 items-center  justify-start">
+        <div className="rounded-t-card border-l border-r border-t border-slate-200 bg-white">
+          <ScrollArea className="w-full whitespace-nowrap">
+            <div className="flex items-center justify-start px-2">
               {[
                 { title: "Pending Leaves", name: "pending" },
                 { title: "Approved Leaves", name: "approved" },
                 { title: "Rejected Leaves", name: "rejected" },
               ].map((e, i) => {
                 return (
-                  <a
+                  <button
+                    type="button"
                     key={i}
                     className={cn(
-                      "cursor-pointer px-6 capitalize text-center relative w-full- text-slate-700 text-[13px] sm:text-sm py-3  font-medium",
+                      "relative cursor-pointer px-6 py-3 text-center text-[13px] font-medium capitalize text-slate-500 sm:text-sm",
                       {
-                        "text-primary ": activeTab === e.name,
+                        "text-primary": activeTab === e.name,
                       }
                     )}
                     onClick={() => {
@@ -413,10 +483,10 @@ export default function Leaves() {
                     }}
                   >
                     {activeTab === e.name && (
-                      <div className="h-[3px] left-0 rounded-t-md bg-primary absolute bottom-0 w-full"></div>
+                      <div className="absolute bottom-0 left-0 h-[3px] w-full rounded-t-md bg-primary" />
                     )}
-                    <span className=""> {e.title}</span>
-                  </a>
+                    <span>{e.title}</span>
+                  </button>
                 );
               })}
             </div>
@@ -424,6 +494,7 @@ export default function Leaves() {
           </ScrollArea>
         </div>
         <DataTable
+          className="rounded-t-none"
           isFetching={recordsQuery.isFetching}
           defaultColumnVisibility={{
             created_by: false,
@@ -462,7 +533,6 @@ export default function Leaves() {
             {
               title: "Employee",
               loader: ({ search }) => {
-                console.log(search);
                 return pocketbase
                   .collection("users")
                   .getFullList(
@@ -491,8 +561,7 @@ export default function Leaves() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}
@@ -545,7 +614,7 @@ function ApproveOrRejectModal({ type, open, setOpen, leave, onCompleted }) {
       .then(() => {
         setOpen(false);
         toast.success(
-          `Leave ${type === "approve" ? "approved" : "rejected"} succesfully`
+          `Leave ${type === "approve" ? "approved" : "rejected"} successfully`
         );
         onCompleted();
         form.reset();
@@ -561,7 +630,7 @@ function ApproveOrRejectModal({ type, open, setOpen, leave, onCompleted }) {
         <DialogHeader>
           <DialogTitle>
             <span className="text-base px-1 font-semibold py-2">
-              {type === "approve" ? "Approve leave." : "Reject leave"}
+              {type === "approve" ? "Approve leave" : "Reject leave"}
             </span>
           </DialogTitle>
           <DialogDescription>
@@ -584,10 +653,9 @@ function ApproveOrRejectModal({ type, open, setOpen, leave, onCompleted }) {
               </div>
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="submit"
-                  onClick={() => form.handleSubmit(onSubmit)}
                   disabled={
                     form.formState.disabled || form.formState.isSubmitting
                   }
@@ -597,7 +665,7 @@ function ApproveOrRejectModal({ type, open, setOpen, leave, onCompleted }) {
                   {form.formState.isSubmitting && (
                     <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
                   )}
-                  {type === "approve" ? "Approve leave." : "Reject leave"}
+                  {type === "approve" ? "Approve leave" : "Reject leave"}
                 </Button>
               </div>
             </DialogFooter>

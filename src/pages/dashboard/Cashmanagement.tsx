@@ -342,18 +342,18 @@ export default function Prepayments() {
                   "en-US",
                   {
                     day: "2-digit",
-                    month: "long",
+                    month: "short",
                     year: "numeric",
                   }
                 ),
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -380,7 +380,7 @@ export default function Prepayments() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("credit deleted succesfully");
+        toast.success("credit deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -491,8 +491,7 @@ export default function Prepayments() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}
@@ -537,11 +536,20 @@ function ApproveOrRejectModal({
   });
 
   const { user } = useAuth();
+  const [payAccount, setPayAccount] = useState("");
+  const accountsQ = useQuery(["expense-accounts"], () => pocketbase.collection("accounts").getFullList({ sort: "name" }), { enabled: open && type === "approve" && !expense?.account });
+  const accountId = expense?.account || payAccount;
 
   const onSubmit = async (values) => {
     try {
+      if (type === "approve") {
+        if (!accountId) return toast.error("Choose the account the expense is paid from.");
+        const acc = await pocketbase.collection("accounts").getOne(accountId);
+        if (acc.currentBalance < expense.amount) return toast.error(`Not enough money on ${acc.name}.`);
+      }
       await pocketbase.collection("prepayments").update(expense.id, {
         status: type === "approve" ? "approved" : "rejected",
+        ...(type === "approve" ? { account: accountId } : {}),
         [type === "approve" ? "approved_by" : "rejected_by"]: user?.id,
         [type === "approve" ? "approved_at" : "rejected_at"]: new Date(),
         [type === "approve" ? "approved_reason" : "rejected_reason"]:
@@ -550,14 +558,14 @@ function ApproveOrRejectModal({
 
       const account = await pocketbase
         .collection("accounts")
-        .getOne(expense.account);
+        .getOne(accountId);
 
       const transaction = await pocketbase
         .collection("accounts_transactions")
         .create({
           amount: expense.amount,
           date: expense.date || expense.created || new Date().toLocaleString(),
-          account: expense.account,
+          account: accountId,
           expense: expense.id,
           transactionType: "expense",
           notes: expense.notes,
@@ -574,7 +582,7 @@ function ApproveOrRejectModal({
 
       setOpen(false);
       toast.success(
-        `Expense ${type === "approve" ? "approved" : "rejected"} succesfully`
+        `Expense ${type === "approve" ? "approved" : "rejected"} successfully`
       );
       onCompleted();
       form.reset();
@@ -602,6 +610,17 @@ function ApproveOrRejectModal({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <div className="grid px-2 gap-2">
+              {type === "approve" && !expense?.account && (
+                <label className="block text-[13px] font-medium text-slate-700">
+                  Pay from account <span className="text-red-600">*</span>
+                  <select className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13.5px]" value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
+                    <option value="">Choose an account</option>
+                    {(accountsQ.data || []).map((a: any) => (
+                      <option key={a.id} value={a.id}>{a.name} · RWF {Math.round(a.currentBalance).toLocaleString()}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div>
                 <AppFormTextArea
                   form={form}
@@ -612,7 +631,7 @@ function ApproveOrRejectModal({
               </div>
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="submit"
                   onClick={() => form.handleSubmit(onSubmit)}

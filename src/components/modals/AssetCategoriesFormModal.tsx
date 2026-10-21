@@ -68,8 +68,8 @@ export function AssetCategoriesFormModal({
         onComplete();
         toast.error(
           q
-            ? "Asset category updated succesfully"
-            : "Asset category  created succesfully"
+            ? "Asset category updated successfully"
+            : "Asset category  created successfully"
         );
         form.reset();
       })
@@ -115,7 +115,7 @@ export function AssetCategoriesFormModal({
               </div>
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="button"
                   onClick={() => form.reset()}

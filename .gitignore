@@ -15,7 +15,7 @@ dist-ssr
 
 pocketbase/pb_data
 pocketbase/pocketbase
-pocketbase/pb_migrations
+pocketbase/pocketbase.exe
 .env
 
 # Editor directories and files

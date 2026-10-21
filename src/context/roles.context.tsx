@@ -11,9 +11,16 @@ const getRoles = async () => {
 };
 
 export function RolesProvider({ children }: { children: React.ReactNode }) {
-  const { isLoading, data: roles } = useQuery("roles", getRoles);
-
   const { user } = useAuth();
+
+  const {
+    isLoading,
+    data: roles = [],
+    error,
+  } = useQuery("roles", getRoles, {
+    enabled: Boolean(user),
+    retry: false,
+  });
 
   const permitions = user?.role?.permitions?.filter((e) => e?.access === true);
 
@@ -24,11 +31,12 @@ export function RolesProvider({ children }: { children: React.ReactNode }) {
   const contextValue = useMemo(
     () => ({
       roles,
-      isLoading,
+      isLoading: Boolean(user) && isLoading,
+      error,
       permitions,
       canPerform,
     }),
-    [roles, isLoading, permitions, canPerform]
+    [roles, isLoading, error, permitions, canPerform, user]
   );
 
   return (

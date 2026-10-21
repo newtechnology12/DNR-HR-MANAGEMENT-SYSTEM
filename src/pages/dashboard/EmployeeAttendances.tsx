@@ -628,7 +628,7 @@ export default function EmployeeAttendances({ employeeId }) {
                 id: e.id,
                 date: new Date(e.date).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 clockin_time: new Date(e.clockin_time).toLocaleTimeString(),
@@ -662,12 +662,12 @@ export default function EmployeeAttendances({ employeeId }) {
                 lunch_late: e.lunch_late || "N.A",
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,

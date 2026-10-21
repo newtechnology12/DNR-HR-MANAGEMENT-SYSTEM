@@ -66,7 +66,6 @@ export default function NewPayroll() {
             );
 
             const deducts = deductions.map((deduction) => {
-              console.log(e.salary * deduction.percentage, deduction.name);
               return {
                 name: deduction.name,
                 amount: (e.salary * deduction.percentage) / 100,
@@ -167,17 +166,17 @@ export default function NewPayroll() {
   );
 
   const total_net_sallaries = payslips?.reduce(
-    (acc, e) => acc + e?.net_sallary,
+    (acc, e) => acc + (Number(e?.net_sallary) || 0),
     0
   );
 
   const total_gross_sallaries = payslips?.reduce(
-    (acc, e) => acc + e?.salary,
+    (acc, e) => acc + (Number(e?.salary) || 0),
     0
   );
 
   const payPrepayment = async (prepayment, payroll) => {
-    return pocketbase.collection("prepayment").update(prepayment.id, {
+    return pocketbase.collection("prepayments").update(prepayment.id, {
       status: "paid",
       payroll: payroll.id,
     });
@@ -243,7 +242,6 @@ export default function NewPayroll() {
       if (existing_payroll[0]?.id)
         throw new Error("Payroll already exists for this period");
 
-      console.log(state?.period_month);
       const payroll_data = {
         total_gross: total_gross_sallaries,
         total_net: total_net_sallaries,
@@ -270,33 +268,28 @@ export default function NewPayroll() {
       });
     },
     onSuccess: (e) => {
-      console.log(e);
       toast.success("You have successfully generated a payroll.");
       navigate(`/dashboard/hr/payroll/${e.id}`);
     },
     onError: (error: any) => {
-      console.log({ error });
       seterror(error.message);
-      // toast.error("Failed to generate payroll");
+      toast.error(error.message || "Failed to generate payroll");
     },
   });
 
   return (
     <>
-      {" "}
-      <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
-              Create a new payroll
-            </h2>
-            <BreadCrumb
-              items={[{ title: "Create a new Payroll", link: "/dashboard" }]}
-            />
-          </div>
+      <div className="space-y-4 px-4 py-4 sm:px-6">
+        <div className="flex flex-col items-start gap-1">
+          <h2 className="text-xl font-bold tracking-tight text-slate-900">
+            Create a new payroll
+          </h2>
+          <BreadCrumb
+            items={[{ title: "Create a new Payroll", link: "/dashboard" }]}
+          />
         </div>
         <div>
-          <Card className="rounded-[4px] overflow-hidden">
+          <Card className="overflow-hidden">
             <div className="mt-1">
               <div className="px-3 py-3">
                 <Button
@@ -316,10 +309,10 @@ export default function NewPayroll() {
               <div className="grid gap-4  pb-3 grid-cols-2 sm:grid-cols-5">
                 {report_status.map((status, i) => (
                   <div key={i}>
-                    <h1 className="px-2- capitalize py-1 text-base sm:text-[14.5px] font-semibold">
+                    <h1 className="capitalize py-1 text-base sm:text-[14.5px] font-semibold">
                       {status.value}
                     </h1>
-                    <div className="px-2- py-1 text-sm text-slate-500">
+                    <div className="py-1 text-sm text-slate-500">
                       {status.title}
                     </div>
                   </div>
@@ -329,132 +322,138 @@ export default function NewPayroll() {
             <div className="border-t w-full border-dashed">
               <ScrollArea className="w-full whitespace-nowrap">
                 <table className="w-full table-auto">
-                  <tr className="text-left">
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Employee
-                    </th>
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Department
-                    </th>
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Gross Sallary
-                    </th>
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Prepayments
-                    </th>
-                    {payrollsQuery?.data?.deductions?.map((deduction, i) => {
-                      return (
-                        <th
-                          key={i}
-                          className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b"
-                        >
-                          {truncateWithEllipsis(deduction.name, 15)}
-                        </th>
-                      );
-                    })}
-
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Net Sallary
-                    </th>
-                  </tr>
-                  {payslips?.map((e, i) => {
-                    return (
-                      <tr key={i}>
-                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
-                          {e.name}
-                        </td>
-                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
-                          {e?.department}
-                        </td>
-                        <td className="font-medium px-5 text-slate-600 capitalize  text-[13px] py-[14px] border-b">
-                          {Number(e.salary)?.toLocaleString()} FRW
-                        </td>
-                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
-                          {Number(e.prepayment)?.toLocaleString()} FRW
-                        </td>
-                        {e.deductions.map((deduction, i) => {
-                          return (
-                            <td
-                              key={i}
-                              className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b"
-                            >
-                              {Number(deduction.amount)?.toLocaleString()} FRW
-                            </td>
-                          );
-                        })}
-                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
-                          {
-                            <span className="text-green-500">
-                              {Number(e.net_sallary)?.toLocaleString()} FRW
-                            </span>
-                          }
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {payslips?.length !== 0 && (
-                    <tr>
-                      <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
-                        Total
-                      </td>
-                      <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-2 border-b">
-                        ---
-                      </td>
-                      <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-2 border-b">
-                        {Number(total_gross_sallaries).toLocaleString()}
-                        FRW
-                      </td>
-                      <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
-                        {prepayments_covered?.toLocaleString()} FRW
-                      </td>
+                  <thead>
+                    <tr className="text-left">
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Employee
+                      </th>
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Department
+                      </th>
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Gross Salary
+                      </th>
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Prepayments
+                      </th>
                       {payrollsQuery?.data?.deductions?.map((deduction, i) => {
                         return (
-                          <td
+                          <th
                             key={i}
-                            className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b"
+                            className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b"
                           >
-                            {Number(
-                              payslips?.reduce(
-                                (acc, e) =>
-                                  acc +
-                                  e?.deductions?.find(
-                                    (d) => d.name === deduction.name
-                                  )?.amount,
-                                0
-                              )
-                            ).toLocaleString()}{" "}
-                            FRW
-                          </td>
+                            {truncateWithEllipsis(deduction.name, 15)}
+                          </th>
                         );
                       })}
 
-                      <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
-                        {Number(total_net_sallaries).toLocaleString()} FRW
-                      </td>
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Net Salary
+                      </th>
                     </tr>
-                  )}
+                  </thead>
+                  <tbody>
+                    {payslips?.map((e) => {
+                      return (
+                        <tr key={e.id}>
+                          <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
+                            {e.name}
+                          </td>
+                          <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
+                            {e?.department}
+                          </td>
+                          <td className="font-medium px-5 text-slate-600 capitalize  text-[13px] py-[14px] border-b">
+                            {Number(e.salary)?.toLocaleString()} FRW
+                          </td>
+                          <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
+                            {Number(e.prepayment)?.toLocaleString()} FRW
+                          </td>
+                          {e.deductions.map((deduction, i) => {
+                            return (
+                              <td
+                                key={i}
+                                className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b"
+                              >
+                                {Number(deduction.amount)?.toLocaleString()} FRW
+                              </td>
+                            );
+                          })}
+                          <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
+                            {
+                              <span className="text-success">
+                                {Number(e.net_sallary)?.toLocaleString()} FRW
+                              </span>
+                            }
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {payslips?.length !== 0 && (
+                      <tr>
+                        <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
+                          Total
+                        </td>
+                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-2 border-b">
+                          ---
+                        </td>
+                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-2 border-b">
+                          {Number(total_gross_sallaries).toLocaleString()}
+                          FRW
+                        </td>
+                        <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
+                          {prepayments_covered?.toLocaleString()} FRW
+                        </td>
+                        {payrollsQuery?.data?.deductions?.map((deduction, i) => {
+                          return (
+                            <td
+                              key={i}
+                              className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b"
+                            >
+                              {Number(
+                                payslips?.reduce(
+                                  (acc, e) =>
+                                    acc +
+                                    (Number(
+                                      e?.deductions?.find(
+                                        (d) => d.name === deduction.name
+                                      )?.amount
+                                    ) || 0),
+                                  0
+                                )
+                              ).toLocaleString()}{" "}
+                              FRW
+                            </td>
+                          );
+                        })}
 
-                  {payslips?.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={
-                          5 + (payrollsQuery?.data?.deductions?.length || 0)
-                        }
-                        className="border-b"
-                      >
-                        <div className="text-center py-10 bg-slate-700- w-full items-center flex justify-center text-[13px] font-medium text-slate-500">
-                          <span>No employees available.</span>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
+                        <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
+                          {Number(total_net_sallaries).toLocaleString()} FRW
+                        </td>
+                      </tr>
+                    )}
+
+                    {payslips?.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={
+                            5 + (payrollsQuery?.data?.deductions?.length || 0)
+                          }
+                          className="border-b"
+                        >
+                          <div className="text-center py-10 w-full items-center flex justify-center text-[13px] font-medium text-slate-500">
+                            <span>No employees available.</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
                 </table>
                 <ScrollBar orientation="horizontal" />
               </ScrollArea>
             </div>
             <div className="pb-4 mt-4 px-5">
               <div className="max-w-xl ml-auto flex flex-col justify-end items-end space-y-3">
-                <div className="px-2- w-full mt-3-">
+                <div className="w-full">
                   <Label className="text-[13px] mb-2 block text-slate-500">
                     Closing Note (Optional)
                   </Label>
@@ -467,16 +466,16 @@ export default function NewPayroll() {
                   />
                 </div>
 
-                <div className="max-w-sm bg-slate-200- w-full space-y-5 pb-4 ml-auto px-5-">
+                <div className="max-w-sm w-full space-y-5 pb-4 ml-auto">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium">Total net sallaries</h4>
+                    <h4 className="text-sm font-medium">Total net salaries</h4>
                     <span className="text-sm font-medium">
                       {Number(total_net_sallaries).toLocaleString()} FRW
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-medium">
-                      Total gross sallaries
+                      Total gross salaries
                     </h4>
                     <span className="text-sm font-medium">
                       <span>
@@ -488,10 +487,10 @@ export default function NewPayroll() {
                   {error && (
                     <Alert
                       variant="destructive"
-                      className="py-2 -mt-2 rounded-[4px] flex items-center"
+                      className="py-2 -mt-2 flex items-center"
                     >
                       <AlertCircleIcon className="h-4 -mt-[5px] mr-3 w-4" />
-                      <AlertTitle className="text-[13px] font-medium fon !m-0">
+                      <AlertTitle className="text-[13px] font-medium !m-0">
                         {error}
                       </AlertTitle>
                     </Alert>

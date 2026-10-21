@@ -17,6 +17,8 @@ import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
 import BreadCrumb from "@/components/breadcrumb";
 import { addDays } from "date-fns";
+import StatCard from "@/components/StatCard";
+import { ClipboardCheck, TrendingUp, Users } from "lucide-react";
 
 export default function Performance() {
   const columns: ColumnDef<any>[] = [
@@ -51,14 +53,13 @@ export default function Performance() {
         <DataTableColumnHeader column={column} title="Period" />
       ),
       cell: ({ row }) => (
-        <div className="w-[80px]- flex items-center gap-2">
-          <Link
-            to={""}
-            className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("period")}
-          </Link>
-        </div>
+        <button
+          type="button"
+          onClick={() => navigate(`/dashboard/hr/performance/${row.original.id}`)}
+          className="capitalize hover:text-primary hover:underline"
+        >
+          {row.getValue("period")}
+        </button>
       ),
       enableSorting: true,
       enableHiding: true,
@@ -243,12 +244,12 @@ export default function Performance() {
                 period: e.period_year + "-" + e.period_month,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -271,7 +272,7 @@ export default function Performance() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("perfomance evaluation deleted succesfully");
+        toast.success("Performance evaluation deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -280,10 +281,61 @@ export default function Performance() {
   };
 
   const navigate = useNavigate();
+
+  const statsQuery = useQuery({
+    queryKey: ["performance-stats"],
+    queryFn: async () => {
+      const startOfMonth = new Date(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        1
+      ).toISOString();
+
+      const [total, thisMonth, all] = await Promise.all([
+        pocketbase.collection("perfomance_evaluations").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("perfomance_evaluations")
+          .getList(1, 1, { filter: `created >= "${startOfMonth}"` })
+          .then((e) => e.totalItems),
+        pocketbase.collection("perfomance_evaluations").getFullList({ fields: "employee" }),
+      ]);
+      const employeesEvaluated = new Set(all.map((e: any) => e.employee).filter(Boolean)).size;
+      return { total, thisMonth, employeesEvaluated };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   return (
     <>
       <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <StatCard
+            title="Total Evaluations"
+            icon={ClipboardCheck}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="All performance evaluations"
+          />
+          <StatCard
+            title="This Month"
+            icon={TrendingUp}
+            tone="info"
+            loading={statsLoading}
+            value={statsQuery.data?.thisMonth}
+            description="Evaluations created this month"
+          />
+          <StatCard
+            title="Employees Evaluated"
+            icon={Users}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.employeesEvaluated}
+            description="Unique employees reviewed"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-lg font-semibold tracking-tight">
               Perfomance & Appraisals
@@ -360,8 +412,7 @@ export default function Performance() {
 
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

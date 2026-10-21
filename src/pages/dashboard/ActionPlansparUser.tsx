@@ -271,7 +271,7 @@ const calculateTaskStatus = (startDate: Date, endDate: Date, status: string) => 
           <div className="capitalize">
             {new Date(row.getValue("startDate")).toLocaleDateString("en-US", {
               day: "2-digit",
-              month: "long",
+              month: "short",
               year: "numeric",
             })}
           </div>
@@ -288,7 +288,7 @@ const calculateTaskStatus = (startDate: Date, endDate: Date, status: string) => 
           <div className="capitalize">
             {new Date(row.getValue("endDate")).toLocaleDateString("en-US", {
               day: "2-digit",
-              month: "long",
+              month: "short",
               year: "numeric",
             })}
           </div>

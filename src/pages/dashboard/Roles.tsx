@@ -3,7 +3,7 @@ import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import ConfirmModal from "@/components/modals/ConfirmModal";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
+import StatCard from "@/components/StatCard";
+import { ShieldCheck, Users } from "lucide-react";
 
 export default function Roles() {
   const navigate = useNavigate();
@@ -48,14 +50,17 @@ export default function Roles() {
         <DataTableColumnHeader column={column} title="Name" />
       ),
       cell: ({ row }) => (
-        <div className="w-[80px]- flex items-center gap-2">
-          <Link
-            to={""}
-            className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("name")}
-          </Link>
-        </div>
+        <button
+          type="button"
+          onClick={() =>
+            navigate(
+              `/dashboard/settings/general-settings/roles-permissions/${row.original.id}`
+            )
+          }
+          className="capitalize hover:text-primary hover:underline"
+        >
+          {row.getValue("name")}
+        </button>
       ),
       enableSorting: true,
       enableHiding: true,
@@ -168,12 +173,12 @@ export default function Roles() {
                 employees: e.employees.length || 0,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 updated: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -196,7 +201,7 @@ export default function Roles() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("Roles deleted succesfully");
+        toast.success("Role deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -204,8 +209,39 @@ export default function Roles() {
       });
   };
 
+  const statsQuery = useQuery({
+    queryKey: ["roles-stats"],
+    queryFn: async () => {
+      const [total, employees] = await Promise.all([
+        pocketbase.collection("roles").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase.collection("users").getList(1, 1, {}).then((e) => e.totalItems),
+      ]);
+      return { total, employees };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
+
   return (
     <>
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StatCard
+          title="Total Roles"
+          icon={ShieldCheck}
+          tone="default"
+          loading={statsLoading}
+          value={statsQuery.data?.total}
+          description="Roles defined in the system"
+        />
+        <StatCard
+          title="Total Employees"
+          icon={Users}
+          tone="info"
+          loading={statsLoading}
+          value={statsQuery.data?.employees}
+          description="Employees across all roles"
+        />
+      </div>
       <DataTable
         className="!border-none !p-0"
         isFetching={recordsQuery.isFetching}
@@ -254,8 +290,7 @@ export default function Roles() {
 
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

@@ -7,7 +7,9 @@ import {
   FormMessage,
 } from "../ui/form";
 import { Label } from "../ui/label";
-export default function AppFormAsyncSelect({ form, name, label, ...other }) {
+export default function AppFormAsyncSelect({
+  required = false,
+  form, name, label, ...other }) {
   return (
     <FormField
       control={form.control}
@@ -15,8 +17,9 @@ export default function AppFormAsyncSelect({ form, name, label, ...other }) {
       render={({ field, fieldState }) => (
         <FormItem>
           <FormLabel>
-            <Label className="text-[13px] mb-1 text-slate-600" htmlFor={label}>
+            <Label className="mb-1 text-[12.5px] font-medium text-slate-700" htmlFor={label}>
               {label}
+              {required && <span className="ml-0.5 text-red-600">*</span>}
             </Label>
           </FormLabel>
           <FormControl>

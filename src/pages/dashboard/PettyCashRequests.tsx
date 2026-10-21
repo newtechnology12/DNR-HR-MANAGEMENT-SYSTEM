@@ -404,7 +404,7 @@ export default function PettyCashRequests() {
       />
       <ConfirmModal
         title={'Are you sure you want to delete?'}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}
@@ -512,7 +512,7 @@ function ApproveOrRejectModal({ type, open, setOpen, request, onCompleted }) {
               </div>
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="submit"
                   onClick={() => form.handleSubmit(onSubmit)}

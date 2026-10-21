@@ -3,7 +3,6 @@ import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle } from "lucide-react";
-import { Link } from "react-router-dom";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState, useEffect } from "react";
@@ -20,6 +19,8 @@ import CashRequestFormModal from "@/components/modals/RequestCashFormModel";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import StatCard from "@/components/StatCard";
+import { Banknote, CheckCircle2, Clock, XCircle } from "lucide-react";
 
 export default function RequestCash() {
   const [users, setUsers] = useState([]);
@@ -85,14 +86,13 @@ export default function RequestCash() {
       cell: ({ row }) => {
         const value = row.getValue("employeeName");
         return (
-          <div className="w-[80px]- flex items-center gap-2">
-            <Link
-              to={""}
-              className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-            >
-              {typeof value === 'string' ? value : 'N/A'}
-            </Link>
-          </div>
+          <button
+            type="button"
+            onClick={() => editRow.edit(row.original)}
+            className="capitalize hover:text-primary hover:underline"
+          >
+            {typeof value === "string" ? value : "N/A"}
+          </button>
         );
       },
       enableSorting: true,
@@ -391,7 +391,7 @@ export default function RequestCash() {
                 totalAmount: Number(record.totalAmount) || 0,
                 date: new Date(record.date).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 paymentMethod: record.paymentMethod || 'N/A',
@@ -419,6 +419,30 @@ export default function RequestCash() {
   const newRecordModal = useModalState();
   const editRow = useEditRow();
   const confirmModal = useConfirmModal();
+
+  const statsQuery = useQuery({
+    queryKey: ["cash-requests-stats"],
+    queryFn: async () => {
+      const [total, pending, approved, rejected] = await Promise.all([
+        pocketbase.collection("cashRequests").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("cashRequests")
+          .getList(1, 1, { filter: `status="pending"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("cashRequests")
+          .getList(1, 1, { filter: `status="approved"` })
+          .then((e) => e.totalItems),
+        pocketbase
+          .collection("cashRequests")
+          .getList(1, 1, { filter: `status="rejected"` })
+          .then((e) => e.totalItems),
+      ]);
+      return { total, pending, approved, rejected };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
 
   const handleDelete = (e) => {
     confirmModal.setIsLoading(true);
@@ -500,7 +524,41 @@ export default function RequestCash() {
   return (
     <>
       <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Requests"
+            icon={Banknote}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="All cash requests"
+          />
+          <StatCard
+            title="Pending"
+            icon={Clock}
+            tone="warning"
+            loading={statsLoading}
+            value={statsQuery.data?.pending}
+            description="Awaiting approval"
+          />
+          <StatCard
+            title="Approved"
+            icon={CheckCircle2}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.approved}
+            description="Approved cash requests"
+          />
+          <StatCard
+            title="Rejected"
+            icon={XCircle}
+            tone="danger"
+            loading={statsLoading}
+            value={statsQuery.data?.rejected}
+            description="Rejected cash requests"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-lg font-semibold tracking-tight">
               All Cash Requests
@@ -584,8 +642,7 @@ export default function RequestCash() {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

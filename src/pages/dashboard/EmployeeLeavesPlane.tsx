@@ -229,7 +229,7 @@
 //       .then(() => {
 //         recordsQuery.refetch();
 //         confirmModal.close();
-//         toast.success("LeavePlane deleted succesfully");
+//         toast.success("LeavePlane deleted successfully");
 //       })
 //       .catch((e) => {
 //         confirmModal.setIsLoading(false);

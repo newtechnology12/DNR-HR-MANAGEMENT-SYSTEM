@@ -1,12 +1,11 @@
 import { cn } from "@/utils/cn";
-import { Check, MoreHorizontal, PlusCircle, X } from "react-feather";
+import { Check, MoreHorizontal, X } from "react-feather";
 import { Fragment, useState } from "react";
 import { useQuery } from "react-query";
 import Avatar from "@/components/shared/Avatar";
 import Loader from "@/components/icons/Loader";
 import pocketbase from "@/lib/pocketbase";
 import BreadCrumb from "@/components/breadcrumb";
-import { Button } from "@/components/ui/button";
 import useSettings from "@/hooks/useSettings";
 import AsyncSelectField from "@/components/AsyncSelectField";
 import cleanObject from "@/utils/cleanObject";
@@ -69,7 +68,7 @@ async function fetchData(e) {
         name: e.name,
         id: e.id,
         phone: e.phone,
-        avatar: e.avatar,
+        avatar: e.avatar ? pocketbase.files.getUrl(e, e.avatar) : "",
       }))
     );
 
@@ -97,8 +96,6 @@ async function fetchData(e) {
         );
 
         const isInTheFuture = new Date(day) > new Date();
-
-        console.log(isNotWorkingDay);
 
         return {
           status: isInTheFuture
@@ -148,39 +145,14 @@ export default function AttendanceReport() {
 
   return (
     <>
-      {" "}
-      <div className="px-4">
-        <div className="flex mb-2 items-start justify-between space-y-2">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-[16px] font-semibold tracking-tight">
-              Employee Attendance Logs
-            </h2>
-            <BreadCrumb
-              items={[{ title: "Attendance logs", link: "/dashboard" }]}
-            />
-          </div>
-          {/* <div className="space-x-2">
-            <Button
-              onClick={() => {
-                // newRecordModal.open();
-              }}
-              size="sm"
-              className="hover:bg-white"
-              variant="outline"
-            >
-              <PlusCircle size={16} className="mr-2" />
-              <span>Bulk upload</span>
-            </Button>
-            <Button
-              onClick={() => {
-                // newRecordModal.open();
-              }}
-              size="sm"
-            >
-              <PlusCircle size={16} className="mr-2" />
-              <span>Create new attendace.</span>
-            </Button>
-          </div> */}
+      <div className="space-y-4 px-4 py-4 sm:px-6">
+        <div className="flex flex-col items-start gap-1">
+          <h2 className="text-xl font-bold tracking-tight text-slate-900">
+            Employee Attendance Logs
+          </h2>
+          <BreadCrumb
+            items={[{ title: "Attendance logs", link: "/dashboard" }]}
+          />
         </div>
         <div className="border rounded-[4px] border-slate-200 bg-white">
           <div>
@@ -288,20 +260,26 @@ export default function AttendanceReport() {
               <Fragment>
                 <div className="w-full no-scrollbar overflow-x-auto">
                   <table className="w-full ">
-                    <tr>
-                      <td className="border-b font-medium text-[13px] text-slate-600 bg-slate-50 border-r px-3">
-                        Employee
-                      </td>
-                      {report.daysOfMonth.map((_, i) => {
-                        return (
-                          <td className="text-[13px] border-r border-b  bg-slate-50 border-slate-200 text-slate-500 font-medium">
-                            <span className="w-[50px] flex h-8 items-center justify-center">
-                              {i + 1}
-                            </span>
-                          </td>
-                        );
-                      })}
-                    </tr>
+                    <thead>
+                      <tr>
+                        <td className="border-b font-medium text-[13px] text-slate-600 bg-slate-50 border-r px-3">
+                          Employee
+                        </td>
+                        {report.daysOfMonth.map((_, i) => {
+                          return (
+                            <td
+                              key={i}
+                              className="text-[13px] border-r border-b  bg-slate-50 border-slate-200 text-slate-500 font-medium"
+                            >
+                              <span className="w-[50px] flex h-8 items-center justify-center">
+                                {i + 1}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
                     {report.employees.map((employeeReport, i) => {
                       return (
                         <tr key={i}>
@@ -370,6 +348,7 @@ export default function AttendanceReport() {
                         </tr>
                       );
                     })}
+                    </tbody>
                   </table>
                 </div>
               </Fragment>

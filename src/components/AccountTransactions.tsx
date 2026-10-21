@@ -249,7 +249,7 @@ export default function AccountTransactions() {
                 balanceAfter: e.balanceAfter,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                   hour: "2-digit",
                   minute: "2-digit",
@@ -282,7 +282,7 @@ export default function AccountTransactions() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("price type deleted succesfully");
+        toast.success("price type deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -389,8 +389,7 @@ export default function AccountTransactions() {
 
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

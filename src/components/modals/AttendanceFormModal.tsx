@@ -164,8 +164,8 @@ export function AttendanceFormModal({
         onComplete();
         toast.error(
           q
-            ? "attendance updated succesfully"
-            : "attendance created succesfully"
+            ? "attendance updated successfully"
+            : "attendance created successfully"
         );
         form.reset();
       })
@@ -258,7 +258,7 @@ export function AttendanceFormModal({
                 </div>
               </div>
               <DialogFooter>
-                <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+                <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                   <Button
                     type="button"
                     onClick={() => form.reset()}

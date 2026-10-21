@@ -213,7 +213,7 @@ export default function ReportList({ employeeId }: { employeeId: string }) {
                 type: e.type,
                 date: new Date(e.date).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 fileUrl: e.fileUrl,
@@ -309,7 +309,7 @@ export default function ReportList({ employeeId }: { employeeId: string }) {
       />
       <ConfirmModal
         title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet a! Nihil`}
+        description={"This action cannot be undone. This will permanently delete the selected record."}
         meta={confirmModal.meta}
         onConfirm={() => {}}
         isLoading={confirmModal.isLoading}

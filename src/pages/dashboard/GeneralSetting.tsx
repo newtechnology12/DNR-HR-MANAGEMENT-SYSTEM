@@ -40,14 +40,13 @@ function GeneralSettongs() {
       await pocketbase.collection("settings").update(settings.id, values);
       toast.success("Settings updated successfully");
     } catch (error) {
-      console.log(error);
       toast.error("Failed to update settings");
     }
   }
 
   return (
-    <div className="grid grid-cols-2 py-2 gap-3">
-      <div className="border-r- border-dashed">
+    <div className="py-2">
+      <div>
         <div className="px-3 py-2 text-[12.5px] text-slate-500 font-medium uppercase">
           <h4>Company information</h4>
         </div>
@@ -61,8 +60,8 @@ function GeneralSettongs() {
                       className="space-y-2"
                       onSubmit={form.handleSubmit(onSubmit)}
                     >
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="!col-span-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="sm:!col-span-2">
                           <AppFormField
                             label="Company Name"
                             placeholder={"Company Name"}
@@ -82,7 +81,7 @@ function GeneralSettongs() {
                           name={"company_phone"}
                           form={form}
                         />
-                        <div className="col-span-2">
+                        <div className="sm:col-span-2">
                           <AppFormField
                             label="Company Address"
                             placeholder={"Company Address"}

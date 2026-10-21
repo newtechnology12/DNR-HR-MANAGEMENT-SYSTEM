@@ -1,3 +1,4 @@
+import displayDate from "@/utils/displayDate";
 import { Camera } from "react-feather";
 import { useState, useRef } from "react";
 import pocketbase from "@/lib/pocketbase";
@@ -46,7 +47,7 @@ export default function EmployeeProfile() {
   return (
     <>
       <div className="px-3">
-        <div className="flex items-start justify-between space-y-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 flex-col">
             <h2 className="text-lg font-semibold tracking-tight">
               Employee Profile
@@ -57,8 +58,8 @@ export default function EmployeeProfile() {
           </div>
         </div>
 
-        <div className="grid mt-2- grid-cols-8 gap-2">
-          <div className="col-span-6">
+        <div className="grid mt-2- grid-cols-1 lg:grid-cols-8 gap-2">
+          <div className="col-span-1 lg:col-span-6">
             <Card className="h-full !shadow-none">
               <CardHeader className="pt-2">
                 <CardTitle className="text-[15px] flex items-center justify-between">
@@ -90,7 +91,7 @@ export default function EmployeeProfile() {
               </CardContent>
             </Card>
           </div>
-          <div className="col-span-2">
+          <div className="col-span-1 lg:col-span-2">
             <Card className="h-full !shadow-none flex flex-col">
               <CardTitle className="text-[15px] px-4 py-3 flex items-center justify-between">
                 <span>Leaves taken vs remaining</span>
@@ -102,7 +103,7 @@ export default function EmployeeProfile() {
 
         <div className="mt-3">
           <Card>
-            <div className="flex px-2 gap-4 w-full border-b items-center justify-start">
+            <div className="flex px-2 gap-1 sm:gap-4 w-full border-b items-center justify-start overflow-x-auto">
               {[
                 "Attendance Log",
                 "Documents",
@@ -114,7 +115,7 @@ export default function EmployeeProfile() {
                   <a
                     key={i}
                     className={cn(
-                      "cursor-pointer px-6 capitalize text-center relative w-full- text-slate-700 text-[13px] sm:text-sm py-3  font-medium",
+                      "cursor-pointer px-3 sm:px-6 capitalize text-center relative whitespace-nowrap text-slate-700 text-[13px] sm:text-sm py-3  font-medium",
                       {
                         "text-primary ": activeTab === e,
                       }
@@ -244,7 +245,7 @@ function ProfileInformation({ employee, refetch }) {
           </p>
         </div>
       </div>
-      <div className="grid px-[6px] gap-6 my-2 pt-3 grid-cols-3">
+      <div className="grid px-[6px] gap-3 sm:gap-6 my-2 pt-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {[
           { key: "First name", value: employee?.name?.split(" ")[0] },
           { key: "Last name", value: employee?.name?.split(" ")[1] },
@@ -252,11 +253,7 @@ function ProfileInformation({ employee, refetch }) {
           { key: "Gender", value: employee.gender || "N.A" },
           {
             key: "Birth",
-            value: new Date(employee.birth).toLocaleDateString("en-US", {
-              month: "long",
-              day: "2-digit",
-              year: "numeric",
-            }),
+            value: displayDate(employee.birth),
           },
           { key: "National Id", value: employee.national_id || "N.A" },
           { key: "Phone", value: employee.phone || "N.A" },
@@ -302,12 +299,7 @@ function ProfileInformation({ employee, refetch }) {
           },
           {
             key: "Joined at",
-            value:
-              new Date(employee?.joined_at).toLocaleDateString("en-US", {
-                month: "long",
-                day: "2-digit",
-                year: "numeric",
-              }) || "N.A",
+            value: displayDate(employee?.joined_at),
           },
         ].map((e, i) => {
           return (

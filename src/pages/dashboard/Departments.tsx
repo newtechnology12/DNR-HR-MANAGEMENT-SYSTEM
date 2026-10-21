@@ -3,7 +3,6 @@ import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle } from "lucide-react";
-import { Link } from "react-router-dom";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
@@ -17,6 +16,8 @@ import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
 import BreadCrumb from "@/components/breadcrumb";
 import { DepartmentFormModal } from "@/components/modals/DepartmentFormModal";
+import StatCard from "@/components/StatCard";
+import { Briefcase, Building2, UserCog, Users } from "lucide-react";
 
 export default function Departments() {
   const columns: ColumnDef<any>[] = [
@@ -51,14 +52,13 @@ export default function Departments() {
         <DataTableColumnHeader column={column} title="Name" />
       ),
       cell: ({ row }) => (
-        <div className="w-[80px]- flex items-center gap-2">
-          <Link
-            to={""}
-            className="hover:underline flex items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("name")}
-          </Link>
-        </div>
+        <button
+          type="button"
+          onClick={() => editRow.edit(row.original)}
+          className="capitalize hover:text-primary hover:underline"
+        >
+          {row.getValue("name")}
+        </button>
       ),
       enableSorting: true,
       enableHiding: true,
@@ -162,7 +162,7 @@ export default function Departments() {
           ...cleanObject({
             filter: [searchQ, filters].filter((e) => e).join("&&"),
             sort: sorters,
-            expand: `departments,created_by,manager`,
+            expand: `departments,created_by,head`,
           }),
         })
         .then((e) => {
@@ -171,10 +171,10 @@ export default function Departments() {
               return {
                 id: e.id,
                 name: e.name,
-                manager: e.expand?.manager?.name,
+                manager: e.expand?.head?.name,
                 created: new Date(e.created).toLocaleDateString("en-US", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
                 }),
                 original: e,
@@ -186,6 +186,24 @@ export default function Departments() {
     },
     enabled: true,
   });
+
+  const statsQuery = useQuery({
+    queryKey: ["departments-stats"],
+    queryFn: async () => {
+      const [total, employees, designations, withManager] = await Promise.all([
+        pocketbase.collection("departments").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase.collection("users").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase.collection("designations").getList(1, 1, {}).then((e) => e.totalItems),
+        pocketbase
+          .collection("departments")
+          .getList(1, 1, { filter: `head != ""` })
+          .then((e) => e.totalItems),
+      ]);
+      return { total, employees, designations, withManager };
+    },
+    enabled: true,
+  });
+  const statsLoading = statsQuery.status === "loading";
 
   const newRecordModal = useModalState();
 
@@ -201,7 +219,7 @@ export default function Departments() {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("departments deleted succesfully");
+        toast.success("Department deleted successfully");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
@@ -211,10 +229,44 @@ export default function Departments() {
 
   return (
     <>
-      <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
+      <div className="space-y-4 px-4 py-4 sm:px-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Departments"
+            icon={Building2}
+            tone="default"
+            loading={statsLoading}
+            value={statsQuery.data?.total}
+            description="Departments in the company"
+          />
+          <StatCard
+            title="Total Employees"
+            icon={Users}
+            tone="info"
+            loading={statsLoading}
+            value={statsQuery.data?.employees}
+            description="Employees across all departments"
+          />
+          <StatCard
+            title="Designations"
+            icon={Briefcase}
+            tone="warning"
+            loading={statsLoading}
+            value={statsQuery.data?.designations}
+            description="Job designations defined"
+          />
+          <StatCard
+            title="With Manager"
+            icon={UserCog}
+            tone="success"
+            loading={statsLoading}
+            value={statsQuery.data?.withManager}
+            description="Departments with a manager assigned"
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col items-start gap-1">
+            <h2 className="text-xl font-bold tracking-tight text-slate-900">
               All Departments
             </h2>
             <BreadCrumb
@@ -222,8 +274,8 @@ export default function Departments() {
             />
           </div>
           <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create new Department.</span>
+            <PlusCircle size={16} />
+            <span>Create Department</span>
           </Button>
         </div>
         <DataTable
@@ -267,9 +319,10 @@ export default function Departments() {
         open={newRecordModal.isOpen || editRow.isOpen}
       />
       <ConfirmModal
-        title={"Are you sure you want to delete?"}
-        description={`Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, amet
-        a! Nihil`}
+        title={"Delete this department?"}
+        description={
+          "This will permanently remove the department. Employees assigned to it will keep their record but lose this department reference. This action cannot be undone."
+        }
         meta={confirmModal.meta}
         onConfirm={handleDelete}
         isLoading={confirmModal.isLoading}

@@ -125,16 +125,16 @@ function Option(props) {
 }
 
 const controlStyles = {
-  base: "border rounded-[3px] bg-white hover:cursor-pointer px-1 py-[4.5px]",
-  focus: "border-primary ring-1- ring-primary-",
-  nonFocus: "border-gray-200 hover:border-slate-200 hover:bg-slate-100",
+  base: "min-h-[38px] border rounded-md bg-white shadow-sm hover:cursor-pointer px-1 py-[1px] transition-[border-color,box-shadow]",
+  focus: "border-primary ring-[3px] ring-primary/15",
+  nonFocus: "border-slate-300 hover:border-slate-400",
 };
-const placeholderStyles = "text-gray-500 !text-[13px] font-medium pl-1 py-0.5";
+const placeholderStyles = "text-slate-400 !text-[13.5px] pl-1 py-0.5";
 const selectInputStyles =
   "pl-1 !text-[12.3px] text-slate-500 font-medium py-0.5";
 const valueContainerStyles = "p-1 gap-1";
 const singleValueStyles =
-  "leading-7- text-[13px] text-slate-500 font-medium ml-1";
+  "text-[13.5px] text-slate-900 ml-1";
 const multiValueStyles =
   "bg-gray-100 rounded-[3px] items-center py-0.5 pl-2 pr-1 gap-1.5";
 const multiValueLabelStyles = "leading-6 py-0.5";
@@ -147,10 +147,10 @@ const indicatorSeparatorStyles = "bg-gray-200 mt-[4px] h-[18px]";
 const dropdownIndicatorStyles =
   "p-1 hover:bg-gray-100 text-gray-500 rounded-[3px] hover:text-black";
 const menuStyles =
-  "p-1 mt-2 border shadow-md border-gray-200 bg-white rounded-[3px]";
+  "p-1 mt-1 border shadow-lg border-slate-200 bg-white rounded-md";
 const groupHeadingStyles = "ml-3 mt-2 mb-1 text-gray-500 text-sm";
 const optionStyles = {
-  base: "hover:cursor-pointer my-1 truncate flex text-slate-500 capitalize font-medium !text-[12.3px] px-3 py-[8px] rounded-[3px]",
+  base: "hover:cursor-pointer my-0.5 truncate flex text-slate-700 capitalize !text-[13px] px-3 py-[7px] rounded",
   focus: "bg-gray-100 active:bg-gray-200",
   selected:
     "after:content-['✔'] !flex items-center bg-slate-100 after:ml-2 after:text-green-500 text-gray-500",

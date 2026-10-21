@@ -40,7 +40,7 @@ export default function ExpensesReport() {
       const reports = expenses_categories.map((category) => {
         const totalAmount = expenses
           .filter((e) => e.expenseCategory === category.id)
-          .reduce((acc, e) => acc + e.amount, 0);
+          .reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         return {
           category: category.name,
           totalAmount,
@@ -58,8 +58,6 @@ export default function ExpensesReport() {
     },
     enabled: true,
   });
-
-  console.log(analyticsQuery?.data);
 
   const presets = [
     {
@@ -114,7 +112,7 @@ export default function ExpensesReport() {
   });
   return (
     <div className="sm:px-4 px-2">
-      <div className="flex flex-col mb-4 sm:flex-row sm:gap-0 sm:items-center gap-3 items-start justify-between space-y-2 mb-3">
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 flex-col">
           <h2 className="text-base font-semibold tracking-tight">
             Expenses Report
@@ -134,6 +132,7 @@ export default function ExpensesReport() {
             <DropdownMenuContent>
               {presets.map((preset) => (
                 <DropdownMenuItem
+                  key={preset.label}
                   onClick={() => {
                     setDate(preset.value);
                   }}
@@ -154,28 +153,31 @@ export default function ExpensesReport() {
         </div>
         <div className="bg-white mt-3">
           <table className="w-full border">
-            <tr className="text-left text-[11px] bg-slate-50 font-medium uppercase">
-              <th className="py-3 border-r border-b px-3">Category</th>
-              <th className="py-3 border-b px-3">Total Amount</th>
-            </tr>
-
-            {analyticsQuery?.data?.expenses_reports?.map((e: any) => (
-              <tr>
-                <td className="py-[12px] px-3 border-r border-b">
-                  <span className="text-[13px] font-medium">{e.category}</span>
-                </td>
-                <td
-                  className={cn(
-                    "py-[6px] text-[13px] text-slate-700 px-3 border-b font-medium",
-                    {
-                      "text-green-500 font-semibold": e.isMain,
-                    }
-                  )}
-                >
-                  {e?.totalAmount?.toLocaleString()} FRW
-                </td>
+            <thead>
+              <tr className="text-left text-[11px] bg-slate-50 font-medium uppercase">
+                <th className="py-3 border-r border-b px-3">Category</th>
+                <th className="py-3 border-b px-3">Total Amount</th>
               </tr>
-            ))}
+            </thead>
+            <tbody>
+              {analyticsQuery?.data?.expenses_reports?.map((e: any, i) => (
+                <tr key={i}>
+                  <td className="py-[12px] px-3 border-r border-b">
+                    <span className="text-[13px] font-medium">{e.category}</span>
+                  </td>
+                  <td
+                    className={cn(
+                      "py-[6px] text-[13px] text-slate-700 px-3 border-b font-medium",
+                      {
+                        "text-success font-semibold": e.isMain,
+                      }
+                    )}
+                  >
+                    {e?.totalAmount?.toLocaleString()} FRW
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
       </div>

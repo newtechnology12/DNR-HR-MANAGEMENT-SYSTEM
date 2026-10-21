@@ -170,7 +170,7 @@ import {
                 />
               </div>
               <DialogFooter>
-                <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+                <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                   <Button
                     onClick={() => form.reset()}
                     className="w-full text-slate-600"

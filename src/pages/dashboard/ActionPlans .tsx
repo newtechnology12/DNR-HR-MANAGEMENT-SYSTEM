@@ -98,24 +98,24 @@ const calculateTaskStatus = (startDate: Date, endDate: Date, status: string) => 
   
     const DescriptionModal = () => (
       <Dialog open={isDescriptionModalOpen} onOpenChange={setIsDescriptionModalOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Description</DialogTitle>
           </DialogHeader>
-          <div className="whitespace-pre-wrap">{selectedDescription}</div>
+          <div className="whitespace-pre-wrap max-h-[60vh] overflow-y-auto">{selectedDescription}</div>
         </DialogContent>
       </Dialog>
     );
-  
+    
     const CommentModal = () => (
       <Dialog open={isCommentModalOpen} onOpenChange={setIsCommentModalOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Add Comment</DialogTitle>
           </DialogHeader>
           <div className="mt-4">
             <textarea
-              className="w-full p-2 border rounded"
+              className="w-full min-h-[100px] p-3 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
               placeholder="Enter your comment..."
               value={selectedTask?.comment || ""}
               onChange={(e) =>
@@ -123,7 +123,7 @@ const calculateTaskStatus = (startDate: Date, endDate: Date, status: string) => 
               }
             />
             <Button
-              className="mt-4"
+              className="mt-4 w-full sm:w-auto"
               onClick={async () => {
                 try {
                   await pocketbase.collection("actionPlans").update(selectedTask.id, {
@@ -143,21 +143,21 @@ const calculateTaskStatus = (startDate: Date, endDate: Date, status: string) => 
         </DialogContent>
       </Dialog>
     );
-  
+    
     const HoursModal = () => (
       <Dialog open={isHoursModalOpen} onOpenChange={setIsHoursModalOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Add Hours</DialogTitle>
           </DialogHeader>
-          <div className="mt-4">
+          <div className="mt-4 space-y-4">
             <Input
               type="number"
               placeholder="Enter hours spent today"
               value={hoursInput}
               onChange={(e) => setHoursInput(e.target.value)}
             />
-            <Button className="mt-4" onClick={handleAddHours}>
+            <Button className="w-full sm:w-auto" onClick={handleAddHours}>
               Add Hours
             </Button>
           </div>
@@ -271,7 +271,7 @@ const calculateTaskStatus = (startDate: Date, endDate: Date, status: string) => 
           <div className="capitalize">
             {new Date(row.getValue("startDate")).toLocaleDateString("en-US", {
               day: "2-digit",
-              month: "long",
+              month: "short",
               year: "numeric",
             })}
           </div>
@@ -288,7 +288,7 @@ const calculateTaskStatus = (startDate: Date, endDate: Date, status: string) => 
           <div className="capitalize">
             {new Date(row.getValue("endDate")).toLocaleDateString("en-US", {
               day: "2-digit",
-              month: "long",
+              month: "short",
               year: "numeric",
             })}
           </div>

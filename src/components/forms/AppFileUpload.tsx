@@ -7,11 +7,13 @@ function AppFileUpload({
   label,
   form,
   preview,
+  required = false,
 }: {
   form: any;
   name: string;
   label: string;
   preview?: any;
+  required?: boolean;
 }) {
   return (
     <div>
@@ -22,11 +24,12 @@ function AppFileUpload({
           <FormItem>
             <FormLabel>
               <Label
-                className="text-[13px] mb-1 text-slate-600"
+                className="mb-1 text-[12.5px] font-medium text-slate-700"
                 htmlFor={label}
               >
-                {label}
-              </Label>
+              {label}
+              {required && <span className="ml-0.5 text-red-600">*</span>}
+            </Label>
             </FormLabel>
             <Dropzone
               preview={preview}

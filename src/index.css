@@ -1,35 +1,10 @@
+@import "@fontsource-variable/inter";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
-  @apply bg-slate-100 overflow-x-hidden;
-}
-
-@font-face {
-  font-family: "Outfit";
-  src: url("/fonts/Outfit/Outfit-Regular.ttf") format("truetype");
-  font-weight: 400;
-}
-@font-face {
-  font-family: "Outfit";
-  src: url("/fonts/Outfit/Outfit-Medium.ttf") format("truetype");
-  font-weight: 500;
-}
-@font-face {
-  font-family: "Outfit";
-  src: url("/fonts/Outfit/Outfit-SemiBold.ttf") format("truetype");
-  font-weight: 600;
-}
-@font-face {
-  font-family: "Outfit";
-  src: url("/fonts/Outfit/Outfit-Bold.ttf") format("truetype");
-  font-weight: 700;
-}
-@font-face {
-  font-family: "Outfit";
-  src: url("/fonts/Outfit/Outfit-ExtraBold.ttf") format("truetype");
-  font-weight: 800;
+  @apply bg-slate-50 overflow-x-hidden font-sans antialiased;
 }
 
 @keyframes indeterminateAnimation {
@@ -113,3 +88,53 @@ input[type="password"]::-webkit-text-security-disc {
   text-indent: 1px;
   text-overflow: "";
 } */
+
+/* ------------------------------------------------------------------
+   System-wide data grid (same look as the shared DataTable):
+   vertical column lines, light header, zebra rows, hover.
+   Borders/backgrounds use normal specificity; spacing and type use
+   :where() so per-cell utilities (text-right, colours…) still win.
+   ------------------------------------------------------------------ */
+.dnr-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+:where(.dnr-grid) th {
+  padding: 9px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  white-space: nowrap;
+  text-align: left;
+}
+:where(.dnr-grid) td {
+  padding: 8px 12px;
+  vertical-align: middle;
+}
+.dnr-grid thead th {
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0;
+}
+.dnr-grid tbody td {
+  border-bottom: 1px solid #eef2f6;
+  border-right: 1px solid #eef2f6;
+}
+.dnr-grid th:last-child,
+.dnr-grid td:last-child {
+  border-right: 0;
+}
+.dnr-grid tbody tr:nth-child(even) {
+  background: rgb(248 250 252 / 0.7);
+}
+.dnr-grid tbody tr:hover {
+  background: #f1f5f9;
+}
+.dnr-grid tfoot td {
+  border-right: 0;
+}

@@ -1,0 +1,247 @@
+{
+  "$comment": "Single source of truth for permission names (roles.permitions). Read by the permission matrix screen, the role editor and the seed scripts. Add new permissions here.",
+  "groups": [
+    {
+      "key": "admin",
+      "module": "M10",
+      "title": "Administration & security",
+      "permissions": [
+        { "name": "view_dashboard", "title": "View the dashboard" },
+        { "name": "access_general_settings", "title": "Manage users, role assignments and system settings" },
+        { "name": "view_security_admin", "title": "View users, roles, permission matrix and settings (read-only)" },
+        { "name": "confirm_role_changes", "title": "Confirm permission-matrix changes proposed by another administrator" },
+        { "name": "manage_security_settings", "title": "Change password, lockout, 2FA and session policy" },
+        { "name": "view_system_health", "title": "View system health, backups and the e-mail / SMS log" },
+        { "name": "manage_delegations", "title": "Set up or end approval delegations for other people" },
+        { "name": "import_data", "title": "Import data (migration templates)" },
+        { "name": "view_audit_logs", "title": "View the audit log" },
+        { "name": "export_audit_logs", "title": "Export the audit log" }
+      ]
+    },
+    {
+      "key": "setup",
+      "module": "M1",
+      "title": "Setup & master data",
+      "permissions": [
+        { "name": "view_master_data", "title": "View chart of accounts, funding sources, projects, fiscal years and tax rates" },
+        { "name": "manage_chart_of_accounts", "title": "Create and change GL accounts and cost centres" },
+        { "name": "manage_funding_sources", "title": "Create and change funding sources" },
+        { "name": "manage_projects", "title": "Create and change projects" },
+        { "name": "manage_fiscal_years", "title": "Create fiscal years and choose the current year" },
+        { "name": "manage_tax_rates", "title": "Create and change dated tax rates" },
+        { "name": "confirm_tax_rates", "title": "Confirm tax and statutory rates against official RRA / RSSB sources" },
+        { "name": "view_departments", "title": "View departments" },
+        { "name": "create_department", "title": "Create and change departments and department heads" },
+        { "name": "manage_approval_workflows", "title": "Manage approval workflows and approval limits" },
+        { "name": "manage_finance_settings", "title": "Change finance controls (budget control, tolerances, thresholds)" },
+        { "name": "manage_procurement_settings", "title": "Manage document numbering, procurement categories and units" }
+      ]
+    },
+    {
+      "key": "budget",
+      "module": "M2",
+      "title": "Budgeting & budget control",
+      "permissions": [
+        { "name": "view_budgets", "title": "View budgets, utilisation and budget reports" },
+        { "name": "manage_budgets", "title": "Prepare, revise and submit budgets" },
+        { "name": "approve_budgets", "title": "Approve budgets and budget revisions" },
+        { "name": "override_budget", "title": "Override an insufficient budget balance (reason required, flagged in reports)" },
+        { "name": "export_budgets", "title": "Export budget reports" }
+      ]
+    },
+    {
+      "key": "procurement",
+      "module": "M3",
+      "title": "Procurement",
+      "permissions": [
+        { "name": "view_procurement_dashboard", "title": "View the procurement dashboard" },
+        { "name": "create_purchase_requisition", "title": "Raise purchase requisitions (own)" },
+        { "name": "view_purchase_requisitions", "title": "View purchase requisitions" },
+        { "name": "approve_purchase_requisitions", "title": "Approve purchase requisitions" },
+        { "name": "view_procurement_plans", "title": "View procurement plans" },
+        { "name": "manage_procurement_plan", "title": "Prepare and submit annual procurement plans" },
+        { "name": "approve_procurement_plans", "title": "Approve procurement plans" },
+        { "name": "view_suppliers", "title": "View suppliers" },
+        { "name": "manage_suppliers", "title": "Register suppliers, contacts, bank details and documents" },
+        { "name": "approve_suppliers", "title": "Approve supplier registrations and bank-detail changes" },
+        { "name": "evaluate_suppliers", "title": "Evaluate supplier performance" },
+        { "name": "view_rfqs", "title": "View RFQs and quotations" },
+        { "name": "manage_rfqs", "title": "Create and send RFQs, record quotations" },
+        { "name": "award_rfqs", "title": "Select the winning supplier" },
+        { "name": "manage_contracts", "title": "Create, submit and terminate procurement contracts" },
+        { "name": "approve_contracts", "title": "Approve procurement contracts" },
+        { "name": "view_purchase_orders", "title": "View purchase orders and goods received notes" },
+        { "name": "manage_purchase_orders", "title": "Create, submit, send and close purchase orders" },
+        { "name": "approve_purchase_orders", "title": "Approve purchase orders" },
+        { "name": "amend_purchase_orders", "title": "Amend approved purchase orders (re-approval required)" },
+        { "name": "receive_goods", "title": "Record goods received notes (full / partial, inspection)" },
+        { "name": "authorize_over_receipt", "title": "Accept deliveries above the ordered quantity (within tolerance)" },
+        { "name": "approve_purchase_returns", "title": "Approve returns to suppliers" },
+        { "name": "view_inventory", "title": "View warehouses and stock" },
+        { "name": "manage_inventory", "title": "Manage warehouses, items and stock adjustments" },
+        { "name": "view_procurement_reports", "title": "View procurement reports" },
+        { "name": "export_procurement", "title": "Export procurement plans, purchase orders and reports" }
+      ]
+    },
+    {
+      "key": "payables",
+      "module": "M4",
+      "title": "Supplier invoices & payment vouchers",
+      "permissions": [
+        { "name": "view_invoices", "title": "View supplier invoices" },
+        { "name": "manage_invoices", "title": "Record, correct and submit supplier invoices" },
+        { "name": "resolve_invoice_exceptions", "title": "Resolve three-way match and duplicate exceptions" },
+        { "name": "approve_invoices", "title": "Approve supplier invoices" },
+        { "name": "view_payment_vouchers", "title": "View payment vouchers" },
+        { "name": "manage_payment_vouchers", "title": "Prepare and submit payment vouchers" },
+        { "name": "approve_payment_vouchers", "title": "Approve payment vouchers" },
+        { "name": "export_invoices", "title": "Export invoices, vouchers and payment reports" }
+      ]
+    },
+    {
+      "key": "treasury",
+      "module": "M5",
+      "title": "Bank, cash & reconciliation",
+      "permissions": [
+        { "name": "view_treasury", "title": "View bank and cash accounts, receipts, payments and transfers" },
+        { "name": "manage_bank_accounts", "title": "Create and change bank and cash accounts" },
+        { "name": "manage_treasury", "title": "Record receipts, cash payments and inter-account transfers" },
+        { "name": "approve_treasury", "title": "Approve receipts, transfers and payment releases" },
+        { "name": "record_payments", "title": "Execute approved payments (bank / cash)" },
+        { "name": "approve_payment_execution", "title": "Release payments for execution (bank signatory)" },
+        { "name": "prepare_bank_reconciliation", "title": "Import statements and prepare bank reconciliations" },
+        { "name": "approve_bank_reconciliation", "title": "Approve bank reconciliations" },
+        { "name": "export_treasury", "title": "Export bank, cash and reconciliation reports" }
+      ]
+    },
+    {
+      "key": "payroll",
+      "module": "M6",
+      "title": "Payroll",
+      "permissions": [
+        { "name": "view_payrolls", "title": "View payroll runs (totals)" },
+        { "name": "view_payroll_details", "title": "View payroll detail and all payslips" },
+        { "name": "create_payroll", "title": "Prepare, calculate and submit payroll" },
+        { "name": "approve_payroll", "title": "Approve payroll" },
+        { "name": "manage_salaries", "title": "Edit salary structures, allowances and deductions" },
+        { "name": "manage_payroll_settings", "title": "Configure PAYE bands and statutory contributions" },
+        { "name": "mark_payroll_paid", "title": "Record payroll payment (not the preparer)" },
+        { "name": "export_payroll", "title": "Export payroll register, bank file and deduction schedules" }
+      ]
+    },
+    {
+      "key": "assets",
+      "module": "M7",
+      "title": "Fixed assets",
+      "permissions": [
+        { "name": "view_fixed_assets", "title": "View the fixed asset register" },
+        { "name": "manage_fixed_assets", "title": "Register assets, transfers, maintenance and verification" },
+        { "name": "approve_fixed_assets", "title": "Approve asset capitalisation and register changes" },
+        { "name": "request_asset_transfer", "title": "Request asset transfers and disposals for own department" },
+        { "name": "approve_asset_disposals", "title": "Approve asset transfers and disposals" },
+        { "name": "run_depreciation", "title": "Calculate and post depreciation runs" },
+        { "name": "approve_depreciation", "title": "Approve depreciation runs" },
+        { "name": "export_assets", "title": "Export asset schedules and depreciation" }
+      ]
+    },
+    {
+      "key": "ledger",
+      "module": "M8",
+      "title": "General ledger & period close",
+      "permissions": [
+        { "name": "view_journals", "title": "View journal entries, GL and trial balance" },
+        { "name": "manage_journals", "title": "Prepare manual, recurring and reversal journals" },
+        { "name": "approve_journals", "title": "Approve and post journal entries" },
+        { "name": "close_periods", "title": "Close fiscal periods" },
+        { "name": "reopen_periods", "title": "Approve re-opening a closed period" },
+        { "name": "export_ledger", "title": "Export the GL, journals and trial balance" }
+      ]
+    },
+    {
+      "key": "reports",
+      "module": "M9",
+      "title": "Financial statements & reports",
+      "permissions": [
+        { "name": "view_financial_reports", "title": "View financial statements and management reports" },
+        { "name": "view_department_reports", "title": "View own department's reports" },
+        { "name": "view_payroll_reports", "title": "View payroll reports" },
+        { "name": "view_asset_reports", "title": "View fixed-asset reports" },
+        { "name": "view_executive_dashboard", "title": "View the executive dashboard" },
+        { "name": "export_reports", "title": "Export financial statements and reports (Excel / PDF)" }
+      ]
+    },
+    {
+      "key": "hr",
+      "module": "HR",
+      "title": "Employees & HR",
+      "permissions": [
+        { "name": "access_employee_portal", "title": "Employee portal (own records, payslips, leave)" },
+        { "name": "view_employees", "title": "View employees" },
+        { "name": "view_employee_profile", "title": "View employee profiles" },
+        { "name": "create_employee", "title": "Create employees" },
+        { "name": "update_employee", "title": "Update employees" },
+        { "name": "delete_employee_documents", "title": "Delete employee documents (staff can never delete their own)" },
+        { "name": "view_designations", "title": "View designations" },
+        { "name": "create_designations", "title": "Create designations" },
+        { "name": "update_designations", "title": "Update designations" },
+        { "name": "view_leaves", "title": "View leave requests" },
+        { "name": "create_leave", "title": "Request leave" },
+        { "name": "update_leave", "title": "Approve and update leave" },
+        { "name": "manage_leave_policy", "title": "Manage leave types, public holidays and entitlement rules" },
+        { "name": "view_attendance_logs", "title": "View attendance logs" },
+        { "name": "create_attendance", "title": "Create attendance" },
+        { "name": "update_attendance", "title": "Update attendance" },
+        { "name": "view_attendace_report", "title": "View attendance report" },
+        { "name": "view_employee_timesheet", "title": "View employee timesheet" },
+        { "name": "view_timesheet_report", "title": "View timesheet report" },
+        { "name": "view_employee_perfomances", "title": "View employee performance" },
+        { "name": "create_employee_perfomance", "title": "Create performance evaluations" },
+        { "name": "update_employee_perfomance", "title": "Update performance evaluations" },
+        { "name": "evaluate_staff", "title": "Evaluate colleagues in own department (appraisals)" },
+        { "name": "manage_appraisals", "title": "Manage appraisal templates and cycles, finalise results" }
+      ]
+    },
+    {
+      "key": "legacy_finance",
+      "module": "Other",
+      "title": "Petty cash & staff expenses",
+      "permissions": [
+        { "name": "view_expenses", "title": "View expense requests" },
+        { "name": "create_expense", "title": "Create expense requests" },
+        { "name": "approve_or_reject_expense", "title": "Approve or reject expense requests" },
+        { "name": "view_expense_reports", "title": "View expense reports" },
+        { "name": "view_employee_prepayments", "title": "View employee prepayments" },
+        { "name": "create_employee_prepayments", "title": "Create employee prepayments" },
+        { "name": "update_employee_prepayments", "title": "Update employee prepayments" },
+        { "name": "view_petty_cash_accounts", "title": "View petty cash accounts" },
+        { "name": "create_petty_cash_account", "title": "Create petty cash accounts" },
+        { "name": "update_petty_cash_account", "title": "Update petty cash accounts" },
+        { "name": "view_petty_cash_requests", "title": "View petty cash requests" },
+        { "name": "approve_or_reject_request", "title": "Approve or reject petty cash requests" },
+        { "name": "refill_accounts", "title": "Refill petty cash accounts" }
+      ]
+    },
+    {
+      "key": "legacy_assets",
+      "module": "Other",
+      "title": "Equipment & asset requests",
+      "permissions": [
+        { "name": "view_assets", "title": "View equipment inventory" },
+        { "name": "create_assets", "title": "Create equipment records" },
+        { "name": "update_assets", "title": "Update equipment records" },
+        { "name": "view_assets_categories", "title": "View asset categories" },
+        { "name": "create_assets_category", "title": "Create asset categories" },
+        { "name": "update_assets_category", "title": "Update asset categories" },
+        { "name": "view_assets_types", "title": "View asset types" },
+        { "name": "create_assets_type", "title": "Create asset types" },
+        { "name": "update_assets_type", "title": "Update asset types" },
+        { "name": "view_assets_requests", "title": "View own equipment requests" },
+        { "name": "view_all_assets_requests", "title": "View all equipment requests" },
+        { "name": "reject_or_approve_assets_requests", "title": "Approve or reject equipment requests" },
+        { "name": "view_assets_allocations", "title": "View equipment allocations" },
+        { "name": "create_asset_allocation", "title": "Create equipment allocations" },
+        { "name": "view_asset_allocation_details", "title": "View equipment allocation detail" }
+      ]
+    }
+  ]
+}

@@ -94,8 +94,7 @@ function Employees({ onSelect }: any) {
                   No Employee Found
                 </h4>
                 <p className="text-[15px] max-w-sm leading-8 text-slate-500">
-                  Lorem ipsum dolor, sit amet consectetur adipisicing elit.
-                  Vitae temporibus.
+                  No employees match your search. Try a different name.
                 </p>
               </div>
             </>

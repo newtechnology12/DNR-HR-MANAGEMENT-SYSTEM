@@ -83,9 +83,9 @@ export default function PayrollDetails() {
       const objs = {
         Employee: e.expand.employee.name,
         Department: e?.expand?.employee.expand?.department?.name,
-        "Net sallary": e.net_sallary,
-        "Gross salary": e.gross_salary,
-        "Total deductions": e.deductions.reduce((acc, e) => acc + e.amount, 0),
+        "Net Salary": e.net_sallary,
+        "Gross Salary": e.gross_salary,
+        "Total Deductions": e.deductions.reduce((acc, e) => acc + e.amount, 0),
       };
       e.deductions.forEach((deduction) => {
         objs[deduction.name] = deduction.amount;
@@ -97,13 +97,13 @@ export default function PayrollDetails() {
     const last_row = {
       Employee: "TOTAL",
       Department: "",
-      "Net sallary": report_data.reduce((acc, e) => acc + e["Net sallary"], 0),
-      "Gross salary": report_data.reduce(
-        (acc, e) => acc + e["Gross salary"],
+      "Net Salary": report_data.reduce((acc, e) => acc + e["Net Salary"], 0),
+      "Gross Salary": report_data.reduce(
+        (acc, e) => acc + e["Gross Salary"],
         0
       ),
-      "Total deductions": report_data.reduce(
-        (acc, e) => acc + e["Total deductions"],
+      "Total Deductions": report_data.reduce(
+        (acc, e) => acc + e["Total Deductions"],
         0
       ),
     };
@@ -131,12 +131,12 @@ export default function PayrollDetails() {
     ?.reduce((acc, e) => acc + e, 0);
 
   const total_net_sallaries = payslips?.reduce(
-    (acc, e) => acc + e?.net_sallary,
+    (acc, e) => acc + (Number(e?.net_sallary) || 0),
     0
   );
 
   const total_gross_sallaries = payslips?.reduce(
-    (acc, e) => acc + e?.gross_salary,
+    (acc, e) => acc + (Number(e?.gross_salary) || 0),
     0
   );
 
@@ -148,19 +148,17 @@ export default function PayrollDetails() {
 
   return (
     <>
-      <div className="px-4">
-        <div className="flex items-start justify-between space-y-2">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
-              Payroll Details
-            </h2>
-            <BreadCrumb
-              items={[{ title: "Payroll Details", link: "/dashboard" }]}
-            />
-          </div>
+      <div className="space-y-4 px-4 py-4 sm:px-6">
+        <div className="flex flex-col items-start gap-1">
+          <h2 className="text-xl font-bold tracking-tight text-slate-900">
+            Payroll Details
+          </h2>
+          <BreadCrumb
+            items={[{ title: "Payroll Details", link: "/dashboard" }]}
+          />
         </div>
         <div>
-          <Card className="rounded-[4px] overflow-hidden">
+          <Card className="overflow-hidden">
             <div className="mt-1">
               <div className="px-3 py-3">
                 <Button
@@ -193,113 +191,119 @@ export default function PayrollDetails() {
             <div className="border-t border-dashed">
               <ScrollArea className="w-full whitespace-nowrap">
                 <table className="w-full">
-                  <tr className="text-left">
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Employee
-                    </th>
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Department
-                    </th>
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Gross Sallary
-                    </th>
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Prepayments
-                    </th>
-                    {payslips[0]?.deductions?.map((deduction, i) => {
+                  <thead>
+                    <tr className="text-left">
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Employee
+                      </th>
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Department
+                      </th>
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Gross Salary
+                      </th>
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Prepayments
+                      </th>
+                      {payslips[0]?.deductions?.map((deduction, i) => {
+                        return (
+                          <th
+                            key={i}
+                            className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b"
+                          >
+                            {truncateWithEllipsis(deduction.name, 15)}
+                          </th>
+                        );
+                      })}
+
+                      <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
+                        Net Salary
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payroll?.expand?.payslips?.map((e) => {
+                      const total_prepayments = (e?.prepayments || [])?.reduce(
+                        (acc, e) => acc + e.amount,
+                        0
+                      );
                       return (
-                        <th
-                          key={i}
-                          className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b"
-                        >
-                          {truncateWithEllipsis(deduction.name, 15)}
-                        </th>
+                        <tr key={e.id}>
+                          <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
+                            {e?.expand?.employee?.name}
+                          </td>
+                          <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
+                            {e?.expand?.employee?.expand?.department?.name}
+                          </td>
+                          <td className="font-medium px-5 text-slate-600 capitalize  text-[13px] py-[14px] border-b">
+                            {Number(e.gross_salary)?.toLocaleString()} FRW
+                          </td>
+                          <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
+                            {Number(total_prepayments)?.toLocaleString()} FRW
+                          </td>
+                          {e.deductions.map((deduction, i) => {
+                            return (
+                              <td
+                                key={i}
+                                className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b"
+                              >
+                                {Number(deduction.amount)?.toLocaleString()} FRW
+                              </td>
+                            );
+                          })}
+                          <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
+                            {
+                              <span className="text-success">
+                                {Number(e.net_sallary)?.toLocaleString()} FRW
+                              </span>
+                            }
+                          </td>
+                        </tr>
                       );
                     })}
-
-                    <th className="font-medium px-5  capitalize  text-sm py-2 bg-slate-50 border-b">
-                      Net Sallary
-                    </th>
-                  </tr>
-                  {payroll?.expand?.payslips?.map((e) => {
-                    const total_prepayments = (e?.prepayments || [])?.reduce(
-                      (acc, e) => acc + e.amount,
-                      0
-                    );
-                    return (
+                    {payroll?.expand?.payslips?.length !== 0 && (
                       <tr>
-                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
-                          {e?.expand?.employee?.name}
+                        <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
+                          Total
                         </td>
-                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
-                          {e?.expand?.employee?.expand?.department?.name}
+                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-2 border-b">
+                          ---
                         </td>
-                        <td className="font-medium px-5 text-slate-600 capitalize  text-[13px] py-[14px] border-b">
-                          {Number(e.gross_salary)?.toLocaleString()} FRW
+                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-2 border-b">
+                          {Number(total_gross_sallaries).toLocaleString()}
+                          FRW
                         </td>
-                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
-                          {Number(total_prepayments)?.toLocaleString()} FRW
+                        <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
+                          {prepayments_covered?.toLocaleString()} FRW
                         </td>
-                        {e.deductions.map((deduction, i) => {
+                        {payslips[0]?.deductions?.map((deduction, i) => {
                           return (
                             <td
                               key={i}
-                              className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b"
+                              className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b"
                             >
-                              {Number(deduction.amount)?.toLocaleString()} FRW
+                              {Number(
+                                payslips?.reduce(
+                                  (acc, e) =>
+                                    acc +
+                                    (Number(
+                                      e?.deductions?.find(
+                                        (d) => d.name === deduction.name
+                                      )?.amount
+                                    ) || 0),
+                                  0
+                                )
+                              ).toLocaleString()}{" "}
+                              FRW
                             </td>
                           );
                         })}
-                        <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-[14px] border-b">
-                          {
-                            <span className="text-green-500">
-                              {Number(e.net_sallary)?.toLocaleString()} FRW
-                            </span>
-                          }
+                        <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
+                          {Number(total_net_sallaries).toLocaleString()} FRW
                         </td>
                       </tr>
-                    );
-                  })}
-                  {payroll?.expand?.payslips?.length !== 0 && (
-                    <tr>
-                      <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
-                        Total
-                      </td>
-                      <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-2 border-b">
-                        ---
-                      </td>
-                      <td className="font-medium px-5 text-slate-600  capitalize  text-[13px] py-2 border-b">
-                        {Number(total_gross_sallaries).toLocaleString()}
-                        FRW
-                      </td>
-                      <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
-                        {prepayments_covered?.toLocaleString()} FRW
-                      </td>
-                      {payslips[0]?.deductions?.map((deduction, i) => {
-                        return (
-                          <td
-                            key={i}
-                            className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b"
-                          >
-                            {Number(
-                              payslips?.reduce(
-                                (acc, e) =>
-                                  acc +
-                                  e?.deductions?.find(
-                                    (d) => d.name === deduction.name
-                                  )?.amount,
-                                0
-                              )
-                            ).toLocaleString()}{" "}
-                            FRW
-                          </td>
-                        );
-                      })}
-                      <td className="font-semibold px-5 text-slate-900  capitalize  text-[13px] py-2 border-b">
-                        {Number(total_net_sallaries).toLocaleString()} FRW
-                      </td>
-                    </tr>
-                  )}
+                    )}
+                  </tbody>
                 </table>
                 <ScrollBar orientation="horizontal" />
               </ScrollArea>

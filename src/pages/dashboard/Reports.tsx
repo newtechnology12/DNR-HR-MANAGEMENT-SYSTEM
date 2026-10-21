@@ -175,7 +175,7 @@ export default function EmployeeReports() {
         <div className="capitalize">
           {new Date(row.getValue("reportDate")).toLocaleDateString("en-US", {
             day: "2-digit",
-            month: "long",
+            month: "short",
             year: "numeric",
           })}
         </div>
@@ -190,7 +190,7 @@ export default function EmployeeReports() {
         <div className="capitalize">
           {new Date(row.getValue("dateHappened")).toLocaleDateString("en-US", {
             day: "2-digit",
-            month: "long",
+            month: "short",
             year: "numeric",
           })}
         </div>
@@ -266,7 +266,7 @@ export default function EmployeeReports() {
         <div className="capitalize">
           {new Date(row.getValue("created")).toLocaleDateString("en-US", {
             day: "2-digit",
-            month: "long",
+            month: "short",
             year: "numeric",
           })}
         </div>

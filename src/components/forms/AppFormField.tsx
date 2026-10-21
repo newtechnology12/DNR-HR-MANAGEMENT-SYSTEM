@@ -10,6 +10,7 @@ import { Input } from "../ui/input";
 import { cn } from "@/utils";
 
 export default function AppFormField({
+  required = false,
   form,
   name,
   label,
@@ -24,10 +25,11 @@ export default function AppFormField({
         <FormItem>
           <FormLabel>
             <Label
-              className="text-[13px] mb-1 dark:text-slate-300 text-slate-600"
+              className="mb-1 text-[12.5px] font-medium text-slate-700"
               htmlFor={label}
             >
               {label}
+              {required && <span className="ml-0.5 text-red-600">*</span>}
             </Label>
           </FormLabel>
           <FormControl>

@@ -17,6 +17,7 @@ import { Label } from "../ui/label";
 import { cn } from "@/utils";
 
 export default function AppFormSelect({
+  required = false,
   name,
   form,
   label,
@@ -31,8 +32,9 @@ export default function AppFormSelect({
       render={({ field, fieldState }) => (
         <FormItem>
           <FormLabel>
-            <Label className="text-[13px] mb-1 text-slate-600" htmlFor={label}>
+            <Label className="mb-1 text-[12.5px] font-medium text-slate-700" htmlFor={label}>
               {label}
+              {required && <span className="ml-0.5 text-red-600">*</span>}
             </Label>
           </FormLabel>
           <FormControl>

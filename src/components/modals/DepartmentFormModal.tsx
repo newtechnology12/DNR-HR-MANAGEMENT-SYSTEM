@@ -20,14 +20,15 @@ import { useAuth } from "@/context/auth.context";
 import AppFormAsyncSelect from "../forms/AppFormAsyncSelect";
 
 const formSchema = z.object({
-  name: z.string().min(1, { message: "Names is a required field" }),
-  manager: z.string().min(1, { message: "Manager is a required field" }),
+  name: z.string().min(1, { message: "Department name is required" }),
+  manager: z.string().min(1, { message: "Choose the department head" }),
 });
 
 const getDefaultValues = (data?: any) => {
   return {
     name: data?.name || "",
-    manager: data?.manager || "",
+    // Stored in "head"; used as the approver for "Department head" workflow steps.
+    manager: data?.head || "",
   };
 };
 
@@ -52,7 +53,8 @@ export function DepartmentFormModal({
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     const data = {
-      ...values,
+      name: values.name,
+      head: values.manager,
     };
 
     const q = !record
@@ -64,10 +66,10 @@ export function DepartmentFormModal({
     return q
       .then(async (e) => {
         onComplete();
-        toast.error(
-          q
-            ? "Department updated succesfully"
-            : "Department created succesfully"
+        toast.success(
+          record
+            ? "Department updated successfully"
+            : "Department created successfully"
         );
         form.reset();
       })
@@ -79,7 +81,9 @@ export function DepartmentFormModal({
     return pocketbase
       .collection("users")
       .getFullList({
-        filter: `name~"${search}"`,
+        filter: search
+          ? `status="Active" && name~"${String(search).replace(/"/g, '\\"')}"`
+          : `status="Active"`,
       })
       .then((e) => e.map((e) => ({ label: e.names || e.name, value: e.id })));
   }
@@ -106,6 +110,7 @@ export function DepartmentFormModal({
               <div className="grid gap-2 grid-cols-1">
                 <AppFormField
                   form={form}
+                  required
                   label={"Department name"}
                   placeholder={"Enter department name"}
                   name={"name"}
@@ -114,15 +119,16 @@ export function DepartmentFormModal({
               <div className="grid gap-2 grid-cols-1">
                 <AppFormAsyncSelect
                   form={form}
-                  label={"Manager"}
-                  placeholder={"Choose manager"}
+                  required
+                  label={"Department head (approves department requests)"}
+                  placeholder={"Choose department head"}
                   name={"manager"}
                   loader={employeesLoader}
                 />
               </div>
             </div>
             <DialogFooter>
-              <div className="mt-6 flex items-center gap-2 px-2 pb-1">
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                 <Button
                   type="button"
                   onClick={() => form.reset()}
