@@ -26,16 +26,16 @@ pb.autoCancellation(false);
 const STRUCTURE = [
   ["Office of the Secretary General", "OSG", "Coordinates the General Secretariat and reports to the Executive Committee", ["Secretary General", "Deputy Secretary General", "Executive Assistant", "Executive Committee Member"]],
   ["Finance and Administration", "FIN", "Budget, accounting, treasury, logistics and general administration", ["Director of Finance and Administration", "Chief Accountant", "Accountant", "Budget Officer", "Cashier / Treasury Officer", "Logistics and Stores Officer", "Administrative Assistant"]],
-  ["Human Resources", "HRM", "Staff administration, payroll, performance and welfare", ["Human Resources Manager", "Human Resources Officer"]],
-  ["Procurement", "PRC", "Procurement planning, sourcing, contracts and supplier management", ["Procurement Manager", "Procurement Officer"]],
+  ["Human Resources", "HRM", "Staff administration, payroll, performance and welfare", ["Human Resources Manager", "Human Resources Officer", "Staff Welfare and Training Officer"]],
+  ["Procurement", "PRC", "Procurement planning, sourcing, contracts and supplier management", ["Procurement Manager", "Procurement Officer", "Contracts Management Officer"]],
   ["Capacity Building", "CBD", "Training and capacity development for districts, sectors and elected leaders", ["Head of Capacity Building", "Capacity Building Specialist", "Training Coordinator"]],
-  ["Recruitment Services", "RCS", "Recruitment services provided to local government entities", ["Head of Recruitment Services", "Recruitment Specialist"]],
+  ["Recruitment Services", "RCS", "Recruitment services provided to local government entities", ["Head of Recruitment Services", "Recruitment Specialist", "Assessment and Testing Officer"]],
   ["Advocacy, Policy and Research", "APR", "Advocacy on decentralisation, local government finance, local economic development and social welfare", ["Director of Advocacy and Policy", "Decentralisation Policy Analyst", "Local Government Finance Specialist", "Local Economic Development Specialist", "Social Welfare Specialist"]],
-  ["Planning, Monitoring and Evaluation", "PME", "Strategic planning, M&E and reporting", ["Planning, Monitoring and Evaluation Manager", "Monitoring and Evaluation Officer"]],
-  ["ICT and Digital Services", "ICT", "ICT infrastructure, information systems and the e-learning platform", ["ICT Manager", "Systems Administrator", "E-learning Platform Officer"]],
-  ["Communication and Public Relations", "COM", "Communication, events and member relations", ["Communication Manager", "Communication Officer"]],
-  ["Internal Audit", "IAU", "Independent assurance to the Control Committee", ["Internal Auditor"]],
-  ["Legal Affairs", "LEG", "Legal advice, contracts review and compliance", ["Legal Advisor"]],
+  ["Planning, Monitoring and Evaluation", "PME", "Strategic planning, M&E and reporting", ["Planning, Monitoring and Evaluation Manager", "Monitoring and Evaluation Officer", "Planning and Reporting Officer", "Data and Statistics Officer"]],
+  ["ICT and Digital Services", "ICT", "ICT infrastructure, information systems and the e-learning platform", ["ICT Manager", "Systems Administrator", "E-learning Platform Officer", "Information Security Officer"]],
+  ["Communication and Public Relations", "COM", "Communication, events and member relations", ["Communication Manager", "Communication Officer", "Events and Protocol Officer", "Digital Media Officer"]],
+  ["Internal Audit", "IAU", "Independent assurance to the Control Committee", ["Head of Internal Audit", "Internal Auditor", "Audit Assistant"]],
+  ["Legal Affairs", "LEG", "Legal advice, contracts review and compliance", ["Legal Advisor", "Legal Officer", "Contracts and Compliance Officer"]],
 ];
 
 // Demo login accounts (one per IMS role) → department / designation that matches their role.

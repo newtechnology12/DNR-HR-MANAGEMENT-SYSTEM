@@ -381,7 +381,7 @@ async function seedUsers(roleIds) {
 
   // Extra employees so tables, charts and payroll look realistic.
   let created = 0;
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 38; i++) {
     const first = FIRST[i % FIRST.length];
     const last = LAST[(i * 7) % LAST.length];
     const email = `${first}.${last}.${i}@dnr-hr.rw`.toLowerCase();
