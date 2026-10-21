@@ -18,7 +18,7 @@ Developed by Infinity Core Solutions Ltd.
 | 5 | Bank & cash, reconciliation (M5): bank accounts and cash books with opening balances, receipts and inter-account transfers approved by the DAF, voucher payments from a chosen account (no overdraft, restricted donor accounts), cash book, bank statement import from Excel / CSV with column mapping and automatic matching, matching by hand, bank charges recorded from the statement, reconciliation (Accountant prepares, DAF approves, then locked), cash counts, cash position and reports | **Done** |
 | 6 | Payroll (M6): Rwanda PAYE and RSSB from dated rates, grades and funding split of donor-funded staff, staff loans repaid through the payroll, comparison with the previous month, approval posts a balanced GL journal and budget actuals by department / funding source / project, payment from a chosen bank account (cash book + payment journal), payroll register, PAYE (RRA), RSSB and bank-file exports; general ledger core (journals, posting accounts) | **Done** |
 | 7 | Fixed assets & depreciation (M7): register with tags, custodians and locations; capitalisation of capital items received on a GRN (or bought outside a PO, or donated) posted to the GL; opening register at go-live; transfers approved by the DAF; maintenance log; monthly depreciation (straight line / reducing balance by category, Accountant → DAF, posted by department and funding source); disposals Store → DAF → SG with the gain or loss in the GL; physical counts and the reconciliation of the register with the GL; staff equipment requests; asset schedule and reports | **Done** |
-| 8 | General ledger, period close (M8) | Planned |
+| 8 | General ledger, period close (M8): every module posts its own balanced journal (invoices, payments, receipts, transfers, statement charges, bank opening balances, payroll, assets), manual journals on posting accounts only (Accountant → DAF) with documents, reversals, recurring journals, trial balance and account ledgers by department / funding source / project, month-end checklist, close by the DAF in order, re-opening approved by the SG | **Done** |
 | 9 | Reports, financial statements, role dashboards (M9) | Planned |
 | 10 | Data migration, tests, documentation | Planned |
 | + | Staff workspace: every staff member's own pages (attendance, leave, plans, payslips, requests, performance, documents), attendance corrections approved by HR, work planning and reporting (annual performance contract → quarter → month → week, supervisor approval, reports and assessment), Help & HR policies | **Done** |
@@ -60,7 +60,7 @@ npm run seed:ralga
 # 3. Frontend (http://localhost:5173, proxies /api to the backend)
 npm run dev:frontend
 
-# 4. API tests on a freshly seeded server (must stay green: 321 checks in 13 suites)
+# 4. API tests on a freshly seeded server (must stay green: 340 checks in 14 suites)
 npm run test:api
 ```
 
@@ -301,7 +301,8 @@ the assets of their department; staff see what is in their care under My workspa
 - **Export** (button *Export*): Excel, PDF or CSV with the RALGA header, the filters used and who generated it,
   on every list; exports are audited and follow each person's access (staff export only their own records).
 - **Supporting documents** (tab *Documents* on budgets, revisions, purchase orders, invoices, vouchers, returns,
-  bank-detail changes, receipts, transfers, bank statements and reconciliations; evidence on work plans): drag and drop several files (PDF, images, Office, CSV, e-mail, zip; 20 MB each).
+  bank-detail changes, receipts, transfers, bank statements, reconciliations, asset disposals and counts, and manual
+  journals; evidence on work plans): drag and drop several files (PDF, images, Office, CSV, e-mail, zip; 20 MB each).
   Files can be added at any stage; they can only be removed while the document is being prepared. Each
   upload and removal is audited.
 
@@ -345,7 +346,8 @@ HR & payroll → Payroll. The HR & Payroll Officer prepares, the DAF (and the SG
   bank transfer file for all banks or one bank, and the full workbook.
 - **Journal entries** (General ledger → Journal entries; DAF, Accountant, Internal Auditor): every journal with
   its lines and dimensions, linked to the document that caused it. Posted journals are never edited — they are
-  reversed by an opposite journal. Other roles cannot read the ledger (checked by the server).
+  reversed by an opposite journal. Other roles cannot read the ledger (checked by the server). See *General
+  ledger and period close* below.
 - **Posting accounts** (Setup → Posting accounts): which GL account each automatic posting uses. The DAF changes
   them; a change applies from the next posting. The seeded accounts and rates are illustrative and must be
   confirmed by Finance before go-live.
@@ -401,6 +403,43 @@ and press *Confirm* (the source is recorded in the audit log).
 5. **Rollback:** stop the service, restore the previous release's files, restore the pre-release backup,
    start the service.
 
+## General ledger and period close
+
+General ledger in the menu: the Accountant prepares, the DAF approves and closes, the Internal Auditor reads, the SG
+decides re-openings. Nobody else reads the ledger (checked by the server).
+
+- **Automatic postings:** each module posts its own balanced journal when its document is final — payroll (approval
+  and payment); supplier invoices when approved (Dr the budget line's expense, or *assets received, not yet
+  invoiced* 2114 for a capital item / Cr accounts payable 2101); payment vouchers when paid (Dr accounts payable, or
+  the expense of a direct voucher / Cr the bank and withholding tax payable 2108); receipts (Dr bank / Cr the income
+  account); transfers between accounts; bank charges and interest recorded from a statement; opening balances of
+  bank and cash accounts (against the accumulated surplus 3101); depreciation, capitalisations and disposals.
+  Cancelling or reversing the document reverses its journal. Every journal links to its document and every
+  document to its journal. *Backfill* (DAF) posts documents recorded before these rules; running it twice posts
+  nothing.
+- **Manual journals** (Journal entries → *New journal*, Accountant): accruals, reclassifications, allocations. Lines
+  are on posting accounts only — never a bank or cash account (receipts, payments and transfers keep the cash book
+  and the ledger equal) nor a control account kept by its module (payables, member contributions) — with the
+  department, funding source and project; debits must equal credits. Supporting documents can be attached. The DAF
+  approves and the journal is posted; until then it is not in the ledger. A returned journal goes back to the
+  Accountant; a posted journal is never edited or cancelled, only reversed by the DAF with a reason, dated on or
+  after the journal. Journals of the modules are corrected from their document.
+- **Recurring journals** (Accountant): monthly, quarterly or yearly templates (rent, audit fees, allocations).
+  *Generate journals due* creates one journal per date that has come (at most 12 at a time) and sends each to the
+  DAF; a date in a closed month is reported and nothing is created for it.
+- **Trial balance:** opening balance, movements and closing balance of every account for any period, grouped by
+  type, with the check that debits equal credits; filters by department, funding source and project. Revenue and
+  expenses start each fiscal year at nil; earlier years' result is in the accumulated surplus. Each account opens
+  its **account ledger**: every posting with the running balance, linked to its journal and document. Both export
+  to Excel, PDF and CSV.
+- **Period close** (DAF): a month is closed after its last day, in order, once its checklist is clear — the previous
+  month closed, every bank and cash account reconciled to the month end, the month's depreciation approved, the
+  payroll approved and posted, no journal waiting for approval, the trial balance balanced. Warnings (invoices of
+  the month not approved, vouchers not paid, receipts and transfers not posted, assets received not yet invoiced)
+  are shown before closing. A closed month takes no posting from any module; its checklist is kept with it.
+- **Re-opening a closed month:** asked by the DAF or the Accountant with what must be corrected and why, latest
+  closed month first, and approved by the SG. The month then takes postings until the DAF closes it again.
+
 ## Testing
 
 `npm run test:api` runs API-level checks against a seeded local server, including negative tests:
@@ -424,5 +463,10 @@ previous month) and fixed assets (who sees the register, no direct writes, depre
 capitalisation journal, threshold, custodians in the asset's department, transfers approved by the DAF, monthly
 depreciation in order with the journal equal to the charge, disposals Store → DAF → SG with the gain in the GL,
 counts marking missing assets lost with the register equal to the GL, staff equipment requests, the opening
-register refusing a bad row). Run them on a freshly seeded server
+register refusing a bad row) and the general ledger (who reads it, journals on posting accounts only and balanced,
+preparer ≠ approver, drafts and rejected journals kept out of the ledger, posted journals only reversed, automatic
+journals corrected from their document, recurring journals generated once and never into a closed month, the trial
+balance balancing and agreeing with the account ledgers, every document reaching the ledger with the bank books and
+payables equal to the GL, months closed in order after the checklist, re-opening approved by the SG, a backfill that
+posts nothing twice). Run them on a freshly seeded server
 (`npm run seed:ralga` first): some checks use the seeded documents.

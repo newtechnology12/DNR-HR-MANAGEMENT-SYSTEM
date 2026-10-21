@@ -27,6 +27,20 @@ onRecordViewRequest((e) => require(`${__hooks}/lib/treasury.js`).guardRead(e), .
 
 onRecordBeforeCreateRequest((e) => require(`${__hooks}/lib/treasury.js`).validateAccount(e, true), "bank_accounts");
 onRecordBeforeUpdateRequest((e) => require(`${__hooks}/lib/treasury.js`).validateAccount(e, false), "bank_accounts");
+// The opening balance goes to the ledger (opening journal); corrected before the account is used, it is re-posted.
+onRecordAfterCreateRequest((e) => {
+  const dao = $app.dao();
+  require(`${__hooks}/lib/glpost.js`).bankOpening(dao, dao.findRecordById("bank_accounts", e.record.id), e.httpContext.get("authRecord"));
+}, "bank_accounts");
+onRecordAfterUpdateRequest((e) => {
+  const dao = $app.dao();
+  const a = dao.findRecordById("bank_accounts", e.record.id);
+  const j = a.getString("opening_journal") ? dao.findRecordById("gl_journals", a.getString("opening_journal")) : null;
+  const total = j ? j.getInt("total_debit") : 0;
+  const glLine = j ? (dao.findRecordsByFilter("gl_journal_lines", "journal = {:j} && account = {:a}", "", 1, 0, { j: j.id, a: a.getString("gl_account") }) || [])[0] : null;
+  const same = j ? total === Math.abs(a.getInt("opening_balance")) && Boolean(glLine) : !a.getInt("opening_balance");
+  if (!same) require(`${__hooks}/lib/glpost.js`).bankOpeningChanged(dao, a, e.httpContext.get("authRecord"));
+}, "bank_accounts");
 onRecordBeforeCreateRequest((e) => require(`${__hooks}/lib/treasury.js`).beforeCreateReceipt(e), "cash_receipts");
 onRecordBeforeUpdateRequest((e) => require(`${__hooks}/lib/treasury.js`).beforeUpdateReceipt(e), "cash_receipts");
 onRecordBeforeDeleteRequest((e) => require(`${__hooks}/lib/treasury.js`).beforeDeleteDraft(e, "manage_treasury", "receipts"), "cash_receipts");

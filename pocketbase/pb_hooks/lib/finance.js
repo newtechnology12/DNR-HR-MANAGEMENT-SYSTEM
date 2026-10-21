@@ -305,6 +305,7 @@ function invoiceAction(dao, id, actor, action, input, meta) {
     if (!reason) throw new BadRequestError("Give a reason for cancelling the invoice.");
     // An approved invoice was already an actual on the budget: reverse it and restore the PO commitment.
     if (inv.getInt("actual_amount") > 0) require("./budget.js").invoiceReversed(dao, inv, actor);
+    if (inv.getString("journal")) require("./glpost.js").invoiceCancelled(dao, inv, actor, reason, meta);
     require("./approvals.js").cancel(dao, "supplier_invoice", inv, actor, reason, meta);
     syncPo(dao, inv.getString("purchase_order"));
     return inv;

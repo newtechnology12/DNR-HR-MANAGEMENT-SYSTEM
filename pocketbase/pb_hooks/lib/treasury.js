@@ -234,7 +234,7 @@ function contraAccount(dao, id, what, types) {
 }
 
 // ------------------------------------------------------------------ accounts
-const ACCOUNT_SYSTEM = ["book_balance", "last_entry_date", "statement_balance", "statement_date", "reconciled_to", "reconciled_balance", "unmatched_book", "unmatched_bank", "created_by"];
+const ACCOUNT_SYSTEM = ["book_balance", "last_entry_date", "statement_balance", "statement_date", "reconciled_to", "reconciled_balance", "unmatched_book", "unmatched_bank", "created_by", "opening_journal"];
 const LOCKED_LABEL = { kind: "type", gl_account: "GL account", opening_balance: "opening balance", opening_date: "opening date", currency: "currency" };
 
 function hasMovements(dao, accountId) {
@@ -456,6 +456,7 @@ function onReceiptApproved(dao, r, actor) {
   });
   r.set("entry", entry.id);
   dao.saveRecord(r);
+  require("./glpost.js").receipt(dao, r, entry, actor);
   let matched = false;
   if (r.getString("statement_line")) {
     try {
@@ -510,6 +511,7 @@ function reverseEntries(dao, entries, actor, reason, number) {
     refreshAccount(dao, a.id);
     out.push(rev);
   }
+  require("./glpost.js").reversal(dao, entries, out, actor, `Reversal of ${number}: ${reason}`);
   return out;
 }
 
@@ -617,6 +619,7 @@ function onTransferApproved(dao, t, actor) {
   t.set("out_entry", out.id);
   t.set("in_entry", inn.id);
   dao.saveRecord(t);
+  require("./glpost.js").transfer(dao, t, out, inn, actor);
   autoMatch(dao, from.id, actor);
   autoMatch(dao, to.id, actor);
   core.notify(dao, [t.getString("prepared_by")].filter((x) => x && (!actor || x !== actor.id)), {
@@ -969,6 +972,7 @@ function recordFromLine(dao, actor, lineId, input, meta) {
   if (line) {
     require("./budget.js").post(dao, { line, type: "actual", amount: l.getInt("amount"), source: { type: "cash_book", id: entry.id, number: st.getString("number") }, description: `${TYPE_LABEL[type]}: ${description}`, actor, date: noon(d) });
   }
+  require("./glpost.js").statementEntry(dao, entry, st.getString("number"), actor);
   makeGroup(dao, a, [entry], [l], "recorded", actor);
   refreshAccount(dao, a.id);
   core.audit(dao, { actor, action: "bank_line_recorded", collection: "bank_accounts", recordId: a.id, label: a.getString("code"), meta, comment: `${TYPE_LABEL[type]} ${fmt(l.getInt("amount"))} · ${description} (${st.getString("number")})` });

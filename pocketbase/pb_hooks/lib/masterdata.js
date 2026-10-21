@@ -121,7 +121,7 @@ function requireOpenPeriod(dao, when, what) {
   const p = periodFor(dao, when);
   const day = (toDate(when) || new Date()).toISOString().slice(0, 10);
   if (!p) throw new BadRequestError(`No fiscal period covers ${day}. Ask Finance to create the fiscal year under Setup → Fiscal years.`);
-  if (p.getString("status") !== "open") throw new BadRequestError(`${p.getString("name")} is closed, so ${what || "this transaction"} cannot be dated ${day}. Use a date in an open period or ask the DAF to reopen it.`);
+  if (p.getString("status") !== "open") throw new BadRequestError(`${p.getString("name")} is closed, so ${what || "this transaction"} cannot be dated ${day}. Use a date in an open period, or ask the DAF to have the month re-opened (the Secretary General approves).`);
   const fy = dao.findRecordById("fiscal_years", p.getString("fiscal_year"));
   if (fy.getString("status") !== "open") throw new BadRequestError(`${fy.getString("name")} is ${fy.getString("status")}; postings are not allowed.`);
   return p;

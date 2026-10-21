@@ -934,7 +934,7 @@ function reconcile(dao, asOf) {
   const glBalance = (account, side) => {
     if (!account) return 0;
     let t = 0;
-    for (const l of dao.findRecordsByFilter("gl_journal_lines", "account = {:a} && date <= {:d}", "", 0, 0, { a: account, d: `${asOf} 23:59:59.999Z` }) || []) t += side === "debit" ? l.getInt("debit") - l.getInt("credit") : l.getInt("credit") - l.getInt("debit");
+    for (const l of dao.findRecordsByFilter("gl_journal_lines", "account = {:a} && date <= {:d} && (status = 'posted' || status = 'reversed')", "", 0, 0, { a: account, d: `${asOf} 23:59:59.999Z` }) || []) t += side === "debit" ? l.getInt("debit") - l.getInt("credit") : l.getInt("credit") - l.getInt("debit");
     return t;
   };
   const rows = [];

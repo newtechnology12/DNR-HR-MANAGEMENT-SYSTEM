@@ -250,6 +250,16 @@ async function main() {
       await admin.collection("fiscal_years").update(fy.id, { status: "closed", is_current: false, notes: "Prior year — closed after the external audit (demo)." });
       for (const p of await admin.collection("fiscal_periods").getFullList({ filter: `fiscal_year = "${fy.id}"` })) await admin.collection("fiscal_periods").update(p.id, { status: "closed" });
     }
+    // The months of the current year open again (seed-gl.mjs closes the past ones once everything is posted).
+    if (current) {
+      for (const t of ["period_reopen"]) {
+        for (const a of await admin.collection("approval_requests").getFullList({ fields: "id", filter: `document_type = "${t}"` })) await admin.collection("approval_requests").delete(a.id).catch(() => null);
+      }
+      for (const r of await admin.collection("period_reopen_requests").getFullList({ fields: "id" }).catch(() => [])) await admin.collection("period_reopen_requests").delete(r.id);
+      for (const p of await admin.collection("fiscal_periods").getFullList({ filter: `fiscal_year = "${fy.id}" && status != "open"` })) {
+        await admin.collection("fiscal_periods").update(p.id, { status: "open", closed_by: "", closed_at: "", close_checklist: null, close_note: "", reopened_by: "", reopened_at: "", reopen_reason: "" });
+      }
+    }
   }
   console.log(`  ✓ fiscal years: FY ${currentStart - 1}/${String(currentStart).slice(2)} (closed) and FY ${currentStart}/${String(currentStart + 1).slice(2)} (current, 12 open periods)`);
 
@@ -272,6 +282,8 @@ async function main() {
     ["payroll.maternity_payable", "2106", "Maternity contributions payable (RSSB)"], ["payroll.cbhi_payable", "2107", "CBHI contributions payable (RSSB)"],
     ["payroll.occ_hazard_payable", "2112", "Occupational hazards contributions payable (RSSB)"], ["payroll.medical_payable", "2113", "Medical insurance contributions payable (RSSB)"],
     ["payroll.advances", "1120", "Salary advances recovered"], ["payroll.loans", "1121", "Staff loan instalments recovered"], ["payroll.other_deductions", "2111", "Other deductions payable"],
+    ["payables.ap", "2101", "Accounts payable — suppliers"], ["payables.wht", "2108", "Withholding tax payable (RRA)"],
+    ["treasury.opening_equity", "3101", "Opening balances (accumulated surplus)"],
     ["assets.grni", "2114", "Assets received, not yet invoiced"], ["assets.donated", "2201", "Donated assets (deferred capital grants)"],
     ["assets.opening_equity", "3101", "Fixed assets at go-live (accumulated surplus)"], ["assets.disposal_proceeds", "1111", "Disposal proceeds receivable"],
     ["assets.disposal_gain", "4205", "Gain on disposal of assets"], ["assets.disposal_loss", "5501", "Loss on disposal of assets"],
@@ -279,7 +291,7 @@ async function main() {
   for (const [i, [key, code, label]] of POSTING.entries()) {
     await upsert(daf, "posting_accounts", `key = "${key}"`, { key, label, module: key.split(".")[0], account: byCode[code].id, sort: i + 1, description: "" });
   }
-  console.log(`  ✓ posting accounts: ${POSTING.length} automatic postings (payroll, fixed assets) mapped to the chart of accounts`);
+  console.log(`  ✓ posting accounts: ${POSTING.length} automatic postings (payroll, payables, bank and cash, fixed assets) mapped to the chart of accounts`);
 
   for (const f of FUNDING) await upsert(daf, "funding_sources", `code = "${f.code}"`, { ...f, currency: "RWF", active: true, start_date: `${currentStart}-07-01 00:00:00.000Z`, end_date: f.type === "donor" ? `${currentStart + 2}-06-30 23:59:59.999Z` : "" });
   const funding = Object.fromEntries((await admin.collection("funding_sources").getFullList()).map((f) => [f.code, f]));

@@ -59,6 +59,12 @@ const payBank = await finance.collection("bank_accounts").create({ code: `TP-${t
 cleanup.push(async () => {
   for (const e of await admin.collection("cash_book_entries").getFullList({ filter: `account = "${payBank.id}"`, fields: "id" })) await admin.collection("cash_book_entries").delete(e.id);
   await admin.collection("bank_accounts").delete(payBank.id);
+  // journals on the test bank (its opening balance, salary payments) go before the account, which keeps postings otherwise
+  const posted = await admin.collection("gl_journal_lines").getFullList({ filter: `account = "${testGl.id}"`, fields: "journal" });
+  for (const jid of new Set(posted.map((l) => l.journal))) {
+    for (const l of await admin.collection("gl_journal_lines").getFullList({ filter: `journal = "${jid}"`, fields: "id" })) await admin.collection("gl_journal_lines").delete(l.id);
+    await admin.collection("gl_journals").delete(jid);
+  }
   await admin.collection("gl_accounts").delete(testGl.id);
 });
 let loan;

@@ -308,6 +308,31 @@ const DOCS = {
       };
     },
   },
+  // General ledger (M8): manual journals, Accountant → DAF; re-opening a closed month, approved by the SG.
+  journal_entry: {
+    collection: "gl_journals",
+    approvePermission: "approve_journals",
+    label: "journal",
+    link: (id) => `/dashboard/finance/journals/${id}`,
+    status: { pending: "pending_approval", approved: "posted", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    // Whoever prepared the journal cannot approve it.
+    context: (doc) => ({
+      amount: doc.getInt("total_debit"), currency: "RWF", department: "", category: "", branch: "",
+      requester: doc.getString("prepared_by"), number: doc.getString("number"), title: doc.getString("description").slice(0, 200),
+    }),
+  },
+  period_reopen: {
+    collection: "period_reopen_requests",
+    approvePermission: "reopen_periods",
+    label: "request to re-open a period",
+    link: () => "/dashboard/finance/periods",
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    context: (doc) => ({
+      amount: 0, currency: "RWF", department: "", category: "", branch: "",
+      requester: doc.getString("requested_by"), number: doc.getString("number"),
+      title: `Re-open ${nameOf($app.dao(), "fiscal_periods", doc.getString("period")) || "a closed month"}`,
+    }),
+  },
   depreciation_run: {
     collection: "depreciation_runs",
     approvePermission: "approve_depreciation",

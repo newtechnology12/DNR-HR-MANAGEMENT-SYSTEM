@@ -17,6 +17,9 @@ import { cn } from "@/utils";
 
 const MODULES: Record<string, { title: string; text: string }> = {
   payroll: { title: "Payroll", text: "Posted when a payroll is approved (costs and liabilities) and when it is paid (salaries payable against the bank)." },
+  payables: { title: "Payables", text: "Posted when a supplier invoice is approved (cost against accounts payable) and when its voucher is paid (payable against the bank, with the withholding tax kept back)." },
+  treasury: { title: "Bank & cash", text: "The other side of a bank or cash account's opening balance. Receipts, transfers and statement lines post to the accounts chosen on them." },
+  assets: { title: "Fixed assets", text: "Used when an asset is capitalised (received not yet invoiced, donated, opening register) and when one is disposed of (proceeds, gain or loss). Depreciation posts to each category's own accounts." },
 };
 const TYPE_OF: Record<string, string> = { "1": "asset", "2": "liability", "3": "net_assets", "4": "revenue", "5": "expense" };
 

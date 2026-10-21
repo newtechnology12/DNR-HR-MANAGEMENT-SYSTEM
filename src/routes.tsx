@@ -92,6 +92,11 @@ const SalaryStructures = lazy(() => import("./pages/hr/payroll/SalaryStructures"
 const StaffLoans = lazy(() => import("./pages/hr/payroll/StaffLoans"));
 const Journals = lazy(() => import("./pages/ledger/Journals"));
 const JournalDetail = lazy(() => import("./pages/ledger/JournalDetail"));
+const JournalEditor = lazy(() => import("./pages/ledger/JournalEditor"));
+const RecurringJournals = lazy(() => import("./pages/ledger/RecurringJournals"));
+const TrialBalance = lazy(() => import("./pages/ledger/TrialBalance"));
+const AccountLedger = lazy(() => import("./pages/ledger/AccountLedger"));
+const PeriodClose = lazy(() => import("./pages/ledger/PeriodClose"));
 const PostingAccounts = lazy(() => import("./pages/setup/PostingAccounts"));
 const SalaryPayments = lazy(() => import("./pages/treasury/SalaryPayments"));
 const AssetsOverview = lazy(() => import("./pages/assets/AssetsOverview"));
@@ -129,6 +134,8 @@ const VoucherForm = lazy(() => import("./pages/finance/VoucherForm"));
 const VoucherDetail = lazy(() => import("./pages/finance/VoucherDetail"));
 const PayablesReports = lazy(() => import("./pages/finance/PayablesReports"));
 const LEDGER_USERS = ["view_journals", "export_ledger", "approve_journals"];
+// trial balance, account ledger and period close: also the Secretary General, who re-opens months
+const LEDGER_REPORT_USERS = [...LEDGER_USERS, "manage_journals", "close_periods", "reopen_periods"];
 const ASSET_USERS = ["view_fixed_assets", "manage_fixed_assets", "approve_fixed_assets", "approve_asset_disposals", "run_depreciation", "approve_depreciation", "view_asset_reports", "export_assets", "view_assets"];
 const ASSET_DEPT_USERS = [...ASSET_USERS, "request_asset_transfer"];
 const VOUCHER_USERS = ["view_payment_vouchers", "manage_payment_vouchers", "approve_payment_vouchers", "record_payments"];
@@ -873,7 +880,13 @@ const router = createBrowserRouter([
                     ),
                   },
                   { path: "journals", element: <ProtectedRoute entity={LEDGER_USERS}><Journals /></ProtectedRoute> },
+                  { path: "journals/new", element: <ProtectedRoute entity="manage_journals"><JournalEditor /></ProtectedRoute> },
                   { path: "journals/:journalId", element: <ProtectedRoute entity={LEDGER_USERS}><JournalDetail /></ProtectedRoute> },
+                  { path: "journals/:journalId/edit", element: <ProtectedRoute entity="manage_journals"><JournalEditor /></ProtectedRoute> },
+                  { path: "recurring-journals", element: <ProtectedRoute entity={LEDGER_USERS}><RecurringJournals /></ProtectedRoute> },
+                  { path: "trial-balance", element: <ProtectedRoute entity={LEDGER_REPORT_USERS}><TrialBalance /></ProtectedRoute> },
+                  { path: "trial-balance/:accountId", element: <ProtectedRoute entity={LEDGER_REPORT_USERS}><AccountLedger /></ProtectedRoute> },
+                  { path: "periods", element: <ProtectedRoute entity={LEDGER_REPORT_USERS}><PeriodClose /></ProtectedRoute> },
                   { path: "vouchers", element: <ProtectedRoute entity={VOUCHER_USERS}><Vouchers /></ProtectedRoute> },
                   { path: "vouchers/new", element: <ProtectedRoute entity="manage_payment_vouchers"><VoucherForm /></ProtectedRoute> },
                   { path: "vouchers/:voucherId", element: <ProtectedRoute entity={VOUCHER_USERS}><VoucherDetail /></ProtectedRoute> },

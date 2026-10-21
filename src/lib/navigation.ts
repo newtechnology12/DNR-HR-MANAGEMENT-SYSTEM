@@ -7,7 +7,7 @@ import {
   ClipboardList, Clock, FileSearch, FileSignature, FolderKanban, GitBranch, GitPullRequest, Inbox, Landmark, Layout, ListChecks,
   ListTree, LucideIcon, Network, Percent, PieChart, Receipt, Scale, ScrollText, ServerCog, Settings, ShieldCheck, ShoppingCart, SlidersHorizontal,
   Split, Table, Tags, Truck, Undo2, UserCog, Users, Wallet, WalletCards, Activity, Coins, LayoutGrid, UserCheck,
-  ClipboardCheck, FileText, FolderOpen, HelpCircle, Laptop, MessageSquareText, Target, BookOpen, Link2, TrendingDown, Trash2,
+  ClipboardCheck, FileText, FolderOpen, HelpCircle, Laptop, MessageSquareText, Target, BookOpen, Link2, TrendingDown, Trash2, Repeat, CalendarCheck,
 } from "lucide-react";
 
 export interface NavItem {
@@ -120,6 +120,9 @@ export const NAVIGATION: NavGroup[] = [
     label: "General ledger",
     items: [
       { key: "journals", label: "Journal entries", link: "/dashboard/finance/journals", icon: BookOpen, perms: ["view_journals", "export_ledger", "approve_journals"] },
+      { key: "recurringJournals", label: "Recurring journals", link: "/dashboard/finance/recurring-journals", icon: Repeat, perms: ["manage_journals", "approve_journals"] },
+      { key: "trialBalance", label: "Trial balance", link: "/dashboard/finance/trial-balance", icon: Scale, perms: ["view_journals", "export_ledger", "approve_journals", "reopen_periods"] },
+      { key: "periodClose", label: "Period close", link: "/dashboard/finance/periods", icon: CalendarCheck, perms: ["close_periods", "reopen_periods", "manage_journals"] },
     ],
   },
   {

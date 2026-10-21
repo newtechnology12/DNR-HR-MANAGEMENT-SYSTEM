@@ -26,6 +26,11 @@ function guard(e, verb) {
     const rule = RULES[name];
     core.requirePermission($app.dao(), auth, rule[0], rule[1]);
   }
+  // an account with postings stays in the chart for good (superusers included): it is made inactive instead
+  const posted = verb === "delete" && name === "gl_accounts" ? $app.dao().findRecordsByFilter("gl_journal_lines", "account = {:a}", "", 1, 0, { a: e.record.id }) || [] : [];
+  if (posted.length) {
+    throw new BadRequestError(`${e.record.getString("code")} ${e.record.getString("name")} has postings in the general ledger, so it cannot be deleted. Make it inactive instead.`);
+  }
   if (verb !== "delete" && masterdata.WRITE_PERMISSION[name]) masterdata.validate(e);
   if (auth && verb === "create" && e.record.collection().schema.getFieldByName("created_by") && !e.record.getString("created_by")) {
     e.record.set("created_by", auth.id);

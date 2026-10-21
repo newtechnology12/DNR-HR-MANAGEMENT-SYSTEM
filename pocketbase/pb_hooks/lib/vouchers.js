@@ -335,6 +335,7 @@ function execute(dao, id, actor, input, meta) {
   v.set("paid_from", account.id);
   v.set("cash_entry", entry ? entry.id : "");
   dao.saveRecord(v);
+  require("./glpost.js").voucherPaid(dao, v, account, entry, actor, meta);
   core.audit(dao, {
     actor, action: "payment_executed", collection: "payment_vouchers", recordId: v.id, label: number, meta,
     comment: `${method.replace(/_/g, " ")} ${reference} from ${account.getString("code")} · net ${fmt(v.getInt("net_amount"))}${whtTotal ? ` · withholding tax ${fmt(whtTotal)}` : ""}`,

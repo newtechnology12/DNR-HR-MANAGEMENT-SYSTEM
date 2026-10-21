@@ -64,6 +64,7 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   supplier_bank_change: "Supplier bank details change",
   payment_voucher: "Payment voucher",
   journal_entry: "Journal entry",
+  period_reopen: "Re-opening a closed month",
   asset_disposal: "Asset disposal",
   asset_transfer: "Asset transfer",
   depreciation_run: "Monthly depreciation",
@@ -93,6 +94,8 @@ export const DOCUMENT_LINKS: Record<string, (id: string) => string> = {
   asset_disposal: (id) => `/dashboard/assets/disposals/${id}`,
   depreciation_run: (id) => `/dashboard/assets/depreciation/${id}`,
   asset: (id) => `/dashboard/assets/register/${id}`,
+  journal_entry: (id) => `/dashboard/finance/journals/${id}`,
+  period_reopen: () => "/dashboard/finance/periods",
 };
 
 const qs = (params: Record<string, unknown>) =>

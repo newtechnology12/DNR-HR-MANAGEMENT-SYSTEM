@@ -334,7 +334,16 @@ try {
     await del("cash_book_entries", `account = "${id}"`);
     await su.collection("bank_accounts").delete(id).catch(() => null);
   }
-  for (const id of created.gl) await su.collection("gl_accounts").delete(id).catch(() => null);
+  // journals on the test accounts (opening balances, receipts, transfers, payments, statement charges) go before the
+  // accounts, which keep their postings otherwise
+  for (const id of created.gl) {
+    const posted = await su.collection("gl_journal_lines").getFullList({ filter: `account = "${id}"`, fields: "journal" });
+    for (const jid of new Set(posted.map((l) => l.journal))) {
+      for (const l of await su.collection("gl_journal_lines").getFullList({ filter: `journal = "${jid}"`, fields: "id" })) await su.collection("gl_journal_lines").delete(l.id);
+      await su.collection("gl_journals").delete(jid).catch((e) => console.log("cleanup:", e.message));
+    }
+  }
+  for (const id of created.gl) await su.collection("gl_accounts").delete(id).catch((e) => console.log("cleanup:", e.message));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

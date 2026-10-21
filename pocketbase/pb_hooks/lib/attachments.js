@@ -29,6 +29,7 @@ const DOCS = {
   work_plans: { field: "attachments", perms: [], owners: ["staff"], open: ["draft", "returned", "approved"] },
   asset_disposals: { field: "attachments", perms: ["manage_fixed_assets", "approve_asset_disposals"], owners: ["prepared_by"], open: ["draft", "returned"] },
   asset_verifications: { field: "attachments", perms: ["manage_fixed_assets"], owners: ["started_by"], open: ["open"] },
+  gl_journals: { field: "attachments", perms: ["manage_journals", "approve_journals"], owners: ["prepared_by"], open: ["draft", "returned"] },
 };
 
 function load(dao, collection, id) {

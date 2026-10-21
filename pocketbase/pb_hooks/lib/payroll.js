@@ -339,6 +339,8 @@ function markPaid(dao, auth, id, input, meta) {
   p.set("payment_date", `${payDay} 12:00:00.000Z`);
   p.set("cash_entry", entry.id);
   p.set("payment_journal", journal.id);
+  entry.set("journal", journal.id);
+  dao.saveRecord(entry);
   dao.saveRecord(p);
   const slips = dao.findRecordsByFilter("employees_payrolls", "payroll = {:p}", "", 5000, 0, { p: p.id }) || [];
   let repaid = 0;
