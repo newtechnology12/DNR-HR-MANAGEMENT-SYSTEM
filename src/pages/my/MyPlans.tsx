@@ -9,10 +9,11 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "react-query";
 import { format } from "date-fns";
 import { ArrowRight, CalendarPlus, ChevronLeft, ChevronRight, ClipboardCheck, FileText, Flag, Plus, Search, UserPlus } from "lucide-react";
+import type { RecordModel } from "pocketbase";
 import pocketbase from "@/lib/pocketbase";
 import { useAuth } from "@/context/auth.context";
 import {
-  HEALTH, HEALTH_NOTE, LEVELS, LEVEL_ORDER, PLAN_STATUS, PlanKind, TYPE_INFO, dayOf, healthOf, openIssues, originOf, planTitle, plansApi, statusOf,
+  HEALTH, LEVELS, LEVEL_ORDER, PLAN_STATUS, PlanKind, TYPE_INFO, dayOf, healthOf, openIssues, originOf, planTitle, plansApi, statusOf,
 } from "@/lib/plans";
 import { DepartmentActivitiesCard } from "@/components/workspace/DepartmentActivities";
 import { useMe } from "@/components/portal/kit";
@@ -45,7 +46,7 @@ export default function MyPlans() {
       <MyHeader
         eyebrow="My workspace"
         title="My plans & reports"
-        subtitle="Annual contract → quarter → month → week. Approved by your supervisor, reported with evidence."
+        subtitle="Plan your work from the annual performance contract down to each week. Your supervisor approves every plan, and assesses the report you send with evidence."
         actions={
           <>
             <button type="button" className={btnOutline} onClick={() => setReporting(true)}>Submit report</button>
@@ -53,7 +54,7 @@ export default function MyPlans() {
           </>
         }
       />
-      <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-[#E3E8EF]">
+      <div role="tablist" className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-[#E3E8EF] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cn("-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-[14.5px] font-bold", tab === k ? "border-[#1466C0] text-[#0B3A6F]" : "border-transparent text-[#5B6577] hover:text-[#14213D]")}>{l}</button>
         ))}
@@ -77,6 +78,70 @@ function Bar({ value, health, className }: { value: number; health: keyof typeof
     <span className={cn("block h-[7px] overflow-hidden rounded-full bg-[#EEF1F5]", className)} aria-hidden>
       <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, value))}%`, background: HEALTH[health].bar }} />
     </span>
+  );
+}
+
+/** Tables on this page: light header, a line between every column (the workspace table style). */
+const GRID =
+  "w-full border-collapse text-[14px] [&_td]:border-r [&_td]:border-[#E3E8EF] [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-[#E3E8EF] [&_th:last-child]:border-r-0";
+const TH = "px-3.5 py-3 text-left text-[12px] font-bold uppercase tracking-[0.04em] text-[#5B6577]";
+
+/** "Week 43 · 19–23 Oct 2026" → dates on the first line, the period's name under them. */
+function periodParts(label: string) {
+  const [first, second] = String(label || "").split(" · ");
+  return second ? { main: second, sub: first } : { main: first || "—", sub: "" };
+}
+
+/** Where the plan comes from, short enough for a table cell; the full sentence stays in the tooltip. */
+function originTag(p: RecordModel): { text: string; full: string; assigned: boolean } {
+  const o = originOf(p);
+  if (!o.assigned) return { text: "My own plan", full: "A plan you prepared yourself", assigned: false };
+  if (p.origin === "cascaded") {
+    const parent = p.expand?.parent?.plan_type as PlanKind | undefined;
+    return { text: `From my ${parent ? TYPE_INFO[parent].short.toLowerCase() : "higher-level"} plan`, full: o.text.replace("Assigned · ", ""), assigned: true };
+  }
+  if (p.source) return { text: `From ${String(p.source).split(" · ")[0]}`, full: o.text.replace("Assigned · ", ""), assigned: true };
+  const by = p.expand?.assigned_by?.name;
+  return { text: by ? `Assigned by ${by}` : "Assigned by your supervisor", full: o.text.replace("Assigned · ", "Assigned by "), assigned: true };
+}
+
+/** Status pill and the next step under it. */
+function statusView(p: RecordModel, now: Date) {
+  const st = statusOf(p, now);
+  const who = p.expand?.supervisor?.name || "your supervisor";
+  const starts = p.period_start ? format(new Date(`${dayOf(p.period_start)}T12:00:00`), "d MMM") : "";
+  const view: Record<string, { label: string; next: string }> = {
+    draft: { label: "Draft", next: "Not sent yet" },
+    submitted: { label: st.label, next: `With ${who}` },
+    returned: { label: "Returned", next: "Correct and send again" },
+    approved: st.label === "Not started" ? { label: "Not started", next: starts ? `Starts ${starts}` : "" } : { label: "Approved", next: "Work in progress" },
+    reported: { label: st.label, next: `With ${who}` },
+    assessed: { label: "Assessed", next: "Feedback received" },
+  };
+  return { tone: st.tone, ...(view[p.status] || { label: st.label, next: "" }) };
+}
+
+/** Health colours explained in plain words (same thresholds as healthOf in lib/plans). */
+function HealthLegend() {
+  const items: [keyof typeof HEALTH, string][] = [
+    ["on_track", "achievement is no more than 10 points behind the time that has passed"],
+    ["at_risk", "10 to 25 points behind"],
+    ["off_track", "more than 25 points behind"],
+    ["completed", "done or reported"],
+    ["not_started", "the period has not begun"],
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-[#EDF0F5] px-5 py-3 text-[12.5px] text-[#5B6577]">
+      <span className="font-bold text-[#36435A]">Health</span>
+      {items.map(([k, text]) => (
+        <span key={k} className="flex items-start gap-1.5">
+          <span className="mt-[5px] h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: HEALTH[k].bar }} aria-hidden />
+          <span>
+            <b className={cn("whitespace-nowrap", HEALTH[k].text)}>{HEALTH[k].label}</b> {text}
+          </span>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -105,23 +170,31 @@ function PlansTab({ uid }: { uid: string }) {
   return (
     <div className="flex flex-col gap-[18px]">
       <WCard flush className="overflow-hidden">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[#EDF0F5] px-5 py-3.5">
+          <h2 className="text-[15px] font-extrabold">This period</h2>
+          <span className="text-[12.5px] text-[#5B6577]">The plans that cover today, from the year down to this week</span>
+        </div>
         <div className="grid gap-px bg-[#EDF0F5] sm:grid-cols-2 xl:grid-cols-4">
           {cycle.map(({ k, plan }, i) => {
             const h = plan ? healthOf(plan, now) : "not_started";
+            const period = plan ? periodParts(plan.period_label) : null;
             return (
               <button key={k} type="button" onClick={() => navigate(plan ? `/dashboard/my/plans/${plan.id}` : `/dashboard/my/plans/new?type=${k}`)} className="flex min-w-0 flex-col gap-1 bg-white px-5 py-4 text-left transition-colors hover:bg-[#F8FAFD]">
-                <span className="flex items-center justify-between gap-2 text-[13px]">
-                  <span className="font-semibold text-[#5B6577]">{i + 1} · {TYPE_INFO[k].short}</span>
-                  {plan && <span className={cn("font-bold", HEALTH[h].text)}>{HEALTH[h].label}</span>}
+                <span className="flex items-center justify-between gap-2 text-[12px]">
+                  <span className="font-bold uppercase tracking-[0.05em] text-[#5B6577]">Level {i + 1} · {TYPE_INFO[k].short}</span>
+                  {plan && <Pill tone={HEALTH[h].tone}>{HEALTH[h].label}</Pill>}
                 </span>
                 <span className="text-[16px] font-extrabold leading-snug">{TYPE_INFO[k].label}</span>
-                {plan ? (
+                {plan && period ? (
                   <>
-                    <span className="truncate text-[13px] text-[#5B6577]">{plan.period_label}</span>
-                    <span className="mt-2 flex items-center gap-3"><Bar value={plan.progress} health={h} className="flex-1" /><b className="w-11 text-right text-[15px] tabular-nums">{plan.progress}%</b></span>
+                    <span className="truncate text-[13px] text-[#5B6577]">{period.sub ? `${period.sub} · ${period.main}` : period.main}</span>
+                    <span className="mt-2.5 flex items-center gap-3">
+                      <Bar value={plan.progress} health={h} className="flex-1" />
+                      <b className="w-11 text-right text-[15px] tabular-nums" aria-label={`${plan.progress}% achieved`}>{plan.progress}%</b>
+                    </span>
                   </>
                 ) : (
-                  <span className="text-[13px] text-[#1466C0]">Not planned yet — plan it →</span>
+                  <span className="mt-1 text-[13px] font-semibold text-[#1466C0]">Not planned yet · Plan it now →</span>
                 )}
               </button>
             );
@@ -131,8 +204,13 @@ function PlansTab({ uid }: { uid: string }) {
 
       <WCard flush className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-          <h2 className="mr-auto text-[17px] font-extrabold">All my plans</h2>
-          <label className="relative w-full sm:w-[300px]">
+          <div className="mr-auto min-w-0">
+            <h2 className="text-[17px] font-extrabold">All my plans</h2>
+            <p className="text-[12.5px] text-[#5B6577]">
+              {plans.length} plan{plans.length === 1 ? "" : "s"} · {assigned.length} assigned to you · open one to update progress or report
+            </p>
+          </div>
+          <label className="relative w-full sm:w-[240px]">
             <span className="sr-only">Search plans</span>
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8A94A6]" aria-hidden />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search plan or code" className="h-10 w-full rounded-[9px] border border-[#DDE3EC] bg-white pl-9 pr-3 text-[13.5px] outline-none placeholder:text-[#8A94A6] focus:border-[#1466C0] focus:ring-2 focus:ring-[#1466C0]/15" />
@@ -166,45 +244,81 @@ function PlansTab({ uid }: { uid: string }) {
           <p className="border-t border-[#EDF0F5] px-5 py-10 text-center text-[13.5px] text-[#5B6577]">No plan matches these filters.</p>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-[14px]">
+            {/* phones: one card per plan */}
+            <ul className="divide-y divide-[#EDF0F5] border-t border-[#EDF0F5] md:hidden">
+              {shown.map((p) => {
+                const h = healthOf(p, now);
+                const s = statusView(p, now);
+                const period = periodParts(p.period_label);
+                return (
+                  <li key={p.id}>
+                    <button type="button" onClick={() => navigate(`/dashboard/my/plans/${p.id}`)} className="flex w-full flex-col gap-1.5 px-4 py-3.5 text-left hover:bg-[#F8FAFD]">
+                      <span className="flex items-start justify-between gap-3">
+                        <b className="line-clamp-2 text-[14px] leading-snug text-[#14213D]">{planTitle(p)}</b>
+                        <Pill tone={s.tone}>{s.label}</Pill>
+                      </span>
+                      <span className="text-[12.5px] text-[#5B6577]">{TYPE_INFO[p.plan_type as PlanKind]?.short} · {period.main}{period.sub ? ` · ${period.sub}` : ""}</span>
+                      <span className="flex items-center gap-3">
+                        <Bar value={p.progress} health={h} className="flex-1" />
+                        <b className="text-[13px] tabular-nums">{p.progress}%</b>
+                        <Pill tone={HEALTH[h].tone}>{HEALTH[h].label}</Pill>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="hidden overflow-x-auto border-t border-[#E3E8EF] md:block">
+              <table className={cn(GRID, "min-w-[980px]")}>
                 <thead>
-                  <tr className="border-y border-[#EDF0F5] bg-[#F8FAFC] text-left text-[13px] text-[#5B6577]">
-                    <th scope="col" className="w-[26%] px-5 py-3 font-bold">Plan</th>
-                    <th scope="col" className="px-3 py-3 font-bold">Level</th>
-                    <th scope="col" className="px-3 py-3 font-bold">Period</th>
-                    <th scope="col" className="px-3 py-3 font-bold">Supervisor</th>
-                    <th scope="col" className="px-3 py-3 font-bold">Achievement</th>
-                    <th scope="col" className="px-3 py-3 font-bold">Health</th>
-                    <th scope="col" className="px-3 py-3 text-center font-bold leading-tight">Open<br />issues</th>
-                    <th scope="col" className="px-3 py-3 font-bold">Status</th>
-                    <th scope="col" className="py-3 pl-3 pr-5 font-bold">Rating</th>
+                  <tr className="bg-[#F8FAFC]">
+                    <th scope="col" className={cn(TH, "pl-5")}>Plan</th>
+                    <th scope="col" className={TH}>Period</th>
+                    <th scope="col" className={TH}>Supervisor</th>
+                    <th scope="col" className={TH}>Achieved</th>
+                    <th scope="col" className={TH}>Health</th>
+                    <th scope="col" className={cn(TH, "text-center")} title="Problems you recorded that are not solved yet">Issues</th>
+                    <th scope="col" className={TH}>Status</th>
+                    <th scope="col" className={cn(TH, "pr-5")}>Rating</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shown.map((p) => {
                     const h = healthOf(p, now);
-                    const o = originOf(p);
-                    const st = statusOf(p, now);
+                    const o = originTag(p);
+                    const s = statusView(p, now);
                     const issues = openIssues(p);
+                    const period = periodParts(p.period_label);
                     return (
-                      <tr key={p.id} onClick={() => navigate(`/dashboard/my/plans/${p.id}`)} className="cursor-pointer border-b border-[#EDF0F5] align-middle last:border-b-0 hover:bg-[#F8FAFD]">
-                        <td className="min-w-[230px] max-w-[330px] px-5 py-3.5">
-                          <Link to={`/dashboard/my/plans/${p.id}`} onClick={(e) => e.stopPropagation()} className="block font-bold leading-snug text-[#14213D] hover:text-[#0B3A6F]">{planTitle(p)}</Link>
-                          <span className="mt-0.5 block text-[12.5px] leading-snug">
-                            <span className="font-mono text-[11.5px] text-[#5B6577]">{p.number}</span>
-                            <span className="text-[#8A94A6]"> · </span>
-                            <span className={o.assigned ? "font-semibold text-[#6B2FA3]" : "text-[#5B6577]"}>{o.text}</span>
+                      <tr key={p.id} onClick={() => navigate(`/dashboard/my/plans/${p.id}`)} className="cursor-pointer border-t border-[#E3E8EF] align-middle hover:[&>td]:bg-[#F8FAFD]">
+                        <td className="min-w-[230px] max-w-[340px] py-3 pl-5 pr-3.5">
+                          <Link to={`/dashboard/my/plans/${p.id}`} onClick={(e) => e.stopPropagation()} className="line-clamp-2 font-bold leading-snug text-[#14213D] hover:text-[#0B3A6F] hover:underline">{planTitle(p)}</Link>
+                          <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]">
+                            <span className="rounded bg-[#F1F4F9] px-1.5 py-px font-mono text-[11px] text-[#5B6577]">{p.number}</span>
+                            <span title={o.full} className={cn("max-w-[240px] truncate rounded px-1.5 py-px font-semibold", o.assigned ? "bg-[#F3ECFA] text-[#6B2FA3]" : "text-[#5B6577]")}>{o.text}</span>
                           </span>
                         </td>
-                        <td className="px-3 py-3.5">{TYPE_INFO[p.plan_type as PlanKind]?.short}</td>
-                        <td className="min-w-[140px] px-3 py-3.5 text-[13.5px] text-[#36435A]">{p.period_label}</td>
-                        <td className="min-w-[110px] px-3 py-3.5 text-[13.5px] text-[#36435A]">{p.expand?.supervisor?.name || <span className="text-[#8A94A6]">—</span>}</td>
-                        <td className="px-3 py-3.5"><span className="flex items-center gap-2.5"><Bar value={p.progress} health={h} className="w-[72px]" /><b className="w-10 text-right tabular-nums">{p.progress}%</b></span></td>
-                        <td className="px-3 py-3.5"><Pill tone={HEALTH[h].tone}>{HEALTH[h].label}</Pill></td>
-                        <td className="px-3 py-3.5 text-center">{issues ? <b className="text-[15px] text-[#B42318]">{issues}</b> : <span className="text-[#8A94A6]">—</span>}</td>
-                        <td className="px-3 py-3.5"><Pill tone={st.tone}>{st.label}</Pill></td>
-                        <td className="py-3.5 pl-3 pr-5">{p.supervisor_rating ? <Stars value={p.supervisor_rating} size={13} /> : <span className="font-bold text-[#E8A33A]">—</span>}</td>
+                        <td className="whitespace-nowrap px-3.5 py-3">
+                          <span className="block text-[13.5px] font-semibold text-[#14213D]">{period.main}</span>
+                          {period.sub && <span className="block text-[12px] text-[#5B6577]">{period.sub}</span>}
+                        </td>
+                        <td className="min-w-[115px] px-3.5 py-3 text-[13.5px] text-[#36435A]">{p.expand?.supervisor?.name || <span className="text-[#8A94A6]">Not set</span>}</td>
+                        <td className="min-w-[105px] px-3.5 py-3">
+                          <b className="block text-[14px] tabular-nums">{p.progress}%</b>
+                          <Bar value={p.progress} health={h} className="mt-1 w-full" />
+                        </td>
+                        <td className="whitespace-nowrap px-3.5 py-3"><Pill tone={HEALTH[h].tone}>{HEALTH[h].label}</Pill></td>
+                        <td className="whitespace-nowrap px-3.5 py-3 text-center">
+                          {issues ? <span className="rounded-full bg-[#FDE8E7] px-2 py-0.5 text-[12.5px] font-bold text-[#B42318]">{issues} open</span> : <span className="text-[12.5px] text-[#8A94A6]">None</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-3.5 py-3">
+                          <Pill tone={s.tone}>{s.label}</Pill>
+                          {s.next && <span className="mt-1 block text-[12px] text-[#5B6577]">{s.next}</span>}
+                        </td>
+                        <td className="whitespace-nowrap py-3 pl-3.5 pr-5">
+                          {p.supervisor_rating ? <Stars value={p.supervisor_rating} size={13} /> : <span className="text-[12.5px] text-[#8A94A6]">Not rated</span>}
+                        </td>
                       </tr>
                     );
                   })}
@@ -218,7 +332,7 @@ function PlansTab({ uid }: { uid: string }) {
             )}
           </>
         )}
-        <p className="border-t border-[#EDF0F5] px-5 py-3 text-[12.5px] text-[#5B6577]">{HEALTH_NOTE}</p>
+        <HealthLegend />
       </WCard>
     </div>
   );
@@ -324,22 +438,38 @@ function TeamTab({ uid }: { uid: string }) {
         </div>
       </div>
       {q.isLoading ? <div className="px-5 pb-5"><Skeleton className="h-32 w-full" /></div> : !shown.length ? <p className="border-t border-[#EDF0F5] px-5 py-8 text-center text-[13.5px] text-[#5B6577]">{filter === "todo" ? "Nothing waiting for you." : "Your team has no plan yet."}</p> : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] text-[14px]">
-            <thead><tr className="border-y border-[#EDF0F5] bg-[#F8FAFC] text-left text-[13px] text-[#5B6577]"><th className="px-5 py-2.5 font-bold">Staff member</th><th className="px-3 py-2.5 font-bold">Plan</th><th className="px-3 py-2.5 font-bold">Achievement</th><th className="px-3 py-2.5 font-bold">Health</th><th className="px-3 py-2.5 text-center font-bold">Issues</th><th className="px-3 py-2.5 font-bold">Status</th><th className="py-2.5 pl-3 pr-5 text-right font-bold" /></tr></thead>
+        <div className="overflow-x-auto border-t border-[#E3E8EF]">
+          <table className={cn(GRID, "min-w-[960px]")}>
+            <thead>
+              <tr className="bg-[#F8FAFC]">
+                <th scope="col" className={cn(TH, "pl-5")}>Staff member</th>
+                <th scope="col" className={TH}>Plan</th>
+                <th scope="col" className={TH}>Achieved</th>
+                <th scope="col" className={TH}>Health</th>
+                <th scope="col" className={cn(TH, "text-center")}>Issues</th>
+                <th scope="col" className={TH}>Status</th>
+                <th scope="col" className={cn(TH, "pr-5 text-right")}>Your action</th>
+              </tr>
+            </thead>
             <tbody>
               {shown.map((r) => {
                 const h = healthOf(r, now);
                 const st = statusOf(r, now);
+                const issues = openIssues(r);
+                const mine = r.supervisor === uid;
+                const action = mine && r.status === "submitted" ? "Approve or return" : mine && r.status === "reported" ? "Assess the report" : "";
                 return (
-                  <tr key={r.id} onClick={() => navigate(`/dashboard/my/plans/${r.id}`)} className="cursor-pointer border-b border-[#EDF0F5] last:border-b-0 hover:bg-[#F8FAFD]">
-                    <td className="px-5 py-3 font-bold">{r.expand?.staff?.name}</td>
-                    <td className="max-w-[320px] px-3 py-3"><span className="block font-semibold leading-snug">{planTitle(r)}</span><span className="block text-[12.5px] text-[#5B6577]">{r.period_label} · {(r.items || []).length} {TYPE_INFO[r.plan_type as PlanKind]?.items.toLowerCase()}</span></td>
-                    <td className="px-3 py-3"><span className="flex items-center gap-2"><Bar value={r.progress} health={h} className="w-20" /><b className="text-[12.5px] tabular-nums">{r.progress}%</b></span></td>
-                    <td className="px-3 py-3"><Pill tone={HEALTH[h].tone}>{HEALTH[h].label}</Pill></td>
-                    <td className="px-3 py-3 text-center">{openIssues(r) ? <b className="text-[#B42318]">{openIssues(r)}</b> : <span className="text-[#8A94A6]">—</span>}</td>
-                    <td className="px-3 py-3"><Pill tone={st.tone}>{st.label}</Pill></td>
-                    <td className="py-3 pl-3 pr-5 text-right">{r.supervisor === uid && r.status === "submitted" ? <span className="text-[13px] font-bold text-[#1466C0]">Approve →</span> : r.supervisor === uid && r.status === "reported" ? <span className="text-[13px] font-bold text-[#1466C0]">Assess →</span> : null}</td>
+                  <tr key={r.id} onClick={() => navigate(`/dashboard/my/plans/${r.id}`)} className="cursor-pointer border-t border-[#E3E8EF] hover:[&>td]:bg-[#F8FAFD]">
+                    <td className="whitespace-nowrap py-3 pl-5 pr-3.5 font-bold">{r.expand?.staff?.name}</td>
+                    <td className="max-w-[340px] px-3.5 py-3">
+                      <span className="line-clamp-2 font-semibold leading-snug">{planTitle(r)}</span>
+                      <span className="block text-[12.5px] text-[#5B6577]">{r.period_label} · {(r.items || []).length} {TYPE_INFO[r.plan_type as PlanKind]?.items.toLowerCase()}</span>
+                    </td>
+                    <td className="min-w-[110px] px-3.5 py-3"><b className="block text-[14px] tabular-nums">{r.progress}%</b><Bar value={r.progress} health={h} className="mt-1 w-full" /></td>
+                    <td className="whitespace-nowrap px-3.5 py-3"><Pill tone={HEALTH[h].tone}>{HEALTH[h].label}</Pill></td>
+                    <td className="whitespace-nowrap px-3.5 py-3 text-center">{issues ? <span className="rounded-full bg-[#FDE8E7] px-2 py-0.5 text-[12.5px] font-bold text-[#B42318]">{issues} open</span> : <span className="text-[12.5px] text-[#8A94A6]">None</span>}</td>
+                    <td className="whitespace-nowrap px-3.5 py-3"><Pill tone={st.tone}>{st.label}</Pill></td>
+                    <td className="whitespace-nowrap py-3 pl-3.5 pr-5 text-right">{action ? <span className="text-[13px] font-bold text-[#1466C0]">{action} →</span> : <span className="text-[12.5px] text-[#8A94A6]">Nothing to do</span>}</td>
                   </tr>
                 );
               })}
@@ -347,7 +477,9 @@ function TeamTab({ uid }: { uid: string }) {
           </table>
         </div>
       )}
-      <p className="border-t border-[#EDF0F5] px-5 py-3 text-[12.5px] text-[#5B6577]">{PLAN_STATUS.submitted.label}: approve or return with a comment. Report to assess: rate it and give feedback.</p>
+      <p className="border-t border-[#EDF0F5] px-5 py-3 text-[12.5px] text-[#5B6577]">
+        <b className="text-[#36435A]">{PLAN_STATUS.submitted.label}:</b> approve the plan, or return it with a comment. <b className="text-[#36435A]">{PLAN_STATUS.reported.label}:</b> rate the work and give feedback.
+      </p>
     </WCard>
   );
 }
