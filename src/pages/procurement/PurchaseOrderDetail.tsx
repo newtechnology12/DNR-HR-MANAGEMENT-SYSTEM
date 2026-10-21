@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/utils";
+import DocumentUploads from "@/components/enterprise/Attachments";
 import { Badge, EmptyState, Panel, StatusBadge } from "@/components/enterprise/ui";
 import { ActionDialog, ActionKind, ApprovalTracker } from "@/components/enterprise/Approval";
 import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, SmartButtons, Totals, toChatter } from "@/components/enterprise/DocumentLayout";
@@ -21,7 +22,7 @@ import { ReturnFormDialog } from "./Returns";
 import { BudgetPanel } from "@/components/budget/BudgetKit";
 import { Field, FormBlock, FormDialog, textareaCls } from "@/components/portal/kit";
 
-const TABS = ["lines", "receipts", "bills", "other", "revisions", "approval"] as const;
+const TABS = ["lines", "receipts", "bills", "other", "revisions", "documents", "approval"] as const;
 const inputCls = "h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 const STEPS = [
@@ -234,6 +235,7 @@ export default function PurchaseOrderDetail() {
             { key: "bills", label: "Bills & payments", count: activeBills.length },
             { key: "other", label: "Other information" },
             ...((po.revisions || []).length ? [{ key: "revisions", label: "Revisions", count: po.revisions.length }] : []),
+            { key: "documents", label: "Documents", count: (po.attachments || []).length },
             ...(approval ? [{ key: "approval", label: "Approval" }] : []),
           ]}
         />
@@ -403,6 +405,7 @@ export default function PurchaseOrderDetail() {
           )}
 
           {tab === "revisions" && <Revisions po={po} />}
+          {tab === "documents" && <DocumentUploads collection="purchase_orders" record={po} canAdd={canManage || canPerform("receive_goods") || canPerform("approve_purchase_orders") || canPerform("manage_invoices")} canRemove={canManage && editable} onChange={refresh} hint="Signed order, delivery notes, correspondence…" />}
           {tab === "approval" && <ApprovalTracker approval={approval} actions={actions} />}
         </div>
       </Sheet>

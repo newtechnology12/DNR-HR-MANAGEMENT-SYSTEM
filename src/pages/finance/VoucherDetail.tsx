@@ -6,7 +6,7 @@ import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "react-query";
 import { toast } from "sonner";
-import { AlertTriangle, Banknote, FileCheck2, Paperclip, Pencil, Printer, Send, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, Banknote, FileCheck2, Pencil, Printer, Send, ShieldCheck, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { BANK_LABELS, VOUCHER_STATUS, VOUCHER_TYPES, payablesApi } from "@/lib/payables";
@@ -21,6 +21,7 @@ import { BudgetPanel } from "@/components/budget/BudgetKit";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { inputCls } from "@/components/portal/kit";
 import { cn } from "@/utils";
+import DocumentUploads from "@/components/enterprise/Attachments";
 
 const STEPS = [
   { key: "draft", label: "Draft" },
@@ -179,18 +180,7 @@ export default function VoucherDetail() {
               </div>
             )
           )}
-          {tab === "documents" && (
-            !(v.attachments || []).length ? <EmptyState icon={Paperclip} text={editable ? "Add supporting documents with Edit." : "No supporting documents attached."} /> : (
-              <ul className="divide-y divide-slate-100 rounded-md border border-slate-200 text-[13px]">
-                {(v.attachments || []).map((f: string) => (
-                  <li key={f} className="flex items-center justify-between gap-2 px-3 py-2.5">
-                    <span className="flex min-w-0 items-center gap-2"><Paperclip size={14} className="shrink-0 text-slate-400" /><span className="truncate">{f}</span></span>
-                    <a href={pocketbase.files.getUrl(v, f)} target="_blank" rel="noreferrer" className="shrink-0 text-[12.5px] font-medium text-primaryDark hover:underline">Open</a>
-                  </li>
-                ))}
-              </ul>
-            )
-          )}
+          {tab === "documents" && <DocumentUploads collection="payment_vouchers" record={v} canAdd={can(["manage_payment_vouchers", "approve_payment_vouchers", "record_payments"])} canRemove={editable} onChange={refresh} hint="Invoice, delivery note, bank transfer confirmation…" />}
           {tab === "approval" && <ApprovalTracker approval={v.expand?.approval} actions={trail.actions} />}
         </div>
       </Sheet>

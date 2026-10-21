@@ -23,6 +23,7 @@ import { Field, FormBlock, FormDialog, inputCls, Segmented } from "@/components/
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LineLedgerDialog, UseBar } from "@/components/budget/BudgetKit";
 import { cn } from "@/utils";
+import DocumentUploads from "@/components/enterprise/Attachments";
 
 const STEPS = [{ key: "draft", label: "Draft" }, { key: "pending_approval", label: "In approval" }, { key: "approved", label: "Approved" }];
 const KIND_ACCOUNT: Record<string, string> = { expense: "expense", capital: "asset", revenue: "revenue" };
@@ -152,7 +153,7 @@ export default function BudgetDetail() {
           ]}
         />
         <Notebook
-          tabs={[{ key: "lines", label: "Budget lines", count: items.length }, { key: "phasing", label: "Monthly phasing" }, { key: "approval", label: "Approval" }]}
+          tabs={[{ key: "lines", label: "Budget lines", count: items.length }, { key: "phasing", label: "Monthly phasing" }, { key: "documents", label: "Documents", count: (b.attachments || []).length }, { key: "approval", label: "Approval" }]}
           active={tab}
           onChange={setTab}
         />
@@ -209,6 +210,7 @@ export default function BudgetDetail() {
               </table>
             </div>
           )}
+          {tab === "documents" && <DocumentUploads collection="budgets" record={b} canAdd={can(["manage_budgets", "approve_budgets"])} canRemove={can("manage_budgets") && EDITABLE.includes(b.status)} onChange={refresh} hint="Budget submissions, council resolutions, assumptions…" />}
           {tab === "approval" && <ApprovalTracker approval={b.expand?.approval} actions={trail.actions} />}
         </div>
       </Sheet>

@@ -365,7 +365,8 @@ routerAdd("GET", "/api/ims/security/users", (c) => {
   const security = require(`${__hooks}/lib/security.js`);
   const info = $apis.requestInfo(c);
   const dao = $app.dao();
-  if (!info.admin) core.requirePermission(dao, info.authRecord, "access_general_settings", "view account security");
+  // Read-only oversight (SG, DAF, Internal Auditor hold view_security_admin); actions stay with administrators.
+  if (!info.admin && !core.can(dao, info.authRecord, "view_security_admin")) core.requirePermission(dao, info.authRecord, "access_general_settings", "view account security");
   const secs = {};
   for (const s of dao.findRecordsByFilter("user_security", "id != ''", "", 5000, 0) || []) secs[s.getString("user")] = s;
   const users = dao.findRecordsByFilter("users", "id != ''", "name", 5000, 0) || [];

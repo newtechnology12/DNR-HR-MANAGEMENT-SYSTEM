@@ -71,6 +71,9 @@ await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const port = server.address().port;
 
 const admin = await login("admin@dnr-hr.rw");
+const su = new PocketBase(PB_URL);
+su.autoCancellation(false);
+await su.admins.authWithPassword(process.env.PB_ADMIN_EMAIL || "admin@dnr-hr.rw", process.env.PB_ADMIN_PASSWORD || "admin123456");
 const hr = await login("hr@dnr-hr.rw");
 const employee = await login("employee@dnr-hr.rw");
 const settings = (await admin.collection("settings").getList(1, 1)).items[0];
@@ -120,6 +123,49 @@ try {
 } finally {
   await admin.collection("settings").update(settings.id, saved);
   server.close();
+}
+
+console.log("Supporting documents");
+const pdf = (name) => {
+  const body = "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF";
+  return new File([body], name, { type: "application/pdf" });
+};
+const upload = (pb, collection, id, files) => {
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f);
+  return pb.send(`/api/ims/attachments/${collection}/${id}`, { method: "POST", body: fd });
+};
+{
+  const acc = await login("accountant@dnr-hr.rw");
+  const approvedInv = await su.collection("supplier_invoices").getFirstListItem('status = "approved" || status = "paid" || status = "partially_paid"');
+  await check("documents can be added to an approved invoice by Finance", async () => {
+    const r = await upload(acc, "supplier_invoices", approvedInv.id, [pdf("supplier-invoice-scan.pdf"), pdf("delivery-note.pdf")]);
+    assert(r.files.filter((f) => /supplier.invoice.scan|delivery.note/.test(f)).length >= 2, `files: ${r.files}`);
+    const log = await su.collection("audit_logs").getList(1, 1, { filter: `record_id = "${approvedInv.id}" && action = "document_attached"` });
+    assert(log.totalItems > 0, "upload not audited");
+  });
+  await check("documents of an approved invoice are part of the record (cannot be removed)", async () => {
+    const inv = await su.collection("supplier_invoices").getOne(approvedInv.id);
+    await expectStatus(acc.send(`/api/ims/attachments/supplier_invoices/${inv.id}/${encodeURIComponent(inv.attachments[0])}`, { method: "DELETE" }), 400);
+  });
+  await check("staff without a role on invoices cannot attach documents to them", async () => {
+    await expectStatus(upload(employee, "supplier_invoices", approvedInv.id, [pdf("x.pdf")]), 403);
+  });
+  await check("only document types are accepted (no programs)", async () => {
+    await expectStatus(upload(acc, "supplier_invoices", approvedInv.id, [new File(["MZ"], "setup.exe", { type: "application/octet-stream" })]), 400);
+  });
+  await check("a draft voucher's documents can be added and removed", async () => {
+    const line = await acc.collection("budget_lines").getFirstListItem('code ~ "FIN-5203" && status = "active"');
+    const v = await acc.collection("payment_vouchers").create({ voucher_type: "direct", payee_name: "Test payee", budget_line: line.id, gross_amount: 1000, description: "Attachment test", payee_bank: { bank_name: "BK", bank_account_number: "1" } });
+    try {
+      const r = await upload(acc, "payment_vouchers", v.id, [pdf("quote.pdf")]);
+      assert(r.files.length === 1, `files ${r.files}`);
+      const del = await acc.send(`/api/ims/attachments/payment_vouchers/${v.id}/${encodeURIComponent(r.files[0])}`, { method: "DELETE" });
+      assert(del.files.length === 0, "not removed");
+    } finally {
+      await acc.collection("payment_vouchers").delete(v.id).catch(() => null);
+    }
+  });
 }
 
 console.log("Payroll preview");

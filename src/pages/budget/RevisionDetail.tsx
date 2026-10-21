@@ -21,6 +21,7 @@ import { DecisionButtons, useApprovalTrail } from "@/components/enterprise/useAp
 import { Field, inputCls, Segmented, textareaCls } from "@/components/portal/kit";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/utils";
+import DocumentUploads from "@/components/enterprise/Attachments";
 
 type Row = { budget_line: string; change: number | string; phasing?: (number | string)[] };
 const STEPS = [{ key: "draft", label: "Draft" }, { key: "pending_approval", label: "In approval" }, { key: "approved", label: "Applied" }];
@@ -164,7 +165,7 @@ export default function RevisionDetail() {
           />
         )}
 
-        <Notebook tabs={[{ key: "lines", label: "Lines", count: rows.length }, ...(isNew ? [] : [{ key: "approval", label: "Approval" }])]} active={tab} onChange={setTab} />
+        <Notebook tabs={[{ key: "lines", label: "Lines", count: rows.length }, ...(isNew ? [] : [{ key: "documents", label: "Documents", count: (r.attachments || []).length }, { key: "approval", label: "Approval" }])]} active={tab} onChange={setTab} />
         <div className="space-y-3 pt-4">
           {tab === "lines" && (
             <>
@@ -260,6 +261,7 @@ export default function RevisionDetail() {
               ))}
             </>
           )}
+          {tab === "documents" && !isNew && <DocumentUploads collection="budget_revisions" record={r} canAdd={can(["manage_budgets", "approve_budgets"])} canRemove={can("manage_budgets") && EDITABLE.includes(r.status)} onChange={refresh} />}
           {tab === "approval" && !isNew && <ApprovalTracker approval={r.expand?.approval} actions={trail.actions} />}
         </div>
       </Sheet>

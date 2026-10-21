@@ -11,12 +11,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/utils";
+import DocumentUploads from "@/components/enterprise/Attachments";
 import { EmptyState, Panel, StatusBadge } from "@/components/enterprise/ui";
 import { ActionDialog, ActionKind, ApprovalTracker } from "@/components/enterprise/Approval";
 import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, SmartButtons, Totals, toChatter } from "@/components/enterprise/DocumentLayout";
 import { INVOICE_STATUS, PAYMENT_METHODS, PO_STATUS, errorMessage, financeApi, money, procurementApi } from "@/lib/procurement";
 
-const TABS = ["lines", "payments", "approval"] as const;
+const TABS = ["lines", "payments", "documents", "approval"] as const;
 const STEPS = [
   { key: "received", label: "Received" },
   { key: "matched", label: "Matched" },
@@ -162,6 +163,7 @@ export default function InvoiceDetail() {
           tabs={[
             { key: "lines", label: "Invoice lines & match", count: lines.length },
             { key: "payments", label: "Payments", count: payments.length },
+            { key: "documents", label: "Documents", count: (inv.attachments || []).length },
             ...(approval ? [{ key: "approval", label: "Approval" }] : []),
           ]}
         />
@@ -247,6 +249,7 @@ export default function InvoiceDetail() {
             )
           )}
 
+          {tab === "documents" && <DocumentUploads collection="supplier_invoices" record={inv} canAdd={canPerform("manage_invoices") || canPerform("approve_invoices") || canPerform("resolve_invoice_exceptions")} canRemove={canPerform("manage_invoices") && ["received", "exception", "matched", "returned"].includes(inv.status)} onChange={refresh} hint="The supplier's invoice (scan or PDF), credit notes…" />}
           {tab === "approval" && <ApprovalTracker approval={approval} actions={actions} />}
         </div>
       </Sheet>

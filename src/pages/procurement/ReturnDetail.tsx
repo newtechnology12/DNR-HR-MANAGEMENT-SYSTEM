@@ -12,6 +12,7 @@ import { ActionDialog, ActionKind, ApprovalTracker } from "@/components/enterpri
 import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, SmartButtons, Totals, toChatter } from "@/components/enterprise/DocumentLayout";
 import { RETURN_STATUS, errorMessage, money, phase5Api, procurementApi } from "@/lib/procurement";
 import { Field, FormBlock, FormDialog, inputCls, showDate } from "@/components/portal/kit";
+import DocumentUploads from "@/components/enterprise/Attachments";
 
 const STEPS = [
   { key: "draft", label: "Draft" },
@@ -107,7 +108,7 @@ export default function ReturnDetail() {
             { label: "Credit note", value: r.credit_note_number ? `${r.credit_note_number} · ${money(r.credit_amount)}` : "" },
           ]}
         />
-        <Notebook active={tab} onChange={setTab} tabs={[{ key: "lines", label: "Returned items", count: (r.items || []).length }, ...(approval ? [{ key: "approval", label: "Approval" }] : [])]} />
+        <Notebook active={tab} onChange={setTab} tabs={[{ key: "lines", label: "Returned items", count: (r.items || []).length }, { key: "documents", label: "Documents", count: (r.attachments || []).length }, ...(approval ? [{ key: "approval", label: "Approval" }] : [])]} />
         <div className="pt-4">
           {tab === "lines" && (
             <>
@@ -131,6 +132,7 @@ export default function ReturnDetail() {
               <Totals rows={r.credit_amount ? [["Credit note received", money(r.credit_amount)]] : []} total={["Value returned", money(r.total_value)]} />
             </>
           )}
+          {tab === "documents" && <DocumentUploads collection="purchase_returns" record={r} canAdd={canPerform("manage_purchase_orders") || canPerform("receive_goods") || canPerform("approve_purchase_returns")} canRemove={["draft", "returned"].includes(r.status) && canPerform("manage_purchase_orders")} onChange={refresh} hint="Photos of the defects, supplier's return note, credit note…" />}
           {tab === "approval" && <ApprovalTracker approval={approval} actions={actions} />}
         </div>
       </Sheet>

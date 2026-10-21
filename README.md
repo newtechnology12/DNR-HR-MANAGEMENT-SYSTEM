@@ -158,6 +158,37 @@ Once a supplier is approved, its bank details are locked. Procurement asks for n
 payments keep going to the verified account. Old and new details stay on the request; every step is
 audited. Bank details are visible only to supplier, payables and audit roles.
 
+## Working with data
+
+- **Excel import** (button *Import* on lists): download the template (Data sheet with the right headers, an
+  Example sheet, the allowed values on a Lists sheet, Instructions), fill it, upload it. Every row is checked
+  first (required fields, numbers, dates, e-mails, choices, links to other records by code / name / e-mail,
+  duplicates in the file); you see each problem and can download the rows to fix. Valid rows are created one
+  by one through the API, so permissions, business rules and the audit trail apply exactly as in the forms.
+  Available on master data (chart of accounts, funding sources, projects, cost centres, tax rates, approval
+  limits), departments, designations, offices, suppliers (created as drafts), stock items, equipment
+  (categories, types, register), leave types, public holidays, salary structures, partners and employees.
+- **Export** (button *Export*): Excel, PDF or CSV with the RALGA header, the filters used and who generated it,
+  on every list; exports are audited and follow each person's access (staff export only their own records).
+- **Supporting documents** (tab *Documents* on budgets, revisions, purchase orders, invoices, vouchers, returns
+  and bank-detail changes): drag and drop several files (PDF, images, Office, CSV, e-mail, zip; 20 MB each).
+  Files can be added at any stage; they can only be removed while the document is being prepared. Each
+  upload and removal is audited.
+
+## E-mail
+
+Settings → E-mail. Enter the mail server (presets for Microsoft 365 and Google Workspace), the sender and the
+public address of the system, switch sending on, then *Send test e-mail*. The settings are applied to the
+server immediately. Approvals, reminders and alerts are e-mailed with the RALGA template; the **E-mail log** on
+the same page lists every message (sent, failed, not sent) and lets an administrator send failed ones again.
+
+## Payroll preview
+
+HR & payroll → Payroll → *New payroll* first shows the whole month before anything is saved: every payslip
+(basic, allowances, gross, PAYE, pension, maternity, CBHI, other deductions, net, employer cost), the totals for
+RRA and RSSB, who is left out and why, and the PAYE bands and contribution rates **in force that month**
+(Settings → Payroll & taxes, dated rates). *Create payroll* then saves exactly those figures.
+
 ## Security
 
 | Control | Default (Settings) |

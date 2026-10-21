@@ -17,6 +17,8 @@ import { ApprovalTracker } from "@/components/enterprise/Approval";
 import { DecisionButtons, useApprovalTrail } from "@/components/enterprise/useApprovalTrail";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/utils";
+import { usePermissions } from "@/context/auth.context";
+import DocumentUploads from "@/components/enterprise/Attachments";
 
 export const BANK_LABELS: [string, string][] = [
   ["bank_name", "Bank"],
@@ -34,6 +36,7 @@ export default function BankChangeDetail() {
   const [reason, setReason] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const me = pocketbase.authStore.model as any;
+  const { can } = usePermissions();
   const q = useQuery(["bank-change", changeId], () => pocketbase.collection("supplier_bank_changes").getOne(changeId!, { expand: "supplier,requested_by,approval" }));
   const trail = useApprovalTrail("supplier_bank_change", "supplier_bank_changes", changeId);
   const r: any = q.data;
@@ -88,7 +91,7 @@ export default function BankChangeDetail() {
             { label: "Cancelled because", value: r.cancel_reason },
           ]}
         />
-        <Notebook tabs={[{ key: "details", label: "Old and new details" }, { key: "approval", label: "Approval" }]} active={tab} onChange={setTab} />
+        <Notebook tabs={[{ key: "details", label: "Old and new details" }, { key: "documents", label: "Bank letter", count: (r.attachments || []).length }, { key: "approval", label: "Approval" }]} active={tab} onChange={setTab} />
         <div className="pt-4">
           {tab === "details" && (
             <div className="overflow-x-auto">
@@ -116,6 +119,7 @@ export default function BankChangeDetail() {
               )}
             </div>
           )}
+          {tab === "documents" && <DocumentUploads collection="supplier_bank_changes" record={r} canAdd={can(["manage_suppliers", "approve_suppliers"])} canRemove={open && r.requested_by === me?.id} onChange={refresh} hint="The supplier's signed bank confirmation letter" />}
           {tab === "approval" && <ApprovalTracker approval={r.expand?.approval} actions={trail.actions} />}
         </div>
       </Sheet>
