@@ -1,173 +1,49 @@
-import DataTable from "@/components/DataTable";
-import TableTools from "@/components/enterprise/TableTools";
-import { IMPORTS } from "@/lib/importConfigs";
-import { ColumnDef, PaginationState } from "@tanstack/react-table";
-import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { PlusCircle } from "lucide-react";
-import pocketbase from "@/lib/pocketbase";
-import cleanObject from "@/utils/cleanObject";
+/**
+ * Settings → Branches: the organisation's offices, their manager and status, with Excel import and
+ * export. Create and edit open the branch form; deleting asks first.
+ */
 import { useState } from "react";
 import { useQuery } from "react-query";
-import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { Building2, Pencil, Plus, Trash2 } from "lucide-react";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
+import pocketbase from "@/lib/pocketbase";
+import cleanObject from "@/utils/cleanObject";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
-import DataTableRowActions from "@/components/datatable/DataTableRowActions";
-import ConfirmModal from "@/components/modals/ConfirmModal";
-import useConfirmModal from "@/hooks/useConfirmModal";
-import { toast } from "sonner";
 import { BranchFormModal } from "@/components/modals/BranchesFormModal";
-import StatCard from "@/components/StatCard";
-import { Building2, MapPin, Users } from "lucide-react";
+import {
+  Button,
+  Card,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  FilterBar,
+  FilterSelect,
+  KpiBand,
+  Pager,
+  StatusPill,
+  fmtDate,
+  fmtNumber,
+} from "@/components/ims";
+
+type Sort = { id: string; desc: boolean };
+type ColumnFilter = { id: string; value: string[] };
 
 export default function Branches() {
-  const columns: ColumnDef<any>[] = [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          // @ts-ignore
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-          className="translate-y-[2px]"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-          className="translate-y-[2px]"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "name",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Name" />
-      ),
-      cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => editRow.edit(row.original)}
-          className="capitalize hover:text-primary hover:underline"
-        >
-          {row.getValue("name")}
-        </button>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "manager",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Manager" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("manager")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Status" />
-      ),
-      cell: ({ row }) => {
-        const status = row.getValue("status") as string;
-        if (!status) return <span className="text-slate-400">---</span>;
-        return (
-          <Badge variant={status === "active" ? "success" : "secondary"} className="capitalize">
-            {status}
-          </Badge>
-        );
-      },
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "location",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Location" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("location")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "created",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created at" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      id: "actions",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Actions" />
-      ),
-      cell: ({ row }) => (
-        <DataTableRowActions
-          actions={[
-            {
-              title: "Edit Branch",
-              onClick: (e) => {
-                editRow.edit(e.original);
-              },
-            },
-            {
-              title: "delete Branch",
-              onClick: (e) => {
-                confirmModal.open({ meta: e });
-              },
-            },
-          ]}
-          row={row}
-        />
-      ),
-    },
-  ];
-
   const [searchText, setsearchText] = useState("");
 
-  const [columnFilters, setColumnFilters] = useState([]);
-  const [sorting, setSorting] = useState([
+  const [columnFilters, setColumnFilters] = useState<ColumnFilter[]>([]);
+  const [sorting, setSorting] = useState<Sort[]>([
     {
       id: "created",
       desc: true,
     },
   ]);
 
-  const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
+  const [{ pageIndex, pageSize }, setPagination] = useState({
     pageIndex: 0,
     pageSize: 10,
   });
@@ -215,20 +91,13 @@ export default function Branches() {
                 manager: e.expand?.manager?.name,
                 status: e.status,
                 location: e.location,
-                created: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
-                updated: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
+                created: e.created,
+                updated: e.updated,
                 original: e,
               };
             }),
             totalPages: e.totalPages,
+            totalItems: e.totalItems,
           };
         });
     },
@@ -260,120 +129,149 @@ export default function Branches() {
 
   const editRow = useEditRow();
 
-  const confirmModal = useConfirmModal();
+  const [deleting, setDeleting] = useState<any>(null);
 
-  const handleDelete = (e) => {
-    confirmModal.setIsLoading(true);
+  const handleDelete = (e: any) => {
     return pocketbase
       .collection("branches")
       .delete(e.id)
       .then(() => {
         recordsQuery.refetch();
-        confirmModal.close();
-        toast.success("Branch deleted successfully");
+        setDeleting(null);
+        toast.success(`${e.name || "Branch"} deleted`);
       })
-      .catch((e) => {
-        confirmModal.setIsLoading(false);
-        toast.error(e.message);
+      .catch((err) => {
+        toast.error(err.message);
+        throw err;
       });
   };
 
+  // The table's sort ("-name") and status filter map onto the query's sorting and column filters.
+  const sort = sorting[0] ? `${sorting[0].desc ? "-" : ""}${sorting[0].id}` : "";
+  const onSort = (s: string) => {
+    setSorting([{ id: s.replace(/^-/, ""), desc: s.startsWith("-") }]);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
+  const status = columnFilters.find((f) => f.id === "status")?.value[0] || "";
+  const setStatus = (v: string) => {
+    setColumnFilters(v ? [{ id: "status", value: [v] }] : []);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
+  const items = recordsQuery.data?.items || [];
+  const total = recordsQuery.data?.totalItems || 0;
+  const filtered = Boolean(searchText || status);
+
+  const columns: Column<any>[] = [
+    { key: "name", header: "Name", sortField: "name", clamp: true, cell: (r) => <span className="font-semibold">{r.name}</span>, sub: (r) => r.description },
+    { key: "manager", header: "Manager", cell: (r) => r.manager || <span className="text-ims-faint">—</span> },
+    { key: "location", header: "Location", sortField: "location", clamp: true, cell: (r) => r.location || <span className="text-ims-faint">—</span> },
+    {
+      key: "status",
+      header: "Status",
+      sortField: "status",
+      cell: (r) => (r.status ? <StatusPill status={r.status === "active" ? "Active" : r.status === "inactive" ? "Inactive" : r.status} /> : <span className="text-ims-faint">—</span>),
+    },
+    { key: "created", header: "Created", sortField: "created", nowrap: true, cell: (r) => fmtDate(r.created) },
+  ];
+
   return (
-    <>
-      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Branches"
-          icon={Building2}
-          tone="default"
-          loading={statsLoading}
-          value={statsQuery.data?.total}
-          description="Branches across the company"
-        />
-        <StatCard
-          title="Active"
-          icon={MapPin}
-          tone="success"
-          loading={statsLoading}
-          value={statsQuery.data?.active}
-          description="Currently active branches"
-        />
-        <StatCard
-          title="Inactive"
-          icon={MapPin}
-          tone="default"
-          loading={statsLoading}
-          value={statsQuery.data?.inactive}
-          description="Currently inactive branches"
-        />
-        <StatCard
-          title="Total Employees"
-          icon={Users}
-          tone="info"
-          loading={statsLoading}
-          value={statsQuery.data?.employees}
-          description="Employees across all branches"
-        />
-      </div>
-      <DataTable
-        className="!border-none !p-0"
-        isFetching={recordsQuery.isFetching}
-        defaultColumnVisibility={{}}
-        isLoading={recordsQuery.status === "loading"}
-        data={recordsQuery?.data?.items || []}
-        columns={columns}
-        onSearch={(e) => {
-          setsearchText(e);
-        }}
-        sorting={sorting}
-        setSorting={setSorting}
-        pageCount={recordsQuery?.data?.totalPages}
-        setPagination={setPagination}
-        pageIndex={pageIndex}
-        pageSize={pageSize}
-        setColumnFilters={setColumnFilters}
-        columnFilters={columnFilters}
-        Action={() => {
-          return (
-            <span className="mr-2 inline-flex flex-wrap items-center gap-2">
-              <TableTools
-                importConfig={IMPORTS.branches}
-                onImported={() => recordsQuery.refetch()}
-                exportConfig={{
-                  title: "Offices", fileName: "offices", what: "branches",
-                  rows: async () => {
-                    const [rows, users] = await Promise.all([
-                      pocketbase.collection("branches").getFullList({ sort: "name" }),
-                      pocketbase.collection("users").getFullList({ fields: "id,name" }),
-                    ]);
-                    const names = Object.fromEntries(users.map((u: any) => [u.id, u.name]));
-                    return rows.map((r: any) => ({ ...r, manager_name: names[r.manager] || "" }));
-                  },
-                  columns: [
-                    { header: "Office", value: (r: any) => r.name, width: 28 },
-                    { header: "Location", value: (r: any) => r.location || "", width: 30 },
-                    { header: "Manager", value: (r: any) => r.manager_name },
-                    { header: "Status", value: (r: any) => r.status || "" },
-                  ],
-                }}
-              />
-              <Button onClick={() => newRecordModal.open()} size="sm">
-                <PlusCircle size={16} className="mr-2" />
-                <span>Create new branch</span>
-              </Button>
-            </span>
-          );
-        }}
-        facets={[
-          {
-            title: "Status",
-            name: "status",
-            options: [
-              { label: "active", value: "active" },
-              { label: "inactive", value: "inactive" },
-            ],
-          },
+    <div className="flex flex-col gap-4">
+      <KpiBand
+        loading={statsLoading}
+        items={[
+          { label: "Branches", value: fmtNumber(statsQuery.data?.total), sub: "Across the organisation" },
+          { label: "Active", value: fmtNumber(statsQuery.data?.active), tone: "success", onClick: () => setStatus("active") },
+          { label: "Inactive", value: fmtNumber(statsQuery.data?.inactive), onClick: () => setStatus("inactive") },
+          { label: "Employees", value: fmtNumber(statsQuery.data?.employees), sub: "In all branches" },
         ]}
       />
+      <Card padded={false} className="overflow-hidden">
+        <FilterBar
+          search={{
+            value: searchText,
+            onChange: (v) => {
+              setsearchText(v);
+              setPagination((p) => ({ ...p, pageIndex: 0 }));
+            },
+            placeholder: "Search branch name",
+          }}
+          chips={status ? [{ key: "status", label: `Status: ${status === "active" ? "Active" : "Inactive"}`, onRemove: () => setStatus("") }] : []}
+          onClear={() => setStatus("")}
+          right={
+            <>
+            <TableTools
+              importConfig={IMPORTS.branches}
+              onImported={() => recordsQuery.refetch()}
+              exportConfig={{
+                title: "Offices", fileName: "offices", what: "branches",
+                rows: async () => {
+                  const [rows, users] = await Promise.all([
+                    pocketbase.collection("branches").getFullList({ sort: "name" }),
+                    pocketbase.collection("users").getFullList({ fields: "id,name" }),
+                  ]);
+                  const names = Object.fromEntries(users.map((u: any) => [u.id, u.name]));
+                  return rows.map((r: any) => ({ ...r, manager_name: names[r.manager] || "" }));
+                },
+                columns: [
+                  { header: "Office", value: (r: any) => r.name, width: 28 },
+                  { header: "Location", value: (r: any) => r.location || "", width: 30 },
+                  { header: "Manager", value: (r: any) => r.manager_name },
+                  { header: "Status", value: (r: any) => r.status || "" },
+                ],
+              }}
+            />
+            <Button variant="primary" icon={Plus} onClick={() => newRecordModal.open()}>New branch</Button>
+            </>
+          }
+        >
+          <FilterSelect
+            label="Status"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "inactive", label: "Inactive" },
+            ]}
+          />
+        </FilterBar>
+        <DataTable
+          columns={columns}
+          rows={items}
+          rowKey={(r) => r.id}
+          sort={sort}
+          onSort={onSort}
+          loading={recordsQuery.status === "loading"}
+          fetching={recordsQuery.isFetching}
+          error={recordsQuery.isError ? recordsQuery.error : undefined}
+          onRetry={() => recordsQuery.refetch()}
+          minWidth={760}
+          caption="Branches"
+          onRowClick={(r) => editRow.edit(r.original)}
+          rowActions={() => [
+            { label: "Edit", icon: Pencil, onSelect: (r) => editRow.edit(r.original) },
+            { label: "Delete", icon: Trash2, danger: true, onSelect: (r) => setDeleting(r) },
+          ]}
+          empty={
+            <EmptyState
+              icon={Building2}
+              text={filtered ? "No branch matches. Change the search or clear the filter." : "No branches yet. Add the first office with New branch."}
+              action={!filtered ? <Button variant="primary" icon={Plus} onClick={() => newRecordModal.open()}>New branch</Button> : undefined}
+            />
+          }
+          footer={
+            total > 0 ? (
+              <Pager
+                page={pageIndex + 1}
+                perPage={pageSize}
+                total={total}
+                onPage={(p) => setPagination((x) => ({ ...x, pageIndex: p - 1 }))}
+                onPerPage={(n) => setPagination({ pageIndex: 0, pageSize: n })}
+                sizes={[10, 30, 50]}
+              />
+            ) : null
+          }
+        />
+      </Card>
 
       <BranchFormModal
         onComplete={() => {
@@ -386,15 +284,15 @@ export default function Branches() {
         open={newRecordModal.isOpen || editRow.isOpen}
       />
 
-      <ConfirmModal
-        title={"Are you sure you want to delete?"}
-        description={"This action cannot be undone. This will permanently delete the selected record."}
-        meta={confirmModal.meta}
-        onConfirm={handleDelete}
-        isLoading={confirmModal.isLoading}
-        open={confirmModal.isOpen}
-        onClose={() => confirmModal.close()}
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        title={`Delete ${deleting?.name || "this branch"}?`}
+        description="The branch is removed for good. This cannot be undone."
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => handleDelete(deleting)}
       />
-    </>
+    </div>
   );
 }

@@ -3,11 +3,20 @@
  * e-mail delivery and locked accounts. Data comes from GET /api/ims/health.
  */
 import { useQuery } from "react-query";
-import { formatDistanceToNow } from "date-fns";
-import { Activity, Archive, CheckCircle2, Database, Lock, Mail, RefreshCw, ServerCog, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Database, Lock, RefreshCw, XCircle } from "lucide-react";
 import { imsApi } from "@/lib/ims";
-import { Button } from "@/components/ui/button";
-import { Badge, ListSkeleton, MetricGroup, PageHeader, Panel } from "@/components/enterprise/ui";
+import { ListSkeleton } from "@/components/enterprise/ui";
+import { Card, CardHeader, Details, KpiBand, Page, PageHeader, fmtNumber, fmtWhen } from "@/components/ims";
+import { cn } from "@/utils";
+
+/** A setting that is on (green check) or off (amber warning with what to do). */
+function OnOff({ on, onText, offText }: { on?: boolean; onText: string; offText: string }) {
+  return on ? (
+    <span className="inline-flex items-center gap-1.5 font-semibold text-ims-success"><CheckCircle2 size={15} aria-hidden /> {onText}</span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 font-semibold text-ims-warning"><AlertTriangle size={15} aria-hidden /> {offText}</span>
+  );
+}
 
 export default function SystemHealth() {
   const q = useQuery(["system-health"], () => imsApi.health(), { refetchInterval: 30_000 });
@@ -16,68 +25,71 @@ export default function SystemHealth() {
   const d = h?.details;
 
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Administration" }, { label: "System health" }]}
         title="System health"
-        description="Live status of the API, database, backups and outgoing e-mail. Refreshes every 30 seconds."
-        breadcrumbs={[{ title: "Administration", link: "#" }, { title: "System health", link: "/dashboard/admin/health" }]}
-        actions={<Button variant="outline" onClick={() => q.refetch()} disabled={q.isFetching}><RefreshCw size={14} className={q.isFetching ? "animate-spin" : ""} /> Refresh</Button>}
+        subtitle="Live status of the API, database, backups and outgoing e-mail. Refreshes every 30 seconds."
+        secondary={[{ label: "Refresh", icon: RefreshCw, onClick: () => q.refetch(), loading: q.isFetching }]}
       />
       {q.isLoading ? (
-        <Panel><ListSkeleton rows={4} /></Panel>
+        <Card><ListSkeleton rows={4} /></Card>
       ) : (
         <>
-          <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-red-200 bg-red-50 text-red-900"}`}>
-            {ok ? <CheckCircle2 size={20} className="text-emerald-600" /> : <XCircle size={20} className="text-red-600" />}
+          <div role="status" className={cn("flex items-center gap-3 rounded-card border px-5 py-4", ok ? "border-ims-success/30 bg-ims-success-bg text-ims-success" : "border-ims-danger/30 bg-ims-danger-bg text-ims-danger")}>
+            {ok ? <CheckCircle2 size={22} className="shrink-0" aria-hidden /> : <XCircle size={22} className="shrink-0" aria-hidden />}
             <div>
-              <p className="text-[14px] font-semibold">{ok ? "All systems operational" : "Service degraded"}</p>
-              <p className="text-[12.5px] opacity-80">Checked {h?.time ? formatDistanceToNow(new Date(h.time), { addSuffix: true }) : "—"} · database answered in {h?.db_ms ?? "—"} ms</p>
+              <p className="text-t-body font-bold">{ok ? "All systems operational" : "Service degraded"}</p>
+              <p className="text-t-small text-ims-body">Checked {h?.time ? fmtWhen(h.time) : "—"} · the database answered in {h?.db_ms ?? "—"} ms</p>
             </div>
           </div>
-          <MetricGroup
-            title="Activity"
-            icon={Activity}
-            columns={4}
-            metrics={[
-              { label: "Active users", value: d?.users_active ?? "—" },
-              { label: "Pending approvals", value: d?.pending_approvals ?? "—" },
-              { label: "Locked accounts", value: d?.locked_accounts ?? "—", tone: d?.locked_accounts ? "danger" : "default" },
-              { label: "Failed e-mails (7 days)", value: d?.emails_failed_7d ?? "—", tone: d?.emails_failed_7d ? "warning" : "default" },
+          <KpiBand
+            items={[
+              { label: "Active users", value: d ? fmtNumber(d.users_active) : "—" },
+              { label: "Pending approvals", value: d ? fmtNumber(d.pending_approvals) : "—" },
+              { label: "Locked accounts", value: d ? fmtNumber(d.locked_accounts) : "—", tone: d?.locked_accounts ? "danger" : "default", to: "/dashboard/admin/users" },
+              { label: "Failed e-mails (7 days)", value: d ? fmtNumber(d.emails_failed_7d) : "—", tone: d?.emails_failed_7d ? "warning" : "default", to: "/dashboard/settings/general-settings/smtp" },
             ]}
           />
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title={<span className="flex items-center gap-2"><Archive size={15} className="text-slate-400" /> Backups</span>} subtitle="Automated database and file backups">
-              <dl className="space-y-2 text-[13px]">
-                <div className="flex justify-between"><dt className="text-slate-500">Schedule</dt><dd className="font-mono text-slate-800">{d?.backups.cron || "not scheduled"}</dd></div>
-                <div className="flex justify-between"><dt className="text-slate-500">Copies kept</dt><dd className="text-slate-800">{d?.backups.keep ?? "—"}</dd></div>
-                <div className="flex justify-between"><dt className="text-slate-500">Off-site (S3) copy</dt><dd>{d?.backups.s3 ? <Badge tone="success">On</Badge> : <Badge tone="warning">Off — recommended</Badge>}</dd></div>
-              </dl>
-              <div className="mt-4 rounded-md bg-slate-50 p-3 text-[12.5px] leading-relaxed text-slate-600">
-                <p className="mb-1 font-semibold text-slate-800">Restore procedure</p>
-                <ol className="list-decimal space-y-0.5 pl-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <Card className="xl:col-span-2">
+              <CardHeader title="Backups" subtitle="Automated database and file backups" />
+              <Details
+                columns={3}
+                items={[
+                  { label: "Schedule", value: d?.backups.cron ? <span className="font-mono text-t-small">{d.backups.cron}</span> : "Not scheduled" },
+                  { label: "Copies kept", value: d?.backups.keep ?? "—" },
+                  { label: "Off-site (S3) copy", value: <OnOff on={d?.backups.s3} onText="On" offText="Off · recommended" /> },
+                ]}
+              />
+              <div className="mt-5 rounded-control bg-ims-thead px-4 py-3.5 text-t-body text-ims-body">
+                <p className="mb-1.5 font-bold text-ims-text">Restore procedure</p>
+                <ol className="list-decimal space-y-1 pl-5">
                   <li>Open the server Admin UI → Settings → Backups.</li>
                   <li>Download the backup to keep a copy, then choose “Restore”.</li>
                   <li>The server restarts on the restored data; sign in and check the audit log.</li>
                 </ol>
-                <p className="mt-1">Full steps, including restoring on a new server, are in the README (Backup & restore).</p>
+                <p className="mt-2 text-t-small text-ims-muted">Full steps, including restoring on a new server, are in the README (Backup &amp; restore).</p>
               </div>
-            </Panel>
-            <div className="space-y-4">
-              <Panel title={<span className="flex items-center gap-2"><Mail size={15} className="text-slate-400" /> E-mail notifications</span>} subtitle="Approval requests and decisions are e-mailed when SMTP is configured">
-                {d?.smtp_enabled ? <Badge tone="success">SMTP configured</Badge> : <Badge tone="warning">SMTP not configured — notifications are in-app only</Badge>}
-                <p className="mt-2 text-[12.5px] text-slate-500">SMS is ready to plug in: every message is queued in the message log for an SMS gateway.</p>
-              </Panel>
-              <Panel title={<span className="flex items-center gap-2"><ServerCog size={15} className="text-slate-400" /> Monitoring endpoints</span>}>
-                <ul className="space-y-1.5 text-[12.5px]">
-                  <li className="flex items-center gap-2"><Database size={13} className="text-slate-400" /> <code className="rounded bg-slate-100 px-1.5 py-0.5">GET /api/health</code> — liveness (no sign-in)</li>
-                  <li className="flex items-center gap-2"><Activity size={13} className="text-slate-400" /> <code className="rounded bg-slate-100 px-1.5 py-0.5">GET /api/ims/health</code> — database check, details for administrators</li>
-                  <li className="flex items-center gap-2"><Lock size={13} className="text-slate-400" /> Logs never contain passwords or 2FA secrets.</li>
+            </Card>
+            <div className="flex flex-col gap-4">
+              <Card>
+                <CardHeader title="E-mail notifications" subtitle="Approval requests and decisions are e-mailed when SMTP is configured" link={{ label: "E-mail settings", to: "/dashboard/settings/general-settings/smtp" }} />
+                <p className="text-t-body"><OnOff on={d?.smtp_enabled} onText="SMTP configured" offText="SMTP not configured · notifications are in-app only" /></p>
+                <p className="mt-2 text-t-small text-ims-muted">SMS is ready to plug in: every message is queued in the message log for an SMS gateway.</p>
+              </Card>
+              <Card>
+                <CardHeader title="Monitoring endpoints" />
+                <ul className="space-y-2.5 text-t-body text-ims-body">
+                  <li className="flex items-start gap-2"><Database size={15} className="mt-0.5 shrink-0 text-ims-muted" aria-hidden /> <span><code className="rounded-md bg-ims-subtle px-1.5 py-0.5 font-mono text-t-small text-ims-text">GET /api/health</code> — liveness (no sign-in)</span></li>
+                  <li className="flex items-start gap-2"><Activity size={15} className="mt-0.5 shrink-0 text-ims-muted" aria-hidden /> <span><code className="rounded-md bg-ims-subtle px-1.5 py-0.5 font-mono text-t-small text-ims-text">GET /api/ims/health</code> — database check, details for administrators</span></li>
+                  <li className="flex items-start gap-2"><Lock size={15} className="mt-0.5 shrink-0 text-ims-muted" aria-hidden /> <span>Logs never contain passwords or 2FA secrets.</span></li>
                 </ul>
-              </Panel>
+              </Card>
             </div>
           </div>
         </>
       )}
-    </div>
+    </Page>
   );
 }

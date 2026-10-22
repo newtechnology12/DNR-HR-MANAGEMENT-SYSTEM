@@ -1,21 +1,24 @@
 /**
  * "Export" button with Excel / PDF / CSV. Pass `permission` to show it only to roles that hold the
  * module's export right (permission matrix "X"); every export is logged in the audit trail.
+ * The trigger is the kit's secondary button (40px, like the filter bar and page header controls);
+ * `size="sm"` gives the compact 34px button.
  */
 import * as React from "react";
 import { toast } from "sonner";
-import { Download, FileSpreadsheet, FileText, Sheet } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronDown, Download, FileSpreadsheet, FileText, Loader2, Sheet } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { buttonClass } from "@/components/ims";
 import { usePermissions } from "@/context/auth.context";
 import { ExportFormat } from "@/lib/exporter";
+import { cn } from "@/utils";
 
 export default function ExportMenu({
   onExport,
   permission,
   disabled,
   label = "Export",
-  size = "sm",
+  size,
 }: {
   onExport: (format: ExportFormat) => Promise<void> | void;
   permission?: string | string[];
@@ -31,33 +34,37 @@ export default function ExportMenu({
     try {
       await onExport(f);
     } catch (e: any) {
-      toast.error(e?.message || "Export failed");
+      toast.error(e?.message || "The export could not be prepared. Try again.");
     } finally {
       setBusy(null);
     }
   };
   const items: { f: ExportFormat; label: string; hint: string; icon: any; color: string }[] = [
-    { f: "xlsx", label: "Excel workbook", hint: ".xlsx with header and totals", icon: FileSpreadsheet, color: "text-emerald-700" },
-    { f: "pdf", label: "PDF report", hint: "printable, with RALGA header", icon: FileText, color: "text-red-600" },
-    { f: "csv", label: "CSV (open format)", hint: "for other systems", icon: Sheet, color: "text-ims-body" },
+    { f: "xlsx", label: "Excel workbook", hint: ".xlsx with header and totals", icon: FileSpreadsheet, color: "text-ims-success" },
+    { f: "pdf", label: "PDF report", hint: "Printable, with the RALGA header", icon: FileText, color: "text-ims-danger" },
+    { f: "csv", label: "CSV (open format)", hint: "For other systems", icon: Sheet, color: "text-ims-body" },
   ];
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size={size} disabled={disabled || Boolean(busy)}>
-          <Download size={14} className="mr-1.5" />
-          {busy ? "Preparing…" : label}
-        </Button>
+      <DropdownMenuTrigger
+        type="button"
+        disabled={disabled || Boolean(busy)}
+        aria-busy={Boolean(busy) || undefined}
+        className={buttonClass({ variant: "secondary", size: size === "sm" ? "sm" : "md" })}
+      >
+        {busy ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Download size={16} aria-hidden />}
+        {busy ? "Preparing…" : label}
+        <ChevronDown size={14} className="-mr-1 text-ims-muted" aria-hidden />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60 bg-white">
-        <DropdownMenuLabel className="text-[11.5px] font-semibold uppercase tracking-wider text-ims-muted">Export what you see</DropdownMenuLabel>
-        <DropdownMenuSeparator />
+      <DropdownMenuContent align="end" className="w-64 rounded-control border-ims-border bg-ims-card p-1 shadow-menu">
+        <DropdownMenuLabel className="px-2.5 py-1.5 text-t-small font-semibold text-ims-muted">Export what you see</DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-ims-divider" />
         {items.map((i) => (
-          <DropdownMenuItem key={i.f} onClick={() => run(i.f)} className="cursor-pointer gap-2.5 py-2">
-            <i.icon size={16} className={i.color} />
+          <DropdownMenuItem key={i.f} onSelect={() => run(i.f)} className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-ims-text focus:bg-ims-subtle">
+            <i.icon size={16} className={cn("shrink-0", i.color)} aria-hidden />
             <span className="flex flex-col">
-              <span className="text-[13px] font-medium text-ims-text">{i.label}</span>
-              <span className="text-[11.5px] text-ims-muted">{i.hint}</span>
+              <span className="text-t-body font-semibold text-ims-text">{i.label}</span>
+              <span className="text-t-small text-ims-muted">{i.hint}</span>
             </span>
           </DropdownMenuItem>
         ))}

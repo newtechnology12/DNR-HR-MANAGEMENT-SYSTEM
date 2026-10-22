@@ -6,7 +6,6 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "react-query";
-import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { AlertTriangle, Check, CheckCircle2, Clock, Minus, Plus, Search, ShieldCheck, Undo2, Users, X, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
@@ -14,10 +13,28 @@ import { useAuth, usePermissions } from "@/context/auth.context";
 import { PERMISSION_GROUPS, PERMISSION_TITLES, imsApi, roleDef } from "@/lib/ims";
 import { errorMessage } from "@/lib/procurement";
 import { exportReport } from "@/lib/exporter";
-import { Button } from "@/components/ui/button";
-import { Badge, EmptyState, Initials, ListSkeleton, PageHeader, Panel } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ListSkeleton } from "@/components/enterprise/ui";
+import {
+  Button,
+  Card,
+  CardHeader,
+  Column,
+  DataTable,
+  EmptyState,
+  Field,
+  FilterBar,
+  FilterSelect,
+  Modal,
+  Page,
+  PageHeader,
+  Person,
+  Pill,
+  StatusPill,
+  Tabs,
+  Textarea,
+  fmtWhen,
+} from "@/components/ims";
 import { cn } from "@/utils";
 
 const SHORT: Record<string, string> = {
@@ -27,6 +44,14 @@ const SHORT: Record<string, string> = {
 const NEVER_APPROVE = ["SYS_ADMIN", "INTERNAL_AUDITOR", "MGMT_VIEWER"];
 type Tab = "matrix" | "requests" | "roles";
 const key = (role: string, perm: string) => `${role}|${perm}`;
+
+/** Change requests in the glossary: pending → Pending approval, approved → Approved (confirmed)… */
+const REQUEST_STATUS: Record<string, { word: string; note?: string }> = {
+  pending: { word: "Pending approval", note: "Waiting for a second administrator or the DAF" },
+  approved: { word: "Approved", note: "Confirmed and applied" },
+  rejected: { word: "Rejected" },
+  cancelled: { word: "Cancelled", note: "Withdrawn by the proposer" },
+};
 
 export default function PermissionMatrix() {
   const { user } = useAuth();
@@ -57,6 +82,7 @@ export default function PermissionMatrix() {
   const [review, setReview] = React.useState(false);
   const [reason, setReason] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [tried, setTried] = React.useState(false);
 
   const granted = React.useMemo(() => {
     const m: Record<string, boolean> = {};
@@ -89,6 +115,7 @@ export default function PermissionMatrix() {
     .filter((g) => g.permissions.length);
 
   async function submit() {
+    setTried(true);
     if (reason.trim().length < 10) return toast.error("Explain the change (at least 10 characters) — the confirmer reads this.");
     setBusy(true);
     try {
@@ -97,6 +124,7 @@ export default function PermissionMatrix() {
       setStaged({});
       setReview(false);
       setReason("");
+      setTried(false);
       queryClient.invalidateQueries(["permission-matrix"]);
       setTab("requests");
     } catch (e) {
@@ -126,8 +154,10 @@ export default function PermissionMatrix() {
   // ---------------------------------------------------------------- requests
   const [deciding, setDeciding] = React.useState<{ req: any; decision: "approve" | "reject" } | null>(null);
   const [comment, setComment] = React.useState("");
+  const [decideTried, setDecideTried] = React.useState(false);
   async function decide() {
     if (!deciding) return;
+    setDecideTried(true);
     if (deciding.decision === "reject" && !comment.trim()) return toast.error("Give a reason for rejecting.");
     setBusy(true);
     try {
@@ -135,6 +165,7 @@ export default function PermissionMatrix() {
       toast.success(deciding.decision === "approve" ? "Confirmed — the roles are updated" : "Change rejected");
       setDeciding(null);
       setComment("");
+      setDecideTried(false);
       queryClient.invalidateQueries(["permission-matrix"]);
     } catch (e) {
       toast.error(errorMessage(e));
@@ -154,55 +185,79 @@ export default function PermissionMatrix() {
 
   const holders = (roleId: string) => (q.data?.users || []).filter((u: any) => u.role === roleId || (u.extra_roles || []).includes(roleId)).length;
 
+  type ChangeRow = { k: string; grant?: boolean; meta?: boolean; title: string; name?: string; role: string };
+  const changeColumns: Column<ChangeRow>[] = [
+    {
+      key: "change",
+      header: "Change",
+      width: "120px",
+      nowrap: true,
+      cell: (c) =>
+        c.meta ? (
+          <span className="inline-flex items-center gap-1.5 font-semibold text-ims-info"><Users size={14} aria-hidden /> Setting</span>
+        ) : c.grant ? (
+          <span className="inline-flex items-center gap-1.5 font-semibold text-ims-success"><Plus size={14} aria-hidden /> Grant</span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 font-semibold text-ims-danger"><Minus size={14} aria-hidden /> Remove</span>
+        ),
+    },
+    { key: "permission", header: "Permission", clamp: true, cell: (c) => c.title, sub: (c) => (c.name ? <span className="font-mono">{c.name}</span> : null) },
+    { key: "role", header: "Role", nowrap: true, cell: (c) => <Pill>{c.role}</Pill> },
+  ];
+
+  const tabs = [
+    { key: "matrix", label: "Matrix" },
+    { key: "requests", label: "Change requests", count: q.data ? pending.length : undefined },
+    { key: "roles", label: "Roles", count: q.data ? roles.length : undefined },
+  ];
+
   return (
-    <div className="space-y-4 px-3 pb-24 sm:px-4">
+    <Page className={cn(stagedList.length > 0 && tab === "matrix" && "pb-28")}>
       <PageHeader
+        breadcrumbs={[{ label: "Administration" }, { label: "Permission matrix" }]}
         title="Permission matrix"
-        description="Who may do what, per role. Changes need a second administrator or the Director of Finance to confirm; every change is audited."
-        breadcrumbs={[{ title: "Administration", link: "#" }, { title: "Permission matrix", link: "/dashboard/admin/permissions" }]}
+        subtitle="Who may do what, per role. A second administrator or the Director of Finance confirms every change."
         actions={<ExportMenu onExport={doExport} permission={["view_security_admin", "export_audit_logs"]} disabled={!roles.length} />}
       />
 
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200" role="tablist">
-        {([["matrix", "Matrix"], ["requests", "Change requests"], ["roles", "Roles"]] as [Tab, string][]).map(([k, label]) => (
-          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cn("-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-medium", tab === k ? "border-primary text-primaryDark" : "border-transparent text-slate-500 hover:text-slate-800")}>
-            {label}
-            {k === "requests" && pending.length > 0 && <span className="rounded-full bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-800">{pending.length}</span>}
-          </button>
-        ))}
-      </div>
+      <Tabs label="Permission matrix sections" tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
       {q.isLoading ? (
-        <Panel><ListSkeleton rows={10} /></Panel>
+        <Card><ListSkeleton rows={10} /></Card>
       ) : tab === "matrix" ? (
         <>
           {!canPropose && (
-            <p className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12.5px] text-slate-600">
-              <ShieldCheck size={14} className="text-slate-400" /> Read-only view. Only System Administrators can propose changes.
+            <p className="flex items-center gap-2 rounded-control border border-ims-border bg-ims-card px-3.5 py-2.5 text-t-small text-ims-body">
+              <ShieldCheck size={15} className="shrink-0 text-ims-muted" aria-hidden /> Read-only view. Only System Administrators can propose changes.
             </p>
           )}
-          <section className="rounded-lg border border-slate-200 bg-white shadow-card">
-            <div className="flex flex-col gap-2 border-b border-slate-100 p-3 sm:flex-row sm:items-center">
-              <label className="relative w-full sm:w-72">
-                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a permission…" aria-label="Find a permission" className="h-9 w-full rounded-md border border-slate-200 pl-9 pr-3 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-              </label>
-              <select value={module} onChange={(e) => setModule(e.target.value)} aria-label="Module" className="h-9 rounded-md border border-slate-200 bg-white px-2.5 text-[13px] outline-none focus:border-primary">
-                <option value="all">All modules</option>
-                {PERMISSION_GROUPS.map((g) => <option key={g.key} value={g.key}>{g.module} · {g.title}</option>)}
-              </select>
-              <span className="text-[12px] text-slate-500 sm:ml-auto">
-                <span className="mr-3 inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded bg-emerald-100 text-emerald-700"><Check size={11} /></span> granted</span>
-                <span className="inline-flex items-center gap-1"><span className="inline-block h-4 w-4 rounded bg-amber-100 ring-1 ring-amber-400" /> staged change</span>
-              </span>
-            </div>
-            <div className="max-h-[70vh] overflow-auto">
-              <table className="w-full min-w-[1080px] border-separate border-spacing-0 text-[12.5px]">
-                <thead className="sticky top-0 z-20 bg-white">
+          <Card padded={false} className="overflow-hidden">
+            <FilterBar
+              search={{ value: search, onChange: setSearch, placeholder: "Search permission name or code" }}
+              right={
+                <span className="flex flex-wrap items-center gap-3 text-t-small text-ims-muted">
+                  <span className="inline-flex items-center gap-1.5"><span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-ims-success-bg text-ims-success"><Check size={12} strokeWidth={3} aria-hidden /></span> Granted</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="inline-block h-5 w-5 rounded-md bg-ims-warning-bg ring-1 ring-inset ring-ims-priority-high" /> Change not yet sent</span>
+                </span>
+              }
+            >
+              <FilterSelect
+                label="Module"
+                value={module === "all" ? "" : module}
+                onChange={(v) => setModule(v || "all")}
+                options={PERMISSION_GROUPS.map((g) => ({ value: g.key, label: `${g.module} · ${g.title}` }))}
+                className="[&_select]:w-[240px]"
+              />
+            </FilterBar>
+            {/* A grid of toggles with a sticky header row and first column: the kit's DataTable has neither, so this stays a table built on the tokens. */}
+            <div className="max-h-[70vh] overflow-auto border-t border-ims-divider">
+              <table className="w-full min-w-[1080px] border-separate border-spacing-0 text-t-body text-ims-text">
+                <caption className="sr-only">Permissions per role</caption>
+                <thead className="sticky top-0 z-20">
                   <tr>
-                    <th className="sticky left-0 z-30 w-[340px] border-b border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Permission</th>
+                    <th scope="col" className="sticky left-0 z-30 h-11 w-[340px] border-b border-r border-ims-divider bg-ims-thead px-3.5 text-left text-t-small font-semibold text-ims-muted">Permission</th>
                     {roles.map((r) => (
-                      <th key={r.id} title={`${r.name} — ${roleDef(r.code)?.description || ""}`} className="w-[64px] border-b border-slate-200 px-1 py-2 text-center text-[11px] font-semibold text-slate-700">
+                      <th key={r.id} scope="col" title={`${r.name} — ${roleDef(r.code)?.description || ""}`} className="h-11 w-[64px] border-b border-ims-divider bg-ims-thead px-1 text-center text-t-small font-semibold text-ims-body">
                         {SHORT[r.code] || r.name}
                       </th>
                     ))}
@@ -212,23 +267,23 @@ export default function PermissionMatrix() {
                   {groups.map((g) => (
                     <React.Fragment key={g.key}>
                       <tr>
-                        <td colSpan={roles.length + 1} className="sticky left-0 border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
-                          <span className="mr-2 rounded bg-slate-200 px-1.5 py-0.5 text-[10.5px] text-slate-600">{g.module}</span>
+                        <th scope="colgroup" colSpan={roles.length + 1} className="sticky left-0 border-b border-ims-divider bg-ims-subtle px-3.5 py-2 text-left text-t-small font-bold text-ims-text">
+                          <span className="mr-2 rounded-md bg-ims-card px-1.5 py-0.5 text-t-hint font-semibold text-ims-muted ring-1 ring-inset ring-ims-border">{g.module}</span>
                           {g.title}
-                        </td>
+                        </th>
                       </tr>
                       {g.permissions.map((p) => (
-                        <tr key={p.name} className="hover:bg-slate-50/70">
-                          <td className="sticky left-0 z-10 border-b border-slate-100 bg-white px-3 py-1.5">
-                            <span className="block text-slate-800">{p.title}</span>
-                            <span className="block font-mono text-[10.5px] text-slate-400">{p.name}</span>
-                          </td>
+                        <tr key={p.name} className="group">
+                          <th scope="row" className="sticky left-0 z-10 border-b border-r border-ims-divider bg-ims-card px-3.5 py-2 text-left font-normal group-hover:bg-ims-hover">
+                            <span className="block text-t-body text-ims-text">{p.title}</span>
+                            <span className="block font-mono text-t-hint text-ims-faint">{p.name}</span>
+                          </th>
                           {roles.map((r) => {
                             const k = key(r.id, p.name);
                             const on = value(r.id, p.name);
                             const isStaged = staged[k] !== undefined;
                             return (
-                              <td key={r.id} className="border-b border-slate-100 px-1 py-1 text-center">
+                              <td key={r.id} className="border-b border-ims-divider px-1 py-1 text-center group-hover:bg-ims-hover">
                                 <button
                                   type="button"
                                   disabled={!canPropose}
@@ -236,12 +291,12 @@ export default function PermissionMatrix() {
                                   aria-pressed={on}
                                   aria-label={`${r.name}: ${p.title}`}
                                   className={cn(
-                                    "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors disabled:cursor-default",
-                                    isStaged ? "bg-amber-100 text-amber-800 ring-1 ring-amber-400" : on ? "bg-emerald-100 text-emerald-700" : "text-slate-300",
-                                    canPropose && !isStaged && (on ? "hover:bg-emerald-200" : "hover:bg-slate-100 hover:text-slate-500")
+                                    "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus disabled:cursor-default",
+                                    isStaged ? "bg-ims-warning-bg text-ims-warning ring-1 ring-inset ring-ims-priority-high" : on ? "bg-ims-success-bg text-ims-success" : "text-ims-priority-low",
+                                    canPropose && !isStaged && (on ? "hover:bg-ims-success/20" : "hover:bg-ims-subtle hover:text-ims-muted")
                                   )}
                                 >
-                                  {on ? <Check size={14} strokeWidth={3} /> : isStaged ? <Minus size={14} /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+                                  {on ? <Check size={14} strokeWidth={3} aria-hidden /> : isStaged ? <Minus size={14} aria-hidden /> : <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />}
                                 </button>
                               </td>
                             );
@@ -252,165 +307,166 @@ export default function PermissionMatrix() {
                   ))}
                 </tbody>
               </table>
-              {!groups.length && <EmptyState icon={Search} title="No permission matches" text="Try another search or module." />}
+              {!groups.length && <EmptyState icon={Search} text="No permission matches. Try another search or module." />}
             </div>
-          </section>
+          </Card>
 
           {stagedList.length > 0 && (
-            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-amber-200 bg-amber-50/95 px-4 py-3 backdrop-blur lg:left-[280px]">
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ims-priority-high/50 bg-ims-warning-bg/95 px-4 py-3 backdrop-blur lg:left-[280px]">
               <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
-                <span className="text-[13px] font-medium text-amber-900">{stagedList.length} change{stagedList.length > 1 ? "s" : ""} staged — nothing changes until a second administrator or the DAF confirms.</span>
+                <span className="text-t-body font-semibold text-ims-warning">
+                  {stagedList.length} change{stagedList.length > 1 ? "s" : ""} not yet sent. Nothing changes until a second administrator or the DAF confirms.
+                </span>
                 <span className="ml-auto flex gap-2">
-                  <Button variant="outline" onClick={() => setStaged({})}><Undo2 size={14} /> Discard</Button>
-                  <Button onClick={() => setReview(true)}>Review & submit</Button>
+                  <Button icon={Undo2} onClick={() => setStaged({})}>Discard</Button>
+                  <Button variant="primary" onClick={() => { setTried(false); setReview(true); }}>Review and send</Button>
                 </span>
               </div>
             </div>
           )}
         </>
       ) : tab === "requests" ? (
-        <div className="space-y-3">
-          {!requests.length && <Panel><EmptyState icon={ShieldCheck} title="No change requests" text="Proposed permission changes appear here for confirmation." /></Panel>}
+        <div className="flex flex-col gap-4">
+          {!requests.length && <Card><EmptyState icon={ShieldCheck} text="No change requests yet. Proposed permission changes appear here for confirmation." /></Card>}
           {requests.map((r) => {
             const mine = r.requested_by === user?.id;
             const changes: any[] = r.changes || [];
+            const st = REQUEST_STATUS[r.status];
+            const rows: ChangeRow[] = [
+              ...changes.map((c, i) => ({ k: `c${i}`, grant: Boolean(c.to), title: PERMISSION_TITLES[c.permission] || c.title, name: c.permission, role: c.role_name })),
+              ...(r.meta_changes || []).map((c: any, i: number) => ({ k: `m${i}`, meta: true, title: `${String(c.field).replace("_", " ")}: ${c.from} → ${c.to}`, role: c.role_name })),
+            ];
             return (
-              <Panel
-                key={r.id}
-                title={
-                  <span className="flex flex-wrap items-center gap-2">
-                    {r.role_name}
-                    <Badge tone={r.status === "pending" ? "warning" : r.status === "approved" ? "success" : r.status === "rejected" ? "danger" : "neutral"}>
-                      {r.status === "pending" ? "Waiting for confirmation" : r.status === "approved" ? "Confirmed" : r.status}
-                    </Badge>
-                  </span>
-                }
-                subtitle={`Proposed by ${r.expand?.requested_by?.name || "?"} · ${formatDistanceToNow(new Date(r.created.replace(" ", "T")), { addSuffix: true })}`}
-                action={
-                  r.status === "pending" ? (
-                    <span className="flex gap-2">
-                      {mine && <Button size="sm" variant="outline" onClick={() => withdraw(r.id)}>Withdraw</Button>}
-                      {canConfirm && !mine && (
-                        <>
-                          <Button size="sm" variant="outline" onClick={() => setDeciding({ req: r, decision: "reject" })}><X size={13} /> Reject</Button>
-                          <Button size="sm" onClick={() => setDeciding({ req: r, decision: "approve" })}><Check size={13} /> Confirm</Button>
-                        </>
-                      )}
-                      {canConfirm && mine && <span className="text-[12px] text-slate-500">Another administrator or the DAF must confirm.</span>}
-                    </span>
-                  ) : undefined
-                }
-              >
-                <p className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-[13px] text-slate-700">“{r.reason}”</p>
-                <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
-                  {changes.map((c, i) => (
-                    <li key={i} className="flex items-center gap-3 px-3 py-2 text-[13px]">
-                      <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", c.to ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700")}>{c.to ? <Plus size={13} /> : <Minus size={13} />}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="font-medium text-slate-900">{c.to ? "Grant" : "Remove"}</span> <span className="text-slate-700">{PERMISSION_TITLES[c.permission] || c.title}</span>
-                        <span className="block font-mono text-[11px] text-slate-400">{c.permission}</span>
+              <Card key={r.id} padded={false} className="overflow-hidden">
+                <div className="px-5 pt-5">
+                  <CardHeader
+                    title={
+                      <span className="flex flex-wrap items-center gap-2">
+                        {r.role_name}
+                        <StatusPill status={st?.word || r.status} />
                       </span>
-                      <Badge>{c.role_name}</Badge>
-                    </li>
-                  ))}
-                  {(r.meta_changes || []).map((c: any, i: number) => (
-                    <li key={`m${i}`} className="flex items-center gap-3 px-3 py-2 text-[13px]">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-blue-700"><Users size={12} /></span>
-                      <span className="flex-1">{c.field.replace("_", " ")}: {c.from} → <strong>{c.to}</strong></span>
-                      <Badge>{c.role_name}</Badge>
-                    </li>
-                  ))}
-                </ul>
+                    }
+                    subtitle={`Proposed by ${r.expand?.requested_by?.name || "?"} · ${fmtWhen(r.created)}${st?.note ? ` · ${st.note}` : ""}`}
+                    action={
+                      r.status === "pending" ? (
+                        <span className="flex flex-wrap items-center gap-2">
+                          {mine && <Button size="sm" onClick={() => withdraw(r.id)}>Withdraw</Button>}
+                          {canConfirm && !mine && (
+                            <>
+                              <Button size="sm" icon={X} onClick={() => { setComment(""); setDecideTried(false); setDeciding({ req: r, decision: "reject" }); }}>Reject</Button>
+                              <Button size="sm" variant="primary" icon={Check} onClick={() => { setComment(""); setDecideTried(false); setDeciding({ req: r, decision: "approve" }); }}>Confirm</Button>
+                            </>
+                          )}
+                          {canConfirm && mine && <span className="text-t-small text-ims-muted">Another administrator or the DAF must confirm.</span>}
+                        </span>
+                      ) : undefined
+                    }
+                  />
+                  <blockquote className="mb-4 rounded-control bg-ims-thead px-3.5 py-2.5 text-t-body text-ims-body">“{r.reason}”</blockquote>
+                </div>
+                <div className="border-t border-ims-divider">
+                  <DataTable columns={changeColumns} rows={rows} rowKey={(c) => c.k} minWidth={560} caption={`Changes for ${r.role_name}`} empty={<EmptyState compact text="No change listed." />} />
+                </div>
                 {r.status !== "pending" && r.status !== "cancelled" && (
-                  <p className="mt-3 flex items-center gap-2 text-[12.5px] text-slate-600">
-                    {r.status === "approved" ? <CheckCircle2 size={14} className="text-emerald-600" /> : <XCircle size={14} className="text-red-600" />}
+                  <p className="flex items-center gap-2 border-t border-ims-divider px-5 py-3 text-t-small text-ims-body">
+                    {r.status === "approved" ? <CheckCircle2 size={15} className="shrink-0 text-ims-success" aria-hidden /> : <XCircle size={15} className="shrink-0 text-ims-danger" aria-hidden />}
                     {r.status === "approved" ? "Confirmed" : "Rejected"} by {r.expand?.decided_by?.name}{r.decision_comment ? ` — “${r.decision_comment}”` : ""}
                   </p>
                 )}
-              </Panel>
+              </Card>
             );
           })}
         </div>
       ) : (
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {roles.map((r) => {
             const def = roleDef(r.code);
             const count = (r.permitions || []).filter((p: any) => p.access).length;
             return (
-              <li key={r.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-card">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-[14.5px] font-semibold text-slate-900">{r.name}</h3>
-                    <p className="font-mono text-[11px] text-slate-400">{r.code || "custom role"}</p>
+              <li key={r.id}>
+                <Card className="h-full">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h2 className="text-t-section text-ims-text">{r.name}</h2>
+                      <p className="font-mono text-t-hint text-ims-faint">{r.code || "Custom role"}</p>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-ims-neutral-bg px-2.5 py-1 text-t-small font-semibold text-ims-neutral" title="Active people holding this role">
+                      <Users size={13} aria-hidden /> {holders(r.id)}
+                    </span>
                   </div>
-                  <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11.5px] font-medium text-slate-600"><Users size={12} /> {holders(r.id)}</span>
-                </div>
-                <p className="mt-2 text-[12.5px] leading-relaxed text-slate-600">{def?.description || r.description}</p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <Badge tone="info">{count} permissions</Badge>
-                  <Badge>Procurement: {r.procurement_scope || "own"}</Badge>
-                  <Badge>HR: {r.hr_scope || "own"}</Badge>
-                  {NEVER_APPROVE.includes(r.code) && <Badge tone="warning">Never approves</Badge>}
-                </div>
+                  <p className="mt-2 text-t-body text-ims-body">{def?.description || r.description}</p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <Pill tone="info">{count} permissions</Pill>
+                    <Pill>Procurement: {r.procurement_scope || "own"}</Pill>
+                    <Pill>HR: {r.hr_scope || "own"}</Pill>
+                    {NEVER_APPROVE.includes(r.code) && <Pill tone="warning">Never approves</Pill>}
+                  </div>
+                </Card>
               </li>
             );
           })}
         </ul>
       )}
 
-      <Dialog open={review} onOpenChange={(o) => !o && setReview(false)}>
-        <DialogContent className="max-w-xl bg-white">
-          <DialogHeader>
-            <DialogTitle>Submit {stagedList.length} permission change{stagedList.length > 1 ? "s" : ""}</DialogTitle>
-            <DialogDescription>A second administrator or the Director of Finance must confirm before the roles change.</DialogDescription>
-          </DialogHeader>
-          <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
-            {stagedList.map((c) => (
-              <li key={key(c.role, c.permission)} className="flex items-center gap-2.5 px-3 py-2 text-[13px]">
-                <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full", c.access ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700")}>{c.access ? <Plus size={12} /> : <Minus size={12} />}</span>
-                <span className="min-w-0 flex-1 truncate">{PERMISSION_TITLES[c.permission] || c.permission}</span>
-                <Badge>{c.roleRec?.name}</Badge>
-              </li>
-            ))}
-          </ul>
-          {warnings.length > 0 && (
-            <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
-              {warnings.map((w) => <p key={w} className="flex items-start gap-1.5"><AlertTriangle size={13} className="mt-0.5 shrink-0" /> {w}</p>)}
-            </div>
-          )}
-          <label className="block">
-            <span className="mb-1 block text-[12.5px] font-medium text-slate-700">Reason <span className="text-red-600">*</span></span>
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why do these roles need this change?" className="h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </label>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setReview(false)}>Back</Button>
-            <Button onClick={submit} disabled={busy}><Clock size={14} /> Send for confirmation</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(deciding)} onOpenChange={(o) => !o && setDeciding(null)}>
-        <DialogContent className="max-w-md bg-white">
-          <DialogHeader>
-            <DialogTitle>{deciding?.decision === "approve" ? "Confirm permission change" : "Reject permission change"}</DialogTitle>
-            <DialogDescription>
-              {deciding?.decision === "approve" ? "The roles are updated immediately and the change is written to the audit log." : "The proposer is notified with your reason."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-[12.5px] text-slate-600">
-            <Initials name={deciding?.req?.expand?.requested_by?.name} className="h-6 w-6 text-[10px]" />
-            {deciding?.req?.expand?.requested_by?.name}: “{deciding?.req?.reason}”
+      <Modal
+        open={review}
+        onClose={() => setReview(false)}
+        title={`Send ${stagedList.length} permission change${stagedList.length > 1 ? "s" : ""} for confirmation`}
+        description="A second administrator or the Director of Finance must confirm before the roles change."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setReview(false)} disabled={busy}>Back</Button>
+            <Button variant="primary" icon={Clock} onClick={submit} loading={busy}>Send for confirmation</Button>
+          </>
+        }
+      >
+        <ul className="max-h-64 divide-y divide-ims-divider overflow-y-auto rounded-control border border-ims-border">
+          {stagedList.map((c) => (
+            <li key={key(c.role, c.permission)} className="flex items-center gap-2.5 px-3 py-2.5 text-t-body">
+              <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", c.access ? "bg-ims-success-bg text-ims-success" : "bg-ims-danger-bg text-ims-danger")} aria-label={c.access ? "Grant" : "Remove"}>
+                {c.access ? <Plus size={13} aria-hidden /> : <Minus size={13} aria-hidden />}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{PERMISSION_TITLES[c.permission] || c.permission}</span>
+              <Pill>{c.roleRec?.name}</Pill>
+            </li>
+          ))}
+        </ul>
+        {warnings.length > 0 && (
+          <div role="alert" className="space-y-1 rounded-control border border-ims-priority-high/50 bg-ims-warning-bg px-3.5 py-2.5 text-t-small text-ims-warning">
+            {warnings.map((w) => <p key={w} className="flex items-start gap-1.5"><AlertTriangle size={14} className="mt-px shrink-0" aria-hidden /> {w}</p>)}
           </div>
-          <label className="block">
-            <span className="mb-1 block text-[12.5px] font-medium text-slate-700">Comment{deciding?.decision === "reject" && <span className="text-red-600"> *</span>}</span>
-            <textarea value={comment} onChange={(e) => setComment(e.target.value)} className="h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </label>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeciding(null)}>Cancel</Button>
-            <Button variant={deciding?.decision === "reject" ? "danger" : "default"} onClick={decide} disabled={busy}>{deciding?.decision === "approve" ? "Confirm change" : "Reject"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+        )}
+        <Field label="Reason" required htmlFor="pm-reason" hint="The confirmer reads this. At least 10 characters." error={tried && reason.trim().length < 10 ? "Explain why these roles need this change (at least 10 characters)." : null}>
+          <Textarea id="pm-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why do these roles need this change?" invalid={tried && reason.trim().length < 10} />
+        </Field>
+      </Modal>
+
+      <Modal
+        open={Boolean(deciding)}
+        onClose={() => setDeciding(null)}
+        size="sm"
+        title={deciding?.decision === "approve" ? "Confirm this permission change?" : "Reject this permission change?"}
+        description={deciding?.decision === "approve" ? "The roles are updated at once and the change is written to the audit log." : "The proposer is notified with your reason."}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeciding(null)} disabled={busy}>Cancel</Button>
+            <Button variant={deciding?.decision === "reject" ? "danger" : "primary"} onClick={decide} loading={busy}>{deciding?.decision === "approve" ? "Confirm change" : "Reject"}</Button>
+          </>
+        }
+      >
+        <div className="rounded-control bg-ims-thead px-3.5 py-2.5 text-t-body">
+          <Person name={deciding?.req?.expand?.requested_by?.name} detail="Proposed the change" />
+          <p className="mt-1.5 text-ims-body">“{deciding?.req?.reason}”</p>
+        </div>
+        <Field
+          label={deciding?.decision === "reject" ? "Reason" : "Comment (optional)"}
+          required={deciding?.decision === "reject"}
+          htmlFor="pm-comment"
+          error={decideTried && deciding?.decision === "reject" && !comment.trim() ? "Write why you reject the change so the proposer knows what to fix." : null}
+        >
+          <Textarea id="pm-comment" value={comment} onChange={(e) => setComment(e.target.value)} invalid={decideTried && deciding?.decision === "reject" && !comment.trim()} />
+        </Field>
+      </Modal>
+    </Page>
   );
 }

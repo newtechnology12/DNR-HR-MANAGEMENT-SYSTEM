@@ -1,15 +1,13 @@
 import { useMemo } from "react";
-import AppFormField from "@/components/forms/AppFormField";
-import { Button } from "@/components/ui/button";
-import Loader from "@/components/icons/Loader";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Form } from "@/components/ui/form";
+import { toast } from "sonner";
 import useSettings from "@/hooks/useSettings";
 import pocketbase from "@/lib/pocketbase";
-import { toast } from "sonner";
+import { Button, Card, CardHeader, Field, Input } from "@/components/ims";
 
+/** Settings → General: the company details shown on documents, payslips and e-mails. */
 function GeneralSettongs() {
   const formSchema = z.object({
     company_name: z.string(),
@@ -34,86 +32,43 @@ function GeneralSettongs() {
     resolver: zodResolver(formSchema),
     values: values,
   });
+  const errors = form.formState.errors;
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       await pocketbase.collection("settings").update(settings.id, values);
-      toast.success("Settings updated successfully");
+      toast.success("Company details saved");
     } catch (error) {
-      toast.error("Failed to update settings");
+      toast.error("The company details could not be saved. Try again.");
     }
   }
 
   return (
-    <div className="py-2">
-      <div>
-        <div className="px-3 py-2 text-[12.5px] text-slate-500 font-medium uppercase">
-          <h4>Company information</h4>
-        </div>
-        <div>
-          <div>
-            <div className="max-w-2xl py-1 px-4">
-              <div className="dark:border-slate-700 border-slate-300">
-                <div className="mb-0">
-                  <Form {...form}>
-                    <form
-                      className="space-y-2"
-                      onSubmit={form.handleSubmit(onSubmit)}
-                    >
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <div className="sm:!col-span-2">
-                          <AppFormField
-                            label="Company Name"
-                            placeholder={"Company Name"}
-                            name={"company_name"}
-                            form={form}
-                          />
-                        </div>
-                        <AppFormField
-                          label="Company Email"
-                          placeholder={"Company Email"}
-                          name={"company_email"}
-                          form={form}
-                        />
-                        <AppFormField
-                          label="Company Phone"
-                          placeholder={"Company Phone"}
-                          name={"company_phone"}
-                          form={form}
-                        />
-                        <div className="sm:col-span-2">
-                          <AppFormField
-                            label="Company Address"
-                            placeholder={"Company Address"}
-                            name={"company_address"}
-                            form={form}
-                          />
-                        </div>
-                      </div>
-                      <div className="!mt-3 flex items-center justify-start">
-                        <Button
-                          size="sm"
-                          type="submit"
-                          className="mt-1"
-                          disabled={
-                            form.formState.disabled ||
-                            form.formState.isSubmitting
-                          }
-                        >
-                          {form.formState.isSubmitting && (
-                            <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
-                          )}
-                          Update Company Details
-                        </Button>
-                      </div>
-                    </form>
-                  </Form>
-                </div>
-              </div>
-            </div>
+    <div className="flex flex-col gap-4">
+      <Card as="div">
+        <CardHeader title="Company information" subtitle="Shown on documents, payslips and e-mails sent by the system." />
+        <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl space-y-4">
+          <Field label="Company name" htmlFor="gs-name">
+            <Input id="gs-name" placeholder="Rwanda Association of Local Government Authorities" {...form.register("company_name")} />
+          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Company e-mail" htmlFor="gs-email" error={errors.company_email ? "Enter a valid e-mail address, such as info@ralga.gov.rw." : null}>
+              <Input id="gs-email" type="email" placeholder="info@ralga.gov.rw" invalid={Boolean(errors.company_email)} {...form.register("company_email")} />
+            </Field>
+            <Field label="Company phone" htmlFor="gs-phone">
+              <Input id="gs-phone" type="tel" placeholder="+250 788 000 000" {...form.register("company_phone")} />
+            </Field>
           </div>
-        </div>
-      </div>
+          <Field label="Company address" htmlFor="gs-address">
+            <Input id="gs-address" placeholder="KG 11 Ave, Kigali" {...form.register("company_address")} />
+          </Field>
+          <div className="flex justify-end border-t border-ims-divider pt-4">
+            <Button type="submit" variant="primary" loading={form.formState.isSubmitting} disabled={form.formState.disabled}>
+              Save company details
+            </Button>
+          </div>
+        </form>
+      </Card>
     </div>
   );
 }

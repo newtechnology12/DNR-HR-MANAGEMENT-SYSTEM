@@ -6,24 +6,44 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "react-query";
 import { toast } from "sonner";
-import { ArrowRight, CalendarRange, Info, Plus, Split, UserCheck } from "lucide-react";
+import { CalendarX2, Info, Plus, Split, UserCheck } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useAuth, usePermissions } from "@/context/auth.context";
-import { DOCUMENT_TYPE_LABELS, showDay } from "@/lib/ims";
+import { DOCUMENT_TYPE_LABELS } from "@/lib/ims";
 import { errorMessage } from "@/lib/procurement";
-import { Button } from "@/components/ui/button";
-import { Badge, EmptyState, Initials, ListSkeleton, PageHeader, Panel } from "@/components/enterprise/ui";
-import { Field, FormBlock, FormDialog, inputCls, textareaCls } from "@/components/portal/kit";
+import {
+  Button,
+  Card,
+  Checkbox,
+  Column,
+  DataTable,
+  DatePicker,
+  EmptyState,
+  Field,
+  Modal,
+  ModalSection,
+  Page,
+  PageHeader,
+  Person,
+  Select,
+  StatusPill,
+  Tabs,
+  Textarea,
+  checkboxClass,
+  fmtDate,
+} from "@/components/ims";
 import { cn } from "@/utils";
 
 const today = () => new Date().toISOString().slice(0, 10);
-function state(d: any): { label: string; tone: "success" | "info" | "neutral" } {
+/** Glossary word for a delegation: Active while it runs, Inactive before it starts, Closed after. */
+function state(d: any): { word: "Active" | "Inactive" | "Closed"; note: string; ended: boolean } {
   const now = new Date().toISOString().replace("T", " ");
-  if (!d.active) return { label: d.cancelled_at ? "Ended early" : "Ended", tone: "neutral" };
-  if (d.start_date > now) return { label: "Scheduled", tone: "info" };
-  if (d.end_date < now) return { label: "Ended", tone: "neutral" };
-  return { label: "Active now", tone: "success" };
+  if (!d.active) return { word: "Closed", note: d.cancelled_at ? "Ended early" : "Ended", ended: true };
+  if (d.start_date > now) return { word: "Inactive", note: `Starts ${fmtDate(d.start_date)}`, ended: false };
+  if (d.end_date < now) return { word: "Closed", note: "Ended", ended: true };
+  return { word: "Active", note: `Until ${fmtDate(d.end_date)}`, ended: false };
 }
+type TabKey = "mine" | "toMe" | "others";
 
 export default function Delegations() {
   const { user } = useAuth();
@@ -32,6 +52,8 @@ export default function Delegations() {
   const queryClient = useQueryClient();
   const [form, setForm] = React.useState<any>(null);
   const [busy, setBusy] = React.useState(false);
+  const [tried, setTried] = React.useState(false);
+  const [tab, setTab] = React.useState<TabKey>("mine");
 
   const q = useQuery(["delegations"], async () => {
     const [list, people] = await Promise.all([
@@ -48,6 +70,7 @@ export default function Delegations() {
   const candidates = (q.data?.people || []).filter((p: any) => p.id !== user?.id && !NEVER.includes(p.expand?.role?.code));
 
   async function save() {
+    setTried(true);
     if (!form.delegate || !form.start_date || !form.end_date || !form.reason?.trim()) return toast.error("Choose the person, the dates and the reason.");
     setBusy(true);
     try {
@@ -71,96 +94,121 @@ export default function Delegations() {
     }
   }
 
-  const Row = ({ d, canEnd }: { d: any; canEnd: boolean }) => {
-    const s = state(d);
-    const types: string[] = d.document_types || [];
-    return (
-      <li className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3.5 sm:flex-row sm:items-center">
-        <span className="flex min-w-0 flex-1 items-center gap-2.5">
-          <Initials name={d.expand?.delegator?.name} />
-          <ArrowRight size={14} className="shrink-0 text-slate-400" />
-          <Initials name={d.expand?.delegate?.name} className="bg-primary/10 text-primaryDark" />
-          <span className="min-w-0">
-            <span className="block truncate text-[13.5px] font-medium text-slate-900">{d.expand?.delegator?.name} → {d.expand?.delegate?.name}</span>
-            <span className="block truncate text-[12px] text-slate-500">{d.reason} · {types.length ? types.map((t) => DOCUMENT_TYPE_LABELS[t] || t).join(", ") : "All documents"}</span>
-          </span>
-        </span>
-        <span className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-[12.5px] text-slate-600"><CalendarRange size={14} className="text-slate-400" /> {showDay(d.start_date)} – {showDay(d.end_date)}</span>
-          <Badge tone={s.tone}>{s.label}</Badge>
-          {canEnd && d.active && s.label !== "Ended" && <Button size="sm" variant="outline" onClick={() => end(d)}>End now</Button>}
-        </span>
-      </li>
-    );
-  };
+  const tabs = [
+    { key: "mine", label: "My delegations", count: q.data ? mine.length : undefined },
+    { key: "toMe", label: "Delegated to me", count: q.data ? toMe.length : undefined },
+    ...(manageAll ? [{ key: "others", label: "All other delegations", count: q.data ? others.length : undefined }] : []),
+  ];
+  const rows = tab === "toMe" ? toMe : tab === "others" ? others : mine;
+  const canEnd = tab !== "toMe";
+
+  const columns: Column<any>[] = [
+    { key: "from", header: "From", className: "max-w-[220px]", cell: (d) => <Person name={d.expand?.delegator?.name} detail="Hands over" /> },
+    { key: "to", header: "To", className: "max-w-[220px]", cell: (d) => <Person name={d.expand?.delegate?.name} detail="Decides on their behalf" /> },
+    {
+      key: "documents",
+      header: "Documents",
+      clamp: true,
+      cell: (d) => {
+        const types: string[] = d.document_types || [];
+        return types.length ? types.map((t) => DOCUMENT_TYPE_LABELS[t] || t).join(", ") : "All documents";
+      },
+      sub: (d) => d.reason,
+    },
+    { key: "dates", header: "Dates", nowrap: true, cell: (d) => `${fmtDate(d.start_date)} – ${fmtDate(d.end_date)}` },
+    {
+      key: "status",
+      header: "Status",
+      cell: (d) => {
+        const s = state(d);
+        return <StatusPill status={s.word} sub={s.note} />;
+      },
+    },
+  ];
+
+  const emptyText = tab === "toMe" ? "Nobody has delegated approvals to you." : tab === "others" ? "No other delegations." : "You have not delegated your approvals. Use Delegate my approvals before you go on leave or mission.";
 
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Approvals", to: "/dashboard/approvals" }, { label: "Delegations" }]}
         title="Delegations"
-        description="Going on leave or mission? Hand your approvals to a named colleague for a date range."
-        breadcrumbs={[{ title: "Approvals", link: "/dashboard/approvals" }, { title: "Delegations", link: "/dashboard/admin/delegations" }]}
-        actions={<Button onClick={() => setForm({ start_date: today(), end_date: today(), all: true, types: [], reason: "" })}><Plus size={15} /> Delegate my approvals</Button>}
+        subtitle="Going on leave or mission? Hand your approvals to a named colleague for a date range."
+        primary={{ label: "Delegate my approvals", icon: Plus, onClick: () => { setTried(false); setForm({ start_date: today(), end_date: today(), all: true, types: [], reason: "" }); } }}
       />
-      <p className="flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2.5 text-[12.5px] leading-relaxed text-blue-900">
-        <Info size={14} className="mt-0.5 shrink-0" />
-        The delegate sees your pending approvals and decides “on behalf of” you. They can never approve a document they raised, or one they already approved at another step. System Administrators, auditors and board viewers cannot be delegates.
+      <p className="flex items-start gap-2 rounded-control bg-ims-info-bg px-3.5 py-2.5 text-t-small text-ims-info">
+        <Info size={15} className="mt-px shrink-0" aria-hidden />
+        <span>The delegate sees your pending approvals and decides “on behalf of” you. They can never approve a document they raised, or one they already approved at another step. System Administrators, auditors and board viewers cannot be delegates.</span>
       </p>
-      {q.isLoading ? (
-        <Panel><ListSkeleton rows={4} /></Panel>
-      ) : (
-        <>
-          <Panel title="My delegations" subtitle="Approvals I hand to someone else">
-            {mine.length ? <ul className="space-y-2">{mine.map((d) => <Row key={d.id} d={d} canEnd />)}</ul> : <EmptyState icon={Split} text="You have not delegated your approvals." />}
-          </Panel>
-          <Panel title="Delegated to me" subtitle="I approve on someone else's behalf">
-            {toMe.length ? <ul className="space-y-2">{toMe.map((d) => <Row key={d.id} d={d} canEnd={false} />)}</ul> : <EmptyState icon={UserCheck} text="Nobody has delegated approvals to you." />}
-          </Panel>
-          {manageAll && (
-            <Panel title="All other delegations" subtitle="Visible to administrators">
-              {others.length ? <ul className="space-y-2">{others.map((d) => <Row key={d.id} d={d} canEnd />)}</ul> : <EmptyState icon={Split} text="No other delegations." />}
-            </Panel>
-          )}
-        </>
-      )}
+      <Card padded={false} className="overflow-hidden">
+        <Tabs inset label="Delegations" tabs={tabs} active={tab} onChange={(k) => setTab(k as TabKey)} />
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(d) => d.id}
+          loading={q.isLoading}
+          error={q.isError ? q.error : undefined}
+          onRetry={() => q.refetch()}
+          minWidth={820}
+          caption="Delegations"
+          rowClassName={(d) => state(d).ended && "text-ims-muted"}
+          rowActions={canEnd ? (d) => (d.active && !state(d).ended ? [{ label: "End now", icon: CalendarX2, onSelect: () => end(d) }] : []) : undefined}
+          empty={<EmptyState icon={tab === "toMe" ? UserCheck : Split} text={emptyText} />}
+        />
+      </Card>
 
-      <FormDialog open={Boolean(form)} onClose={() => setForm(null)} icon={Split} title="Delegate my approvals" description="The delegate is notified and every approval shows that it was decided on your behalf." submitLabel="Save delegation" busy={busy} onSubmit={save}>
+      <Modal
+        open={Boolean(form)}
+        onClose={() => setForm(null)}
+        title="Delegate my approvals"
+        description="The delegate is notified and every approval shows that it was decided on your behalf."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setForm(null)} disabled={busy}>Cancel</Button>
+            <Button variant="primary" onClick={save} loading={busy}>Save delegation</Button>
+          </>
+        }
+      >
         {form && (
           <>
-            <FormBlock icon={UserCheck} title="Who and when">
-              <Field label="Delegate" required>
-                <select value={form.delegate || ""} onChange={(e) => setForm({ ...form, delegate: e.target.value })} className={inputCls}>
+            <ModalSection title="Who and when">
+              <Field label="Delegate" required htmlFor="dl-delegate" error={tried && !form.delegate ? "Choose the colleague who decides for you." : null}>
+                <Select id="dl-delegate" value={form.delegate || ""} onChange={(e) => setForm({ ...form, delegate: e.target.value })} invalid={tried && !form.delegate}>
                   <option value="">Choose a colleague…</option>
                   {candidates.map((p: any) => <option key={p.id} value={p.id}>{p.name} — {p.expand?.role?.name}</option>)}
-                </select>
+                </Select>
               </Field>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="First day" required><input type="date" value={form.start_date} min={today()} onChange={(e) => setForm({ ...form, start_date: e.target.value })} className={inputCls} /></Field>
-                <Field label="Last day" required><input type="date" value={form.end_date} min={form.start_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} className={inputCls} /></Field>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="First day" required htmlFor="dl-start" error={tried && !form.start_date ? "Choose the first day." : null}>
+                  <DatePicker id="dl-start" value={form.start_date} min={today()} onChange={(v) => setForm({ ...form, start_date: v })} invalid={tried && !form.start_date} />
+                </Field>
+                <Field label="Last day" required htmlFor="dl-end" error={tried && !form.end_date ? "Choose the last day." : null}>
+                  <DatePicker id="dl-end" value={form.end_date} min={form.start_date} onChange={(v) => setForm({ ...form, end_date: v })} invalid={tried && !form.end_date} />
+                </Field>
               </div>
-              <Field label="Reason" required hint="e.g. annual leave, mission to the Western Province">
-                <textarea value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className={textareaCls} />
+              <Field label="Reason" required htmlFor="dl-reason" hint="For example annual leave, or a mission to the Western Province." error={tried && !form.reason?.trim() ? "Say why you hand over your approvals." : null}>
+                <Textarea id="dl-reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} invalid={tried && !form.reason?.trim()} />
               </Field>
-            </FormBlock>
-            <FormBlock icon={Info} title="Which documents">
-              <label className="flex items-center gap-2.5 text-[13.5px] text-slate-700">
-                <input type="checkbox" checked={form.all} onChange={(e) => setForm({ ...form, all: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-primary" />
-                All documents waiting for me
-              </label>
+            </ModalSection>
+            <ModalSection title="Which documents">
+              <Checkbox label="All documents waiting for me" checked={Boolean(form.all)} onChange={(v) => setForm({ ...form, all: v })} />
               {!form.all && (
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                  {Object.entries(DOCUMENT_TYPE_LABELS).map(([k, v]) => (
-                    <label key={k} className={cn("flex items-center gap-2 rounded-md border px-2.5 py-2 text-[13px]", form.types.includes(k) ? "border-primary bg-primary/5" : "border-slate-200")}>
-                      <input type="checkbox" checked={form.types.includes(k)} onChange={(e) => setForm({ ...form, types: e.target.checked ? [...form.types, k] : form.types.filter((x: string) => x !== k) })} className="h-4 w-4 rounded border-slate-300 text-primary" />
-                      {v}
-                    </label>
-                  ))}
+                  {Object.entries(DOCUMENT_TYPE_LABELS).map(([k, v]) => {
+                    const on = form.types.includes(k);
+                    return (
+                      <label key={k} className={cn("flex min-h-[40px] cursor-pointer items-center gap-2.5 rounded-control border px-3 py-2 text-t-body", on ? "border-ims-link bg-ims-info-bg text-ims-text" : "border-ims-border text-ims-body hover:bg-ims-hover")}>
+                        <input type="checkbox" className={cn(checkboxClass, "mt-0")} checked={on} onChange={(e) => setForm({ ...form, types: e.target.checked ? [...form.types, k] : form.types.filter((x: string) => x !== k) })} />
+                        {v}
+                      </label>
+                    );
+                  })}
                 </div>
               )}
-            </FormBlock>
+            </ModalSection>
           </>
         )}
-      </FormDialog>
-    </div>
+      </Modal>
+    </Page>
   );
 }

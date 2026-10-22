@@ -1,16 +1,15 @@
 import { useMemo } from "react";
-import AppFormField from "@/components/forms/AppFormField";
-import { Button } from "@/components/ui/button";
-import Loader from "@/components/icons/Loader";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
-import { Form } from "@/components/ui/form";
-import AppFormTimePicker from "@/components/forms/AppFormTimePicker";
+import { toast } from "sonner";
 import useSettings from "@/hooks/useSettings";
 import pocketbase from "@/lib/pocketbase";
-import { toast } from "sonner";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button, Card, CardHeader, Checkbox, Field, Input, sentence } from "@/components/ims";
+
+const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+/** Settings → Attendance: working hours, clock-in window, lunch break and working days. */
 function AttendaceSettings() {
   // Define the form schema with new fields
   const formSchema = z.object({
@@ -81,10 +80,10 @@ function AttendaceSettings() {
       };
 
       await pocketbase.collection("settings").update(settings.id, updatedValues);
-      toast.success("Attendance settings updated successfully");
+      toast.success("Attendance settings saved");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to update attendance settings");
+      toast.error("The attendance settings could not be saved. Try again.");
     }
   }
 
@@ -94,146 +93,67 @@ function AttendaceSettings() {
   });
 
   return (
-    <div className="py-3 px-4 max-w-2xl">
-      <div className="dark:border-slate-700 border-slate-300">
-        <div className="border-b dark:border-b-slate-700 border-slate-300 mb-0 pb-3">
-          <h4 className="font-semibold dark:text-slate-200 text-[15px]">
-            Attendance Settings
-          </h4>
-          <p className="text-[14px] leading-7 dark:text-slate-400 mt-1 text-slate-500">
-            Configure work hours, breaks, and attendance settings.
-          </p>
+    <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <Card as="div">
+        <CardHeader title="Working hours" subtitle="The official working day, used to mark late arrivals and early departures." />
+        <div className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Work starts at" htmlFor="as-work-start">
+            <Input id="as-work-start" type="time" {...form.register("work_start_time")} />
+          </Field>
+          <Field label="Work ends at" htmlFor="as-work-end">
+            <Input id="as-work-end" type="time" {...form.register("work_end_time")} />
+          </Field>
+          <Field label="Early clock-in allowed (minutes)" htmlFor="as-early" hint="How many minutes before the start of work staff may clock in.">
+            <Input id="as-early" type="number" min={0} inputMode="numeric" {...form.register("early_clockin_mins")} />
+          </Field>
         </div>
-        <div className="mb-0">
-          <Form {...form}>
-            <form className="space-y-2" onSubmit={form.handleSubmit(onSubmit)}>
-              {/* Work Start and End Time */}
-              <div className="grid grid-cols-2 gap-2">
-                <AppFormTimePicker
-                  label="Work start time"
-                  name="work_start_time"
-                  placeholder="Work start time"
-                  form={form}
-                />
-                <AppFormTimePicker
-                  label="Work end time"
-                  name="work_end_time"
-                  placeholder="Work end time"
-                  form={form}
-                />
-              </div>
+      </Card>
 
-              {/* Early Clock-in Minutes */}
-              <div>
-                <AppFormField
-                  label="Early work start time (mins)"
-                  type="number"
-                  name="early_clockin_mins"
-                  placeholder="Early work start time (mins)"
-                  form={form}
-                />
-              </div>
-
-              {/* Clock-in, Lunch Break, and Clock-out Times */}
-              <div className="grid grid-cols-2 gap-2">
-                <AppFormTimePicker
-                  label="Clock-in time"
-                  name="clock_in_time"
-                  placeholder="Clock-in time"
-                  form={form}
-                />
-                <AppFormTimePicker
-                  label="Clock-out time"
-                  name="clock_out_time"
-                  placeholder="Clock-out time"
-                  form={form}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <AppFormTimePicker
-                  label="Lunch break start time"
-                  name="lunch_break_start"
-                  placeholder="Lunch break start time"
-                  form={form}
-                />
-                <AppFormField
-                  label="Lunch break duration (hours)"
-                  type="number"
-                  name="lunch_break_duration"
-                  placeholder="Lunch break duration (hours)"
-                  form={form}
-                />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">
-                  Lunch break end time: <strong>{lunchBreakEnd}</strong>
-                </p>
-              </div>
-
-              {/* Working Days */}
-              <div className="!mt-4 mb-1">
-                <div className="border-b dark:border-b-slate-700 border-slate-300 mb-0 pb-3">
-                  <h4 className="font-semibold dark:text-slate-200 text-[15px]">
-                    Working days
-                  </h4>
-                  <p className="text-[14px] leading-7 dark:text-slate-400 mt-1 text-slate-500">
-                    Select the days employees are expected to work.
-                  </p>
-                </div>
-                <div className="grid mt-0 grid-cols-3 gap-y-1">
-                  {[
-                    "monday",
-                    "tuesday",
-                    "wednesday",
-                    "thursday",
-                    "friday",
-                    "saturday",
-                    "sunday",
-                  ].map((day, i) => (
-                    <div
-                      key={i}
-                      className="flex px-4 pb-4 justify-between w-full items-center space-x-2"
-                    >
-                      <Checkbox
-                        onCheckedChange={(checked) => {
-                          const newv = checked
-                            ? [...working_days, day]
-                            : working_days.filter((d) => d !== day);
-                          form.setValue("working_days", newv);
-                        }}
-                        checked={working_days.includes(day)}
-                        id={day}
-                      />
-                      <label
-                        htmlFor={day}
-                        className="capitalize font-medium text-slate-500 text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {day}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <div className="!mt-0 flex items-center justify-start">
-                <Button
-                  size="sm"
-                  type="submit"
-                  className="mt-1"
-                  disabled={form.formState.isSubmitting}
-                >
-                  {form.formState.isSubmitting && (
-                    <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
-                  )}
-                  Update attendance settings
-                </Button>
-              </div>
-            </form>
-          </Form>
+      <Card as="div">
+        <CardHeader title="Clock-in and lunch break" subtitle="The times the clock-in screen expects, and the lunch break that is not counted as work." />
+        <div className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Clock-in time" htmlFor="as-clock-in">
+            <Input id="as-clock-in" type="time" {...form.register("clock_in_time")} />
+          </Field>
+          <Field label="Clock-out time" htmlFor="as-clock-out">
+            <Input id="as-clock-out" type="time" {...form.register("clock_out_time")} />
+          </Field>
+          <Field label="Lunch break starts at" htmlFor="as-lunch-start">
+            <Input id="as-lunch-start" type="time" {...form.register("lunch_break_start")} />
+          </Field>
+          <Field label="Lunch break duration (hours)" htmlFor="as-lunch-duration" hint={lunchBreakEnd ? `The lunch break ends at ${lunchBreakEnd}.` : "Set the start and the duration to see when it ends."}>
+            <Input id="as-lunch-duration" type="number" min={0} inputMode="numeric" {...form.register("lunch_break_duration")} />
+          </Field>
         </div>
+      </Card>
+
+      <Card as="div">
+        <CardHeader title="Working days" subtitle="The days employees are expected to work. Other days are not counted as absences." />
+        <fieldset>
+          <legend className="sr-only">Working days</legend>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 lg:grid-cols-7">
+            {DAYS.map((day) => (
+              <Checkbox
+                key={day}
+                id={`as-day-${day}`}
+                label={sentence(day)}
+                checked={(working_days || []).includes(day)}
+                onChange={(checked) => {
+                  const newv = checked ? [...working_days, day] : working_days.filter((d) => d !== day);
+                  form.setValue("working_days", newv);
+                }}
+              />
+            ))}
+          </div>
+        </fieldset>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button type="submit" variant="primary" loading={form.formState.isSubmitting}>
+          Save attendance settings
+        </Button>
       </div>
-    </div>
+    </form>
   );
 }
 

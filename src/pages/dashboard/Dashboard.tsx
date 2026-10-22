@@ -1,46 +1,24 @@
+/**
+ * Team overview — the dashboard for roles that oversee the workforce: today's attendance, leave and
+ * pending decisions in one band, the attendance trend, what waits for the signed-in person, and the
+ * latest requests. Staff without such a role go to their own workspace (see Dashboard below).
+ */
 import * as React from "react";
 import { useQuery } from "react-query";
 import { Navigate, useNavigate } from "react-router-dom";
-import { format, formatDistanceToNow, startOfMonth, subDays } from "date-fns";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
-  ArrowRight,
-  Banknote,
-  CalendarClock,
-  CheckCircle2,
-  Clock,
-  Inbox,
-  Palmtree,
-  Receipt,
-  UserCheck,
-  Users,
-  Wallet,
-} from "lucide-react";
+import { format, startOfMonth, subDays } from "date-fns";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { ArrowRight, CalendarClock, CheckCircle2, Inbox, Palmtree, Receipt, Users, Wallet } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { cn } from "@/utils";
 import { useAuth } from "@/context/auth.context";
 import { useRoles } from "@/context/roles.context";
 import useSettings from "@/hooks/useSettings";
-import StatCard from "@/components/StatCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import BreadCrumb from "@/components/breadcrumb";
-import { ChartTooltip, EmptyState, HorizontalBars, Initials, ListSkeleton, Panel, StatusBadge } from "@/components/enterprise/ui";
+import { CHART, ChartTooltip, HorizontalBars, ListSkeleton, StatusBadge } from "@/components/enterprise/ui";
+import { Card, CardHeader, Column, DataTable, EmptyState, KpiBand, Page, PageHeader, Person, fmtDate, fmtMoney, fmtMoneyShort, fmtNumber, fmtWhen } from "@/components/ims";
+import { EXPENSE_STATUS } from "@/lib/expenses";
 import { queueCounts, queuesFor } from "./queues";
-
-// Chart colours: reference data-viz palette, slots 1–2 (validated for colour-blind separation).
-const SERIES_ON_TIME = "#2a78d6";
-const SERIES_LATE = "#eb6834";
-const GRID = "#e5e7eb";
-const AXIS_TEXT = "#64748b";
 
 const PERIODS = [
   { label: "7 days", days: 7 },
@@ -62,9 +40,9 @@ const endOfDay = (d: Date) => {
   x.setHours(23, 59, 59, 999);
   return x;
 };
-const compactMoney = (n: number) =>
-  `RWF ${new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n || 0)}`;
-const fullMoney = (n: number) => `RWF ${(n || 0).toLocaleString()}`;
+/** "RWF 1.3M" in the band, "RWF 1,250,000" in sentences (kit formats). */
+const compactMoney = (n: number) => fmtMoneyShort(n || 0);
+const fullMoney = (n: number) => fmtMoney(n || 0);
 const count = (collection: string, filter = "") =>
   pocketbase.collection(collection).getList(1, 1, { filter, fields: "id" }).then((r) => r.totalItems);
 
@@ -208,6 +186,8 @@ export default function Dashboard() {
   return <Navigate to="/dashboard/my" replace />;
 }
 
+type Recent = Awaited<ReturnType<typeof fetchRecent>>[number];
+
 function TeamDashboard({ scope }: { scope: "organisation" | "department" }) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -243,297 +223,245 @@ function TeamDashboard({ scope }: { scope: "organisation" | "department" }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
+  const recentColumns: Column<Recent>[] = [
+    {
+      key: "who",
+      header: "Employee",
+      className: "max-w-[220px]",
+      cell: (r) => (
+        <span className="flex min-w-0 items-center gap-2.5">
+          <r.icon size={16} className="shrink-0 text-ims-muted" aria-hidden />
+          <Person name={r.who} detail={r.kind} />
+        </span>
+      ),
+    },
+    { key: "what", header: "Details", clamp: true, cell: (r) => r.what },
+    { key: "status", header: "Status", cell: (r) => <StatusBadge status={r.status} map={r.kind === "Expense" ? EXPENSE_STATUS : undefined} /> },
+    { key: "created", header: "Submitted", nowrap: true, cell: (r) => fmtWhen(r.created) },
+  ];
+
   return (
-    <div className="flex-1 space-y-5 px-4 py-4 sm:px-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <BreadCrumb items={[{ title: "Overview", link: "/dashboard" }]} />
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            {greeting}, {user?.names?.split(" ")[0] || "there"}
-          </h2>
-          <p className="text-[13px] text-slate-500">
-            {format(new Date(), "EEEE, d MMMM yyyy")} ·{" "}
-            {scope === "department" ? `Department view: ${deptName || "your department"}` : settings?.company_name || "Organisation overview"}
-          </p>
-        </div>
-        <PeriodSwitch value={days} onChange={setDays} />
-      </div>
+    <Page>
+      <PageHeader
+        title={`${greeting}, ${user?.names?.split(" ")[0] || "there"}`}
+        subtitle={`Team overview · ${scope === "department" ? `Department: ${deptName || "your department"}` : settings?.company_name || "the whole organisation"}`}
+        meta={format(new Date(), "EEEE, d MMM yyyy")}
+        actions={<PeriodSwitch value={days} onChange={setDays} />}
+      />
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard
-          title={scope === "department" ? "Team" : "Staff"}
-          icon={Users}
-          loading={today.isLoading}
-          value={t?.active}
-          description={t ? `${t.newHires} new this month` : undefined}
-          onClick={() => navigate("/dashboard/hr/employees")}
-        />
-        <StatCard
-          title="Present"
-          icon={UserCheck}
-          tone="success"
-          loading={today.isLoading}
-          value={isWorkingDay ? t?.present : "—"}
-          description={isWorkingDay ? `${attendanceRate}% attendance rate` : "Not a working day"}
-          onClick={() => navigate("/dashboard/attendance/attendance-logs")}
-        />
-        <StatCard
-          title="Late"
-          icon={Clock}
-          tone="warning"
-          loading={today.isLoading}
-          value={isWorkingDay ? t?.late : "—"}
-          description={isWorkingDay ? `${absent} absent today` : "Not a working day"}
-          onClick={() => navigate("/dashboard/attendance/attendance-logs")}
-        />
-        <StatCard
-          title="On leave"
-          icon={Palmtree}
-          tone="info"
-          loading={today.isLoading}
-          value={t?.onLeave.length}
-          description="Away today"
-          onClick={() => navigate("/dashboard/hr/leaves")}
-        />
-        <StatCard
-          title="Pending"
-          icon={Inbox}
-          tone={totalPending > 0 ? "danger" : "neutral"}
-          loading={pending.isLoading}
-          value={totalPending}
-          description="Awaiting approval"
-        />
-        <StatCard
-          title="Expenses"
-          icon={Banknote}
-          tone="neutral"
-          loading={trends.isLoading}
-          value={compactMoney(trends.data?.spend || 0)}
-          description={
-            trends.data?.spendChange == null
-              ? `Approved, last ${days} days`
-              : `${trends.data.spendChange > 0 ? "+" : ""}${trends.data.spendChange}% vs prior ${days}d`
-          }
-          onClick={() => navigate("/dashboard/hr/prepayments")}
-        />
-      </div>
+      <KpiBand
+        items={[
+          { label: scope === "department" ? "Team" : "Staff", value: today.isLoading ? undefined : fmtNumber(t?.active), sub: t ? `${fmtNumber(t.newHires)} new this month` : undefined, to: "/dashboard/hr/employees" },
+          {
+            label: "Present today",
+            value: today.isLoading ? undefined : isWorkingDay ? fmtNumber(t?.present) : "—",
+            tone: "success",
+            sub: isWorkingDay ? `${attendanceRate}% attendance rate` : "Not a working day",
+            to: "/dashboard/attendance/attendance-logs",
+          },
+          {
+            label: "Late today",
+            value: today.isLoading ? undefined : isWorkingDay ? fmtNumber(t?.late) : "—",
+            tone: isWorkingDay && t?.late ? "warning" : "default",
+            sub: isWorkingDay ? `${fmtNumber(absent)} absent` : "Not a working day",
+            to: "/dashboard/attendance/attendance-logs",
+          },
+          { label: "On leave today", value: today.isLoading ? undefined : fmtNumber(t?.onLeave.length), sub: "Approved leave", to: "/dashboard/hr/leaves" },
+          { label: "Waiting for you", value: pending.isLoading ? undefined : fmtNumber(totalPending), tone: totalPending > 0 ? "warning" : "default", sub: "Decisions to take" },
+          {
+            label: `Expenses, ${days} days`,
+            value: trends.isLoading ? undefined : compactMoney(trends.data?.spend || 0),
+            sub:
+              trends.data?.spendChange == null
+                ? "Approved"
+                : `${trends.data.spendChange > 0 ? "+" : ""}${trends.data.spendChange}% on the ${days} days before`,
+            to: "/dashboard/hr/prepayments",
+          },
+        ]}
+      />
 
-      {/* Attendance trend + action centre */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Panel
-          className="xl:col-span-2"
-          title="Attendance trend"
-          subtitle={`Clock-ins per working day, last ${days} days · ${who}`}
-          action={{ label: "Attendance logs", onClick: () => navigate("/dashboard/attendance/attendance-logs") }}
-        >
-          {trends.isLoading ? (
-            <Skeleton className="h-[260px] w-full" />
-          ) : !trends.data?.attendanceTrend.some((d) => d.onTime + d.late > 0) ? (
-            <EmptyState icon={CalendarClock} text="No attendance recorded in this period" />
-          ) : (
-            <div className="h-[260px]" role="img" aria-label="Stacked bar chart of on-time and late clock-ins per working day">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trends.data.attendanceTrend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }} barCategoryGap={days > 30 ? 1 : "20%"}>
-                  <CartesianGrid vertical={false} stroke={GRID} />
-                  <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: AXIS_TEXT }} minTickGap={16} />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: AXIS_TEXT }} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "#f1f5f9" }} />
-                  <Legend verticalAlign="top" align="right" height={28} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, color: AXIS_TEXT }} />
-                  <Bar isAnimationActive={false} dataKey="onTime" name="On time" stackId="a" fill={SERIES_ON_TIME} stroke="#fff" strokeWidth={1} />
-                  <Bar isAnimationActive={false} dataKey="late" name="Late" stackId="a" fill={SERIES_LATE} stroke="#fff" strokeWidth={1} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Panel>
-
-        <Panel title="Needs your action" subtitle="Requests waiting for a decision">
-          {pending.isLoading ? (
-            <ListSkeleton rows={5} />
-          ) : queues.length === 0 ? (
-            <EmptyState icon={CheckCircle2} text="You have no approval queues" />
-          ) : (
-            <ul className="-mx-1 divide-y divide-slate-100">
-              {queues.map((q) => {
-                const n = pending.data?.[q.key] || 0;
-                return (
-                  <li key={q.key}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(q.link)}
-                      className="group flex w-full items-center gap-3 rounded-md px-1 py-2.5 text-left hover:bg-slate-50"
-                    >
-                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-600">
-                        <q.icon size={15} />
-                      </span>
-                      <span className="flex-1 text-[13px] font-medium text-slate-700">{q.label}</span>
-                      <span
-                        className={cn(
-                          "min-w-[28px] rounded-full px-2 py-0.5 text-center text-[12px] font-semibold tabular-nums",
-                          n > 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"
-                        )}
-                      >
-                        {n}
-                      </span>
-                      <ArrowRight size={14} className="text-slate-300 group-hover:text-slate-500" />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Panel>
-      </div>
-
-      {/* Workforce distribution */}
-      <div className={cn("grid grid-cols-1 gap-4 lg:grid-cols-2", scope === "organisation" && "xl:grid-cols-3")}>
-        {scope === "organisation" && (
-          <Panel title="Headcount by department" subtitle="Active employees">
-            {headcount.isLoading ? (
-              <Skeleton className="h-[240px] w-full" />
-            ) : !headcount.data?.length ? (
-              <EmptyState icon={Users} text="No employees assigned to departments" />
+        {/* main column (2/3) */}
+        <div className="flex min-w-0 flex-col gap-4 xl:col-span-2">
+          <Card>
+            <CardHeader
+              title="Attendance trend"
+              subtitle={`Clock-ins per working day, last ${days} days · ${who}`}
+              link={{ label: "Attendance logs", to: "/dashboard/attendance/attendance-logs" }}
+            />
+            {trends.isLoading ? (
+              <Skeleton className="h-[260px] w-full" />
+            ) : !trends.data?.attendanceTrend.some((d) => d.onTime + d.late > 0) ? (
+              <EmptyState compact icon={CalendarClock} text="No attendance recorded in this period." />
             ) : (
-              <HorizontalBars data={headcount.data} label="Employees" />
+              <>
+                <div className="mb-2 flex flex-wrap justify-end gap-4 text-t-small text-ims-body" aria-hidden>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: CHART.series1 }} />On time</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: CHART.series2 }} />Late</span>
+                </div>
+                <div className="h-[260px]" role="img" aria-label="Stacked bar chart of on-time and late clock-ins per working day">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={trends.data.attendanceTrend} margin={{ top: 4, right: 8, left: -18, bottom: 0 }} barCategoryGap={days > 30 ? 1 : "20%"}>
+                      <CartesianGrid vertical={false} stroke={CHART.grid} />
+                      <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART.axis }} minTickGap={16} />
+                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART.axis }} />
+                      <Tooltip content={<ChartTooltip />} cursor={{ fill: CHART.grid }} />
+                      <Bar isAnimationActive={false} dataKey="onTime" name="On time" stackId="a" fill={CHART.series1} />
+                      <Bar isAnimationActive={false} dataKey="late" name="Late" stackId="a" fill={CHART.series2} radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
             )}
-          </Panel>
-        )}
+          </Card>
 
-        <Panel title="Leave by type" subtitle={`Requests starting in the last ${days} days · ${who}`}>
-          {trends.isLoading ? (
-            <Skeleton className="h-[240px] w-full" />
-          ) : !trends.data?.leaveByType.length ? (
-            <EmptyState icon={Palmtree} text="No leave requests in this period" />
-          ) : (
-            <HorizontalBars data={trends.data.leaveByType.map((l) => ({ name: l.type, value: l.value }))} label="Requests" />
-          )}
-        </Panel>
-
-        <Panel
-          title="On leave today"
-          subtitle={t ? `${t.onLeave.length} employee(s) away` : undefined}
-          className={cn(scope === "organisation" && "lg:col-span-2 xl:col-span-1")}
-        >
-          {today.isLoading ? (
-            <ListSkeleton rows={4} />
-          ) : !t?.onLeave.length ? (
-            <EmptyState icon={Palmtree} text="Everyone is in today" />
-          ) : (
-            <ul className="max-h-[240px] divide-y divide-slate-100 overflow-y-auto pr-1">
-              {t.onLeave.map((l) => (
-                <li key={l.id} className="flex items-center gap-3 py-2.5">
-                  <Initials name={l.expand?.employee?.name} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-medium text-slate-800">{l.expand?.employee?.name || "Unknown"}</p>
-                    <p className="truncate text-[12px] text-slate-500">
-                      {l.type} · {l.expand?.employee?.expand?.department?.name || "—"}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-[12px] text-slate-500">Back {format(new Date(l.end), "d MMM")}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
-
-      {/* Activity + finance */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title="Recent requests" subtitle={`Latest leave, expense and petty cash submissions you can see · ${who}`}>
-          {recent.isLoading ? (
-            <ListSkeleton rows={6} />
-          ) : !recent.data?.length ? (
-            <EmptyState icon={Inbox} text="No requests yet" />
-          ) : (
-            <div className="-mx-4 overflow-x-auto">
-              <table className="dnr-grid w-full min-w-[560px] text-[13px]">
-                <thead>
-                  <tr className="border-y border-slate-100 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-2 font-semibold">Type</th>
-                    <th className="px-4 py-2 font-semibold">Employee</th>
-                    <th className="px-4 py-2 font-semibold">Details</th>
-                    <th className="px-4 py-2 font-semibold">Status</th>
-                    <th className="px-4 py-2 text-right font-semibold">Submitted</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {recent.data.map((r) => (
-                    <tr key={`${r.kind}-${r.id}`} onClick={() => navigate(r.link)} className="cursor-pointer hover:bg-slate-50">
-                      <td className="px-4 py-2.5">
-                        <span className="flex items-center gap-2 whitespace-nowrap text-slate-600">
-                          <r.icon size={14} className="text-slate-400" />
-                          {r.kind}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-800">{r.who || "—"}</td>
-                      <td className="max-w-[240px] truncate px-4 py-2.5 text-slate-600">{r.what}</td>
-                      <td className="px-4 py-2.5">
-                        <StatusBadge status={r.status} />
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-right text-slate-500">
-                        {formatDistanceToNow(new Date(r.created), { addSuffix: true })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <Card padded={false} className="overflow-hidden">
+            <div className="px-5 pt-5">
+              <CardHeader title="Recent requests" subtitle={`Latest leave, expense and petty cash submissions you can see · ${who}`} />
             </div>
-          )}
-        </Panel>
+            <DataTable
+              columns={recentColumns}
+              rows={recent.data || []}
+              rowKey={(r) => `${r.kind}-${r.id}`}
+              loading={recent.isLoading}
+              error={recent.isError ? recent.error : undefined}
+              onRetry={() => recent.refetch()}
+              onRowClick={(r) => navigate(r.link)}
+              minWidth={560}
+              caption="Recent requests"
+              empty={<EmptyState compact icon={Inbox} text="No requests yet." />}
+            />
+          </Card>
 
-        <Panel
-          title="Finance snapshot"
-          subtitle="Cash accounts and latest payroll"
-          action={canPerform("view_petty_cash_accounts") ? { label: "Accounts", onClick: () => navigate("/dashboard/finance/petty-cash-accounts") } : undefined}
-        >
-          {!finance.isFetched && finance.isLoading ? (
-            <ListSkeleton rows={5} />
-          ) : !finance.data ? (
-            <EmptyState icon={Wallet} text="You don't have access to finance data" />
-          ) : (
-            <div className="space-y-4">
-              {finance.data.lastPayroll && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/dashboard/hr/payroll/${finance.data.lastPayroll.id}`)}
-                  className="w-full rounded-md border border-slate-200 p-3 text-left hover:bg-slate-50"
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    Payroll · {format(new Date(finance.data.lastPayroll.year, finance.data.lastPayroll.month - 1), "MMMM yyyy")}
-                  </p>
-                  <div className="mt-1 flex items-baseline justify-between gap-2">
-                    <span className="text-lg font-semibold tabular-nums text-slate-900">{fullMoney(finance.data.lastPayroll.total_net)}</span>
-                    <span className="text-[12px] text-slate-500">net of {compactMoney(finance.data.lastPayroll.total_gross)} gross</span>
-                  </div>
-                </button>
+          {scope === "organisation" && (
+            <Card>
+              <CardHeader title="Headcount by department" subtitle="Active employees" link={{ label: "Employees", to: "/dashboard/hr/employees" }} />
+              {headcount.isLoading ? (
+                <Skeleton className="h-[240px] w-full" />
+              ) : !headcount.data?.length ? (
+                <EmptyState compact icon={Users} text="No employees assigned to departments yet." />
+              ) : (
+                <HorizontalBars data={headcount.data} label="Employees" labelWidth={170} />
               )}
-              <ul className="divide-y divide-slate-100">
-                {finance.data.accounts.map((a) => (
-                  <li key={a.id} className="flex items-center justify-between gap-3 py-2">
-                    <span className="flex min-w-0 items-center gap-2 text-[13px] text-slate-700">
-                      <Wallet size={14} className="shrink-0 text-slate-400" />
-                      <span className="truncate">{a.name}</span>
-                    </span>
-                    <span className={cn("text-[13px] font-semibold tabular-nums", a.currentBalance < 0 ? "text-red-600" : "text-slate-900")}>
-                      {fullMoney(a.currentBalance)}
-                    </span>
+            </Card>
+          )}
+        </div>
+
+        {/* side column (1/3) */}
+        <div className="flex min-w-0 flex-col gap-4">
+          <Card>
+            <CardHeader title="Needs your action" subtitle="Requests waiting for your decision" />
+            {pending.isLoading ? (
+              <ListSkeleton rows={5} />
+            ) : queues.length === 0 ? (
+              <EmptyState compact icon={CheckCircle2} text="You have no approval queues." />
+            ) : (
+              <ul className="-mx-1 divide-y divide-ims-divider">
+                {queues.map((q) => {
+                  const n = pending.data?.[q.key] || 0;
+                  return (
+                    <li key={q.key}>
+                      <button
+                        type="button"
+                        onClick={() => navigate(q.link)}
+                        className="group flex min-h-[44px] w-full items-center gap-3 rounded-control px-1 py-2 text-left hover:bg-ims-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus"
+                      >
+                        <q.icon size={16} className="shrink-0 text-ims-muted" aria-hidden />
+                        <span className="min-w-0 flex-1 text-t-body font-semibold text-ims-body group-hover:text-ims-primary">{q.label}</span>
+                        <span className={cn("min-w-[28px] rounded-pill px-2 py-0.5 text-center text-t-hint font-bold tabular-nums", n > 0 ? "bg-ims-warning-bg text-ims-warning" : "bg-ims-neutral-bg text-ims-muted")}>
+                          {n}
+                        </span>
+                        <ArrowRight size={14} className="shrink-0 text-ims-faint group-hover:text-ims-muted" aria-hidden />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+
+          <Card>
+            <CardHeader title="On leave today" subtitle={`Approved leave · ${who}`} link={{ label: "Leave", to: "/dashboard/hr/leaves" }} />
+            {today.isLoading ? (
+              <ListSkeleton rows={4} />
+            ) : !t?.onLeave.length ? (
+              <EmptyState compact icon={Palmtree} text="Everyone is in today." />
+            ) : (
+              <ul className="max-h-[260px] divide-y divide-ims-divider overflow-y-auto pr-1">
+                {t.onLeave.map((l) => (
+                  <li key={l.id} className="flex items-center gap-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <Person name={l.expand?.employee?.name || "Unknown"} detail={`${l.type} · ${l.expand?.employee?.expand?.department?.name || "—"}`} />
+                    </div>
+                    <span className="shrink-0 text-t-small text-ims-muted">Until {fmtDate(l.end)}</span>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-        </Panel>
+            )}
+          </Card>
+
+          <Card>
+            <CardHeader title="Leave by type" subtitle={`Requests starting in the last ${days} days · ${who}`} />
+            {trends.isLoading ? (
+              <Skeleton className="h-[200px] w-full" />
+            ) : !trends.data?.leaveByType.length ? (
+              <EmptyState compact icon={Palmtree} text="No leave requests in this period." />
+            ) : (
+              <HorizontalBars data={trends.data.leaveByType.map((l) => ({ name: l.type, value: l.value }))} label="Requests" labelWidth={120} />
+            )}
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Finance snapshot"
+              subtitle="Cash accounts and the latest payroll"
+              link={canPerform("view_petty_cash_accounts") ? { label: "Accounts", to: "/dashboard/finance/petty-cash-accounts" } : undefined}
+            />
+            {!finance.isFetched && finance.isLoading ? (
+              <ListSkeleton rows={5} />
+            ) : !finance.data ? (
+              <EmptyState compact icon={Wallet} text="Finance figures are shown to roles that see cash accounts or payroll." />
+            ) : (
+              <div className="space-y-4">
+                {finance.data.lastPayroll && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/dashboard/hr/payroll/${finance.data.lastPayroll.id}`)}
+                    className="w-full rounded-control border border-ims-border p-3.5 text-left hover:bg-ims-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus"
+                  >
+                    <p className="text-t-small font-semibold text-ims-muted">
+                      Payroll · {format(new Date(finance.data.lastPayroll.year, finance.data.lastPayroll.month - 1), "MMMM yyyy")}
+                    </p>
+                    <p className="mt-1 text-t-section tabular-nums text-ims-text">{fullMoney(finance.data.lastPayroll.total_net)}</p>
+                    <p className="text-t-small text-ims-muted">Net pay, of {compactMoney(finance.data.lastPayroll.total_gross)} gross</p>
+                  </button>
+                )}
+                <ul className="divide-y divide-ims-divider">
+                  {finance.data.accounts.map((a) => (
+                    <li key={a.id} className="flex items-center justify-between gap-3 py-2">
+                      <span className="flex min-w-0 items-center gap-2 text-t-body text-ims-body">
+                        <Wallet size={15} className="shrink-0 text-ims-muted" aria-hidden />
+                        <span className="truncate">{a.name}</span>
+                      </span>
+                      <span className={cn("whitespace-nowrap text-t-body font-semibold tabular-nums", a.currentBalance < 0 ? "text-ims-danger" : "text-ims-text")}>
+                        {fullMoney(a.currentBalance)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
-    </div>
+    </Page>
   );
 }
 
 // ------------------------------------------------------------------ building blocks
 function PeriodSwitch({ value, onChange }: { value: number; onChange: (d: number) => void }) {
   return (
-    <div role="radiogroup" aria-label="Reporting period" className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 shadow-card">
+    <div role="radiogroup" aria-label="Reporting period" className="inline-flex rounded-control border border-ims-field bg-ims-card p-0.5">
       {PERIODS.map((p) => (
         <button
           key={p.days}
@@ -542,8 +470,8 @@ function PeriodSwitch({ value, onChange }: { value: number; onChange: (d: number
           aria-checked={value === p.days}
           onClick={() => onChange(p.days)}
           className={cn(
-            "rounded px-3 py-1.5 text-[12.5px] font-medium transition-colors",
-            value === p.days ? "bg-ralga-navy text-white" : "text-slate-600 hover:bg-slate-100"
+            "h-[34px] rounded-md px-3.5 text-t-small font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus",
+            value === p.days ? "bg-ims-primary text-white" : "text-ims-body hover:bg-ims-subtle"
           )}
         >
           {p.label}

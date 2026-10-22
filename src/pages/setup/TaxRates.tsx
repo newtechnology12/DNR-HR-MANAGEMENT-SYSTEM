@@ -4,38 +4,59 @@
  * the DAF records the source when confirming, and changing a rate clears the confirmation.
  */
 import * as React from "react";
-import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "react-query";
 import { toast } from "sonner";
-import { AlertTriangle, BadgeCheck, CalendarRange, ExternalLink, Percent, Plus, ShieldAlert } from "lucide-react";
+import { AlertTriangle, BadgeCheck, ExternalLink, Pencil, Percent, Plus } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
-import { imsApi, showDay } from "@/lib/ims";
+import { imsApi } from "@/lib/ims";
 import { errorMessage } from "@/lib/procurement";
 import { exportReport } from "@/lib/exporter";
-import { Button } from "@/components/ui/button";
-import { Badge, ListSkeleton, PageHeader, Panel } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
 import { ImportButton } from "@/components/enterprise/ExcelImport";
 import { IMPORTS } from "@/lib/importConfigs";
-import { Field, FormBlock, FormDialog, inputCls, showDate, textareaCls, toInputDate } from "@/components/portal/kit";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { cn } from "@/utils";
+import { toInputDate } from "@/components/portal/kit";
+import {
+  Button,
+  Card,
+  Checkbox,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  DatePicker,
+  EmptyState,
+  Field,
+  Input,
+  Modal,
+  ModalSection,
+  Num,
+  Page,
+  PageHeader,
+  Select,
+  StatusPill,
+  Tabs,
+  Textarea,
+  fmtDate,
+  sentence,
+} from "@/components/ims";
 
 type Table = "tax_rates" | "paye_bands" | "statutory_contributions";
 const TABS: { key: Table; label: string }[] = [
-  { key: "tax_rates", label: "VAT & withholding" },
+  { key: "tax_rates", label: "VAT and withholding" },
   { key: "paye_bands", label: "PAYE bands" },
-  { key: "statutory_contributions", label: "RSSB & statutory contributions" },
+  { key: "statutory_contributions", label: "RSSB and statutory contributions" },
 ];
 
-function Confirmed({ ok }: { ok: boolean }) {
-  return ok ? (
-    <Badge tone="success"><BadgeCheck size={12} className="mr-1" /> Confirmed by Finance</Badge>
+/** Finance confirmation in the glossary: confirmed = Approved, not yet = Pending approval. */
+function Confirmed({ row }: { row: any }) {
+  return row.confirmed_by_finance ? (
+    <StatusPill status="Approved" sub={row.expand?.confirmed_by ? `${row.expand.confirmed_by.name} · ${fmtDate(row.confirmed_at)}` : "Confirmed by Finance"} />
   ) : (
-    <Badge tone="warning"><ShieldAlert size={12} className="mr-1" /> To be confirmed</Badge>
+    <StatusPill status="Pending approval" sub="To be confirmed by Finance" />
   );
 }
+const pct = (v: any) => (v === null || v === undefined || v === "" ? "—" : `${Number(v).toLocaleString("en-US", { maximumFractionDigits: 3 })}%`);
+const inForce = (from?: string, to?: string) => `${from ? fmtDate(from) : "—"} – ${to ? fmtDate(to) : "open"}`;
 
 export default function TaxRates() {
   const { can } = usePermissions();
@@ -45,9 +66,9 @@ export default function TaxRates() {
   const queryClient = useQueryClient();
   const [tab, setTab] = React.useState<Table>("tax_rates");
   const [confirming, setConfirming] = React.useState<{ table: Table; row: any } | null>(null);
-  const [source, setSource] = React.useState("");
   const [editing, setEditing] = React.useState<any>(null);
   const [busy, setBusy] = React.useState(false);
+  const [tried, setTried] = React.useState(false);
 
   const q = useQuery(["tax-tables"], async () => {
     const [tax, paye, contributions] = await Promise.all([
@@ -61,25 +82,26 @@ export default function TaxRates() {
 
   const unconfirmed = q.data ? Object.values(q.data).flat().filter((r: any) => !r.confirmed_by_finance && r.active !== false).length : 0;
 
-  async function confirm() {
+  async function confirm(source: string) {
     if (!confirming) return;
-    if (source.trim().length < 5) return toast.error("Say where you checked the rate (law, article, RRA / RSSB notice).");
-    setBusy(true);
+    if (source.trim().length < 5) {
+      toast.error("Say where you checked the rate (law, article, RRA / RSSB notice).");
+      throw new Error("source");
+    }
     try {
       await imsApi.confirmRate(confirming.table, confirming.row.id, source.trim());
       toast.success("Rate confirmed — recorded in the audit log");
       setConfirming(null);
-      setSource("");
       queryClient.invalidateQueries(["tax-tables"]);
     } catch (e) {
       toast.error(errorMessage(e));
-    } finally {
-      setBusy(false);
+      throw e;
     }
   }
 
   async function saveRate() {
     if (!editing) return;
+    setTried(true);
     if (!editing.code || !editing.name || editing.rate === "" || !editing.effective_from) return toast.error("Code, name, rate and start date are required.");
     setBusy(true);
     const data = {
@@ -112,183 +134,178 @@ export default function TaxRates() {
     return exportReport({ title: `Tax rates — ${TABS.find((t) => t.key === tab)?.label}`, rows, columns, format, what: tab });
   };
 
+  const openNew = () => { setTried(false); setEditing({ category: "withholding", active: true, rate: "", effective_from: new Date().toISOString().slice(0, 10) }); };
+  const openEdit = (r: any) => { setTried(false); setEditing({ ...r, effective_from: toInputDate(r.effective_from), effective_to: toInputDate(r.effective_to) }); };
+
+  const confirmColumn: Column<any> = { key: "confirmed", header: "Finance confirmation", cell: (r) => <Confirmed row={r} /> };
+  const columns: Column<any>[] =
+    tab === "tax_rates"
+      ? [
+          { key: "rate_name", header: "Rate", clamp: true, cell: (r) => <span className="font-semibold">{r.name}</span>, sub: (r) => [r.code, r.legal_reference].filter(Boolean).join(" · ") },
+          { key: "rate", header: "Rate (%)", numeric: true, cell: (r) => <span className="font-semibold">{pct(r.rate)}</span> },
+          { key: "in_force", header: "In force", nowrap: true, cell: (r) => inForce(r.effective_from, r.effective_to) },
+          { key: "gl", header: "GL account", clamp: true, cell: (r) => (r.expand?.gl_account ? `${r.expand.gl_account.code} ${r.expand.gl_account.name}` : <span className="text-ims-faint">—</span>) },
+          confirmColumn,
+        ]
+      : tab === "paye_bands"
+        ? [
+            { key: "type", header: "Employee type", cell: (r) => sentence(r.employment_type) },
+            { key: "from", header: "From (RWF)", numeric: true, cell: (r) => <Num value={r.min_amount} /> },
+            { key: "to", header: "To (RWF)", numeric: true, cell: (r) => (r.max_amount ? <Num value={r.max_amount} /> : <span className="text-ims-muted">and above</span>) },
+            { key: "rate", header: "Rate (%)", numeric: true, cell: (r) => <span className="font-semibold">{pct(r.rate)}</span> },
+            { key: "in_force", header: "In force", nowrap: true, cell: (r) => inForce(r.effective_from, r.effective_to) },
+            confirmColumn,
+          ]
+        : [
+            { key: "name", header: "Contribution", clamp: true, cell: (r) => <span className="font-semibold">{r.name}</span>, sub: (r) => r.code },
+            { key: "employee", header: "Employee (%)", numeric: true, cell: (r) => pct(r.employee_rate) },
+            { key: "employer", header: "Employer (%)", numeric: true, cell: (r) => pct(r.employer_rate) },
+            { key: "base", header: "Base", cell: (r) => sentence(String(r.base || "")) || <span className="text-ims-faint">—</span> },
+            { key: "remit", header: "Remit to", cell: (r) => r.remit_to || <span className="text-ims-faint">—</span> },
+            confirmColumn,
+          ];
+
+  const editable = canManage && tab === "tax_rates";
+
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
-        title="Tax & statutory rates"
-        description="Dated rate tables used by invoices, payment vouchers and payroll. Nothing is hard-coded."
-        breadcrumbs={[{ title: "Setup", link: "#" }, { title: "Tax rates", link: "/dashboard/setup/tax-rates" }]}
+        breadcrumbs={[{ label: "Setup" }, { label: "Tax rates" }]}
+        title="Tax and statutory rates"
+        subtitle="Dated rate tables used by invoices, payment vouchers and payroll. Nothing is hard-coded."
         actions={
           <>
             <ExportMenu onExport={doExport} permission={["view_master_data", "export_reports"]} disabled={!rows.length} />
             {tab === "tax_rates" && <ImportButton config={IMPORTS.taxRates} size="default" />}
-            {canManage && tab === "tax_rates" && (
-              <Button onClick={() => setEditing({ category: "withholding", active: true, rate: "", effective_from: new Date().toISOString().slice(0, 10) })}>
-                <Plus size={15} /> New rate
-              </Button>
-            )}
-            {canPayroll && tab !== "tax_rates" && (
-              <Button asChild variant="outline">
-                <Link to="/dashboard/settings/general-settings/payroll"><ExternalLink size={14} /> Edit in payroll settings</Link>
-              </Button>
-            )}
           </>
         }
+        primary={editable ? { label: "New rate", icon: Plus, onClick: openNew } : undefined}
+        secondary={canPayroll && tab !== "tax_rates" ? [{ label: "Edit in payroll settings", icon: ExternalLink, to: "/dashboard/settings/general-settings/payroll" }] : []}
       />
 
       {unconfirmed > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
-          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" />
+        <div role="status" className="flex items-start gap-3 rounded-card border border-ims-priority-high/50 bg-ims-warning-bg px-5 py-4 text-ims-warning">
+          <AlertTriangle size={20} className="mt-0.5 shrink-0" aria-hidden />
           <div>
-            <p className="font-semibold">{unconfirmed} rate{unconfirmed > 1 ? "s" : ""} not yet confirmed by Finance</p>
-            <p className="text-amber-800">The seeded rates reflect the vendor's understanding of Rwandan law. Check each one against the current law on rra.gov.rw and rssb.rw, then press “Confirm” and record the source.</p>
+            <p className="text-t-body font-bold">{unconfirmed} rate{unconfirmed > 1 ? "s" : ""} not yet confirmed by Finance</p>
+            <p className="mt-0.5 text-t-small text-ims-body">The seeded rates reflect the vendor's understanding of Rwandan law. Check each one against the current law on rra.gov.rw and rssb.rw, then choose “Confirm rate” in the row menu and record the source.</p>
           </div>
         </div>
       )}
 
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200" role="tablist">
-        {TABS.map((t) => (
-          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)} className={cn("-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-medium", tab === t.key ? "border-primary text-primaryDark" : "border-transparent text-slate-500 hover:text-slate-800")}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Card padded={false} className="overflow-hidden">
+        <Tabs
+          inset
+          label="Rate tables"
+          tabs={TABS.map((t) => ({ key: t.key, label: t.label, count: q.data ? q.data[t.key].length : undefined }))}
+          active={tab}
+          onChange={(k) => setTab(k as Table)}
+        />
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.id}
+          loading={q.isLoading}
+          error={q.isError ? q.error : undefined}
+          onRetry={() => q.refetch()}
+          minWidth={820}
+          caption={TABS.find((t) => t.key === tab)?.label}
+          rowClassName={(r) => r.active === false && "text-ims-muted"}
+          onRowClick={editable ? openEdit : undefined}
+          rowActions={
+            editable || canConfirm
+              ? (r) => [
+                  ...(editable ? [{ label: "Edit", icon: Pencil, onSelect: openEdit }] : []),
+                  ...(canConfirm && !r.confirmed_by_finance ? [{ label: "Confirm rate", icon: BadgeCheck, onSelect: () => setConfirming({ table: tab, row: r }) }] : []),
+                ]
+              : undefined
+          }
+          empty={<EmptyState icon={Percent} text="No rates in this table yet." action={editable ? <Button variant="primary" icon={Plus} onClick={openNew}>New rate</Button> : undefined} />}
+        />
+      </Card>
 
-      <Panel bodyClassName="px-0 pb-0">
-        {q.isLoading ? (
-          <div className="p-4"><ListSkeleton rows={5} /></div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="dnr-grid w-full min-w-[720px]">
-              <thead>
-                {tab === "tax_rates" ? (
-                  <tr><th>Rate</th><th className="text-right">%</th><th>In force</th><th>GL account</th><th>Status</th><th /></tr>
-                ) : tab === "paye_bands" ? (
-                  <tr><th>Employee type</th><th className="text-right">From (RWF)</th><th className="text-right">To (RWF)</th><th className="text-right">%</th><th>In force</th><th>Status</th><th /></tr>
-                ) : (
-                  <tr><th>Contribution</th><th className="text-right">Employee %</th><th className="text-right">Employer %</th><th>Base</th><th>Remit to</th><th>Status</th><th /></tr>
-                )}
-              </thead>
-              <tbody>
-                {rows.map((r: any) => (
-                  <tr key={r.id} className={cn(r.active === false && "opacity-60")}>
-                    {tab === "tax_rates" ? (
-                      <>
-                        <td>
-                          <span className="block font-medium text-slate-900">{r.name}</span>
-                          <span className="block font-mono text-[11.5px] text-slate-500">{r.code}</span>
-                          {r.legal_reference && <span className="block text-[11.5px] text-slate-500">{r.legal_reference}</span>}
-                        </td>
-                        <td className="text-right text-[15px] font-semibold tabular-nums text-slate-900">{r.rate}%</td>
-                        <td className="text-[12.5px] text-slate-600">{showDay(r.effective_from)} – {r.effective_to ? showDay(r.effective_to) : "open"}</td>
-                        <td className="text-[12.5px] text-slate-600">{r.expand?.gl_account ? `${r.expand.gl_account.code} ${r.expand.gl_account.name}` : "—"}</td>
-                      </>
-                    ) : tab === "paye_bands" ? (
-                      <>
-                        <td className="capitalize">{r.employment_type}</td>
-                        <td className="text-right tabular-nums">{Number(r.min_amount).toLocaleString()}</td>
-                        <td className="text-right tabular-nums">{r.max_amount ? Number(r.max_amount).toLocaleString() : "and above"}</td>
-                        <td className="text-right font-semibold tabular-nums">{r.rate}%</td>
-                        <td className="text-[12.5px] text-slate-600">{r.effective_from ? showDay(r.effective_from) : "—"} – {r.effective_to ? showDay(r.effective_to) : "open"}</td>
-                      </>
-                    ) : (
-                      <>
-                        <td>
-                          <span className="block font-medium text-slate-900">{r.name}</span>
-                          <span className="block font-mono text-[11.5px] text-slate-500">{r.code}</span>
-                        </td>
-                        <td className="text-right tabular-nums">{r.employee_rate}%</td>
-                        <td className="text-right tabular-nums">{r.employer_rate}%</td>
-                        <td className="text-[12.5px] text-slate-600">{String(r.base || "").replace(/_/g, " ")}</td>
-                        <td className="text-[12.5px] text-slate-600">{r.remit_to || "—"}</td>
-                      </>
-                    )}
-                    <td>
-                      <span className="flex flex-col items-start gap-1">
-                        <Confirmed ok={r.confirmed_by_finance} />
-                        {r.expand?.confirmed_by && <span className="text-[11px] text-slate-500">{r.expand.confirmed_by.name} · {showDate(r.confirmed_at)}</span>}
-                      </span>
-                    </td>
-                    <td className="text-right">
-                      <span className="inline-flex gap-1">
-                        {canManage && tab === "tax_rates" && (
-                          <Button size="sm" variant="ghost" onClick={() => setEditing({ ...r, effective_from: toInputDate(r.effective_from), effective_to: toInputDate(r.effective_to) })}>Edit</Button>
-                        )}
-                        {canConfirm && !r.confirmed_by_finance && (
-                          <Button size="sm" variant="outline" onClick={() => setConfirming({ table: tab, row: r })}>
-                            <BadgeCheck size={13} /> Confirm
-                          </Button>
-                        )}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
+      <ConfirmDialog
+        open={Boolean(confirming)}
+        onClose={() => setConfirming(null)}
+        title={`Confirm ${confirming?.row?.name || confirming?.row?.code || "this rate"} against the official source?`}
+        description="You confirm that this rate matches the law in force. Your name, the time and the source are kept in the audit log."
+        confirmLabel="Confirm rate"
+        reason={{ label: "Source checked", placeholder: "For example: Law on income tax, article …; RRA public notice of …", min: 5, required: true }}
+        onConfirm={confirm}
+      />
 
-      <Dialog open={Boolean(confirming)} onOpenChange={(o) => !o && setConfirming(null)}>
-        <DialogContent className="max-w-md bg-white">
-          <DialogHeader>
-            <DialogTitle>Confirm rate against the official source</DialogTitle>
-            <DialogDescription>You confirm that this rate matches the law in force. Your name, the time and the source are kept in the audit log.</DialogDescription>
-          </DialogHeader>
-          <label className="block">
-            <span className="mb-1 block text-[12.5px] font-medium text-slate-700">Source checked <span className="text-red-600">*</span></span>
-            <textarea value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. Law on income tax, article …; RRA public notice of …" className="h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </label>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirming(null)}>Cancel</Button>
-            <Button onClick={confirm} disabled={busy}><BadgeCheck size={14} /> Confirm rate</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <FormDialog
+      <Modal
         open={Boolean(editing)}
         onClose={() => setEditing(null)}
-        icon={Percent}
+        size="lg"
         title={editing?.id ? `Edit ${editing.code}` : "New tax rate"}
         description="To change a rate from a date, end the current one and add a new one — history is kept. Saving clears the Finance confirmation."
-        submitLabel="Save rate"
-        busy={busy}
-        onSubmit={saveRate}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+            <Button variant="primary" onClick={saveRate} loading={busy}>Save rate</Button>
+          </>
+        }
       >
         {editing && (
           <>
-            <FormBlock icon={Percent} title="Rate">
+            <ModalSection title="Rate">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Code" required><input value={editing.code || ""} onChange={(e) => setEditing({ ...editing, code: e.target.value.toUpperCase() })} className={cn(inputCls, "font-mono")} placeholder="WHT_SERVICES" /></Field>
-                <Field label="Category" required>
-                  <select value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} className={inputCls}>
-                    <option value="vat">VAT</option><option value="withholding">Withholding</option><option value="excise">Excise</option><option value="other">Other</option>
-                  </select>
+                <Field label="Code" required htmlFor="tr-code" error={tried && !editing.code ? "Enter a code, such as WHT_SERVICES." : null}>
+                  <Input id="tr-code" value={editing.code || ""} onChange={(e) => setEditing({ ...editing, code: e.target.value.toUpperCase() })} className="font-mono" placeholder="WHT_SERVICES" invalid={tried && !editing.code} />
                 </Field>
-                <Field label="Name" required className="sm:col-span-2"><input value={editing.name || ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className={inputCls} /></Field>
-                <Field label="Rate (%)" required><input type="number" step="0.01" min={0} max={100} value={editing.rate} onChange={(e) => setEditing({ ...editing, rate: e.target.value })} className={cn(inputCls, "text-right")} /></Field>
-                <Field label="Payable / recoverable account">
-                  <select value={editing.gl_account || ""} onChange={(e) => setEditing({ ...editing, gl_account: e.target.value })} className={inputCls}>
+                <Field label="Category" required htmlFor="tr-category">
+                  <Select id="tr-category" value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })}>
+                    <option value="vat">VAT</option><option value="withholding">Withholding</option><option value="excise">Excise</option><option value="other">Other</option>
+                  </Select>
+                </Field>
+                <Field label="Name" required htmlFor="tr-name" className="sm:col-span-2" error={tried && !editing.name ? "Enter the name of the rate." : null}>
+                  <Input id="tr-name" value={editing.name || ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} invalid={tried && !editing.name} />
+                </Field>
+                <Field label="Rate (%)" required htmlFor="tr-rate" error={tried && editing.rate === "" ? "Enter the rate, between 0 and 100." : null}>
+                  <Input id="tr-rate" type="number" step="0.01" min={0} max={100} value={editing.rate} onChange={(e) => setEditing({ ...editing, rate: e.target.value })} className="text-right tabular-nums" invalid={tried && editing.rate === ""} />
+                </Field>
+                <Field label="Payable / recoverable account" htmlFor="tr-gl">
+                  <Select id="tr-gl" value={editing.gl_account || ""} onChange={(e) => setEditing({ ...editing, gl_account: e.target.value })}>
                     <option value="">— None —</option>
                     {(accounts.data || []).map((a: any) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-                  </select>
+                  </Select>
                 </Field>
               </div>
-            </FormBlock>
-            <FormBlock icon={CalendarRange} title="Validity and source">
+            </ModalSection>
+            <ModalSection title="Validity and source">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="In force from" required><input type="date" value={editing.effective_from || ""} onChange={(e) => setEditing({ ...editing, effective_from: e.target.value })} className={inputCls} /></Field>
-                <Field label="Until (optional)"><input type="date" value={editing.effective_to || ""} onChange={(e) => setEditing({ ...editing, effective_to: e.target.value })} className={inputCls} /></Field>
-                <Field label="Applies to" className="sm:col-span-2"><input value={editing.applies_to || ""} onChange={(e) => setEditing({ ...editing, applies_to: e.target.value })} className={inputCls} /></Field>
-                <Field label="Legal reference" className="sm:col-span-2"><input value={editing.legal_reference || ""} onChange={(e) => setEditing({ ...editing, legal_reference: e.target.value })} className={inputCls} /></Field>
-                <label className="flex items-center gap-2.5 text-[13.5px] text-slate-700"><input type="checkbox" checked={Boolean(editing.active)} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-primary" /> Active</label>
-                <Field label="Notes" className="sm:col-span-2"><textarea value={editing.notes || ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} className={textareaCls} /></Field>
+                <Field label="In force from" required htmlFor="tr-from" error={tried && !editing.effective_from ? "Choose the first day the rate applies." : null}>
+                  <DatePicker id="tr-from" value={editing.effective_from || ""} onChange={(v) => setEditing({ ...editing, effective_from: v })} invalid={tried && !editing.effective_from} />
+                </Field>
+                <Field
+                  label="Until"
+                  htmlFor="tr-to"
+                  hint={
+                    editing.effective_to ? (
+                      <button type="button" className="font-bold text-ims-link hover:underline" onClick={() => setEditing({ ...editing, effective_to: "" })}>Clear the end date</button>
+                    ) : (
+                      "Leave empty while the rate is in force."
+                    )
+                  }
+                >
+                  <DatePicker id="tr-to" value={editing.effective_to || ""} min={editing.effective_from || undefined} onChange={(v) => setEditing({ ...editing, effective_to: v })} placeholder="Open" />
+                </Field>
+                <Field label="Applies to" htmlFor="tr-applies" className="sm:col-span-2">
+                  <Input id="tr-applies" value={editing.applies_to || ""} onChange={(e) => setEditing({ ...editing, applies_to: e.target.value })} />
+                </Field>
+                <Field label="Legal reference" htmlFor="tr-legal" className="sm:col-span-2">
+                  <Input id="tr-legal" value={editing.legal_reference || ""} onChange={(e) => setEditing({ ...editing, legal_reference: e.target.value })} />
+                </Field>
+                <Checkbox label="Active" checked={Boolean(editing.active)} onChange={(v) => setEditing({ ...editing, active: v })} className="sm:col-span-2" />
+                <Field label="Notes" htmlFor="tr-notes" className="sm:col-span-2">
+                  <Textarea id="tr-notes" value={editing.notes || ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} />
+                </Field>
               </div>
-            </FormBlock>
+            </ModalSection>
           </>
         )}
-      </FormDialog>
-    </div>
+      </Modal>
+    </Page>
   );
 }

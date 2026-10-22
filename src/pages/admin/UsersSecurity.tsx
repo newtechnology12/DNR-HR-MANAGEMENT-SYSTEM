@@ -5,19 +5,38 @@
  */
 import * as React from "react";
 import { useQuery, useQueryClient } from "react-query";
-import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { AlertTriangle, KeyRound, Lock, Unlock, Search, ShieldCheck, ShieldOff, UserCog, Users } from "lucide-react";
+import { AlertTriangle, ShieldCheck, ShieldOff, Unlock, UserCog } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { AccountSecurity, imsApi } from "@/lib/ims";
 import { errorMessage } from "@/lib/procurement";
 import { exportReport } from "@/lib/exporter";
-import { Button } from "@/components/ui/button";
-import { Badge, EmptyState, Initials, ListSkeleton, MetricGroup, PageHeader, Panel } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
-import { Field, FormBlock, FormDialog, inputCls } from "@/components/portal/kit";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Button,
+  Card,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  Field,
+  FilterBar,
+  KpiBand,
+  Modal,
+  Page,
+  PageHeader,
+  Pager,
+  Person,
+  Pill,
+  Select,
+  StatusPill,
+  Tabs,
+  checkboxClass,
+  fmtDateTime,
+  fmtNumber,
+  fmtWhen,
+} from "@/components/ims";
 import { cn } from "@/utils";
 
 /** Role combinations that break segregation of duties for one person. */
@@ -30,18 +49,19 @@ const CONFLICTS: [string, string, string][] = [
   ["INTERNAL_AUDITOR", "", "The Internal Auditor must be independent: no other role."],
   ["PROCUREMENT_OFFICER", "STORE_ASSET", "Ordering and receiving goods should be separate."],
 ];
-const ago = (v?: string) => (v ? formatDistanceToNow(new Date(v.replace(" ", "T")), { addSuffix: true }) : "never");
+type FilterKey = "all" | "locked" | "no2fa" | "multi";
 
 export default function UsersSecurity() {
   const { can } = usePermissions();
   const canManage = can("access_general_settings");
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState("");
-  const [filter, setFilter] = React.useState<"all" | "locked" | "no2fa" | "multi">("all");
+  const [filter, setFilter] = React.useState<FilterKey>("all");
   const [editing, setEditing] = React.useState<{ user: any; role: string; extra: string[] } | null>(null);
   const [action, setAction] = React.useState<{ user: AccountSecurity; kind: "unlock" | "reset-2fa" } | null>(null);
-  const [reason, setReason] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [page, setPage] = React.useState(1);
+  const [perPage, setPerPage] = React.useState(15);
 
   const q = useQuery(["users-security"], async () => {
     const [sec, users, roles] = await Promise.all([
@@ -62,6 +82,15 @@ export default function UsersSecurity() {
     return true;
   });
   const all = q.data?.sec || [];
+  React.useEffect(() => setPage(1), [search, filter, perPage]);
+  const pageRows = items.slice((page - 1) * perPage, page * perPage);
+  const counts = {
+    active: all.filter((a) => a.status === "Active").length,
+    with2fa: all.filter((a) => a.totp_enabled).length,
+    no2fa: all.filter((a) => !a.totp_enabled && a.status === "Active").length,
+    locked: all.filter((a) => a.locked_until).length,
+    multi: all.filter((a) => a.roles.length > 1).length,
+  };
 
   const conflictsFor = (codes: string[]) =>
     CONFLICTS.filter(([a, b]) => codes.includes(a) && (b ? codes.includes(b) : codes.length > 1)).map((c) => c[2]);
@@ -80,20 +109,20 @@ export default function UsersSecurity() {
       setBusy(false);
     }
   }
-  async function runAction() {
+  async function runAction(reason: string) {
     if (!action) return;
-    if (reason.trim().length < 5) return toast.error("Give the reason (kept in the audit log).");
-    setBusy(true);
+    if (reason.trim().length < 5) {
+      toast.error("Give the reason (kept in the audit log).");
+      throw new Error("reason");
+    }
     try {
       await imsApi.accountAction(action.user.id, action.kind, reason.trim());
       toast.success(action.kind === "unlock" ? `${action.user.name} can sign in again` : `2FA reset for ${action.user.name}`);
       setAction(null);
-      setReason("");
       queryClient.invalidateQueries(["users-security"]);
     } catch (e) {
       toast.error(errorMessage(e));
-    } finally {
-      setBusy(false);
+      throw e;
     }
   }
 
@@ -113,149 +142,192 @@ export default function UsersSecurity() {
     });
 
   const editCodes = editing ? [editing.role, ...editing.extra].map((id) => roles.find((r) => r.id === id)?.code).filter(Boolean) : [];
+  const editConflicts = conflictsFor(editCodes as string[]);
+  const openRoles = (a: AccountSecurity) => {
+    const u = usersById[a.id];
+    if (u) setEditing({ user: { ...u, name: a.name }, role: u.role, extra: u.extra_roles || [] });
+  };
+
+  const columns: Column<AccountSecurity>[] = [
+    {
+      key: "person",
+      header: "Person",
+      className: "max-w-[280px]",
+      cell: (a) => {
+        const u = usersById[a.id];
+        return <Person name={a.name} detail={`${a.email}${u?.expand?.department ? ` · ${u.expand.department.name}` : ""}`} />;
+      },
+    },
+    {
+      key: "roles",
+      header: "Roles",
+      cell: (a) => {
+        const u = usersById[a.id];
+        const codes = u ? [u.role, ...(u.extra_roles || [])].map((id: string) => roles.find((r) => r.id === id)?.code).filter(Boolean) : [];
+        const conflicts = conflictsFor(codes as string[]);
+        return (
+          <span className="flex max-w-[300px] flex-wrap gap-1">
+            {a.roles.map((r, i) => <Pill key={r} tone={i === 0 ? "info" : "neutral"}>{r}</Pill>)}
+            {conflicts.length > 0 && (
+              <Pill tone="danger" title={conflicts.join("\n")}>
+                <AlertTriangle size={12} className="mr-1" aria-hidden /> Duties conflict
+              </Pill>
+            )}
+          </span>
+        );
+      },
+    },
+    {
+      key: "2fa",
+      header: "2FA",
+      nowrap: true,
+      cell: (a) =>
+        a.totp_enabled ? (
+          <span className="inline-flex items-center gap-1.5 font-semibold text-ims-success"><ShieldCheck size={15} aria-hidden /> On</span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-ims-muted"><ShieldOff size={15} aria-hidden /> Off</span>
+        ),
+    },
+    {
+      key: "status",
+      header: "Account",
+      cell: (a) => (
+        <StatusPill
+          status={a.status === "Active" ? "Active" : "Inactive"}
+          sub={
+            a.locked_until ? (
+              <span className="font-semibold text-ims-danger">Locked until {fmtDateTime(a.locked_until)}</span>
+            ) : a.failed_logins > 0 ? (
+              <span className="text-ims-warning">{a.failed_logins} failed sign-in{a.failed_logins === 1 ? "" : "s"}</span>
+            ) : a.status !== "Active" && a.status ? (
+              a.status
+            ) : undefined
+          }
+        />
+      ),
+    },
+    {
+      key: "last",
+      header: "Last sign-in",
+      nowrap: true,
+      cell: (a) => (a.last_login_at ? fmtWhen(a.last_login_at) : <span className="text-ims-muted">Never</span>),
+      sub: (a) => (a.last_login_ip ? <span className="font-mono">{a.last_login_ip}</span> : null),
+    },
+  ];
 
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
-        title="Users & security"
-        description="Accounts, role assignments, two-factor authentication and lockouts. Role changes and unlocks are audited."
-        breadcrumbs={[{ title: "Administration", link: "#" }, { title: "Users & security", link: "/dashboard/admin/users" }]}
+        breadcrumbs={[{ label: "Administration" }, { label: "Users and security" }]}
+        title="Users and security"
+        subtitle="Accounts, role assignments, two-factor authentication and lockouts. Every change is audited."
         actions={<ExportMenu onExport={doExport} permission={["view_security_admin", "export_audit_logs"]} disabled={!items.length} />}
       />
-      <MetricGroup
-        title="Accounts"
-        icon={Users}
+      <KpiBand
         loading={q.isLoading}
-        columns={4}
-        metrics={[
-          { label: "Active accounts", value: all.filter((a) => a.status === "Active").length, onClick: () => setFilter("all") },
-          { label: "With 2FA", value: all.filter((a) => a.totp_enabled).length, tone: "success", onClick: () => setFilter("no2fa"), sub: `${all.filter((a) => !a.totp_enabled && a.status === "Active").length} without` },
-          { label: "Locked now", value: all.filter((a) => a.locked_until).length, tone: all.some((a) => a.locked_until) ? "danger" : "default", onClick: () => setFilter("locked") },
-          { label: "Hold several roles", value: all.filter((a) => a.roles.length > 1).length, onClick: () => setFilter("multi") },
+        items={[
+          { label: "Active accounts", value: fmtNumber(counts.active), onClick: () => setFilter("all") },
+          { label: "With 2FA", value: fmtNumber(counts.with2fa), tone: "success", sub: `${fmtNumber(counts.no2fa)} without`, onClick: () => setFilter("no2fa") },
+          { label: "Locked now", value: fmtNumber(counts.locked), tone: counts.locked ? "danger" : "default", onClick: () => setFilter("locked") },
+          { label: "Hold several roles", value: fmtNumber(counts.multi), onClick: () => setFilter("multi") },
         ]}
       />
-      <Panel bodyClassName="px-0 pb-0">
-        <div className="flex flex-col gap-2 border-b border-slate-100 px-4 pb-3 sm:flex-row sm:items-center">
-          <label className="relative w-full sm:w-72">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, e-mail or role…" aria-label="Search accounts" className="h-9 w-full rounded-md border border-slate-200 pl-9 pr-3 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </label>
-          <div className="flex gap-1 overflow-x-auto">
-            {([["all", "All"], ["locked", "Locked"], ["no2fa", "Without 2FA"], ["multi", "Several roles"]] as const).map(([k, l]) => (
-              <button key={k} type="button" onClick={() => setFilter(k)} aria-pressed={filter === k} className={cn("h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-medium", filter === k ? "border-primary bg-primary text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>{l}</button>
-            ))}
-          </div>
-        </div>
-        {q.isLoading ? (
-          <div className="p-4"><ListSkeleton rows={8} /></div>
-        ) : !items.length ? (
-          <EmptyState icon={UserCog} title="No accounts" text="No account matches these filters." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="dnr-grid w-full min-w-[900px]">
-              <thead><tr><th>Person</th><th>Roles</th><th>2FA</th><th>Sign-in</th><th>Last sign-in</th>{canManage && <th className="text-right">Actions</th>}</tr></thead>
-              <tbody>
-                {items.map((a) => {
-                  const u = usersById[a.id];
-                  const codes = u ? [u.role, ...(u.extra_roles || [])].map((id: string) => roles.find((r) => r.id === id)?.code).filter(Boolean) : [];
-                  const conflicts = conflictsFor(codes as string[]);
+      <Card padded={false} className="overflow-hidden">
+        <Tabs
+          inset
+          label="Accounts"
+          active={filter}
+          onChange={(k) => setFilter(k as FilterKey)}
+          tabs={[
+            { key: "all", label: "All accounts", count: q.data ? all.length : undefined },
+            { key: "locked", label: "Locked", count: q.data ? counts.locked : undefined },
+            { key: "no2fa", label: "Without 2FA", count: q.data ? counts.no2fa : undefined },
+            { key: "multi", label: "Several roles", count: q.data ? counts.multi : undefined },
+          ]}
+        />
+        <FilterBar search={{ value: search, onChange: setSearch, placeholder: "Search name, e-mail or role" }} />
+        <DataTable
+          columns={columns}
+          rows={pageRows}
+          rowKey={(a) => a.id}
+          loading={q.isLoading}
+          error={q.isError ? q.error : undefined}
+          onRetry={() => q.refetch()}
+          minWidth={900}
+          caption="User accounts"
+          rowClassName={(a) => a.status !== "Active" && "text-ims-muted opacity-70"}
+          onRowClick={canManage ? (a) => openRoles(a) : undefined}
+          rowActions={
+            canManage
+              ? (a) => [
+                  ...(usersById[a.id] ? [{ label: "Change roles", icon: UserCog, onSelect: () => openRoles(a) }] : []),
+                  ...(a.locked_until ? [{ label: "Unlock account", icon: Unlock, onSelect: () => setAction({ user: a, kind: "unlock" }) }] : []),
+                  ...(a.totp_enabled ? [{ label: "Reset 2FA", icon: ShieldOff, onSelect: () => setAction({ user: a, kind: "reset-2fa" }) }] : []),
+                ]
+              : undefined
+          }
+          footer={items.length > 0 ? <Pager page={page} perPage={perPage} total={items.length} onPage={setPage} onPerPage={setPerPage} /> : null}
+          empty={<EmptyState icon={UserCog} text={search || filter !== "all" ? "No account matches these filters. Change the search or choose another tab." : "No accounts yet."} />}
+        />
+      </Card>
+
+      <Modal
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title={`Roles of ${editing?.user?.name || ""}`}
+        description="One person may hold several roles; segregation of duties applies to the person. Changes are audited."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+            <Button variant="primary" onClick={saveRoles} loading={busy}>Save roles</Button>
+          </>
+        }
+      >
+        {editing && (
+          <>
+            <Field label="Main role" required htmlFor="us-main-role" hint="Sets the person's default visibility scope.">
+              <Select id="us-main-role" value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value })}>
+                {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </Select>
+            </Field>
+            <fieldset>
+              <legend className="mb-1.5 text-t-label text-ims-text">Additional roles</legend>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {roles.filter((r) => r.id !== editing.role).map((r) => {
+                  const on = editing.extra.includes(r.id);
                   return (
-                    <tr key={a.id} className={cn(a.status !== "Active" && "opacity-60")}>
-                      <td>
-                        <span className="flex items-center gap-2.5">
-                          <Initials name={a.name} />
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium text-slate-900">{a.name}</span>
-                            <span className="block truncate text-[12px] text-slate-500">{a.email}{u?.expand?.department ? ` · ${u.expand.department.name}` : ""}</span>
-                          </span>
-                        </span>
-                      </td>
-                      <td>
-                        <span className="flex max-w-[280px] flex-wrap gap-1">
-                          {a.roles.map((r, i) => <Badge key={r} tone={i === 0 ? "info" : "neutral"}>{r}</Badge>)}
-                          {conflicts.length > 0 && <span title={conflicts.join("\n")}><Badge tone="danger"><AlertTriangle size={11} className="mr-1" /> SoD</Badge></span>}
-                        </span>
-                      </td>
-                      <td>{a.totp_enabled ? <Badge tone="success"><ShieldCheck size={11} className="mr-1" /> On</Badge> : <Badge>Off</Badge>}</td>
-                      <td>
-                        {a.locked_until ? (
-                          <Badge tone="danger"><Lock size={11} className="mr-1" /> Locked</Badge>
-                        ) : a.status !== "Active" ? (
-                          <Badge>{a.status || "Inactive"}</Badge>
-                        ) : a.failed_logins > 0 ? (
-                          <Badge tone="warning">{a.failed_logins} failed</Badge>
-                        ) : (
-                          <Badge tone="success">OK</Badge>
-                        )}
-                      </td>
-                      <td className="text-[12.5px] text-slate-600">
-                        {ago(a.last_login_at)}
-                        {a.last_login_ip && <span className="block font-mono text-[11px] text-slate-400">{a.last_login_ip}</span>}
-                      </td>
-                      {canManage && (
-                        <td className="text-right">
-                          <span className="inline-flex gap-1">
-                            {u && <Button size="sm" variant="ghost" onClick={() => setEditing({ user: { ...u, name: a.name }, role: u.role, extra: u.extra_roles || [] })}><UserCog size={13} /> Roles</Button>}
-                            {a.locked_until && <Button size="sm" variant="outline" onClick={() => setAction({ user: a, kind: "unlock" })}><Unlock size={13} /> Unlock</Button>}
-                            {a.totp_enabled && <Button size="sm" variant="ghost" onClick={() => setAction({ user: a, kind: "reset-2fa" })}><ShieldOff size={13} /> Reset 2FA</Button>}
-                          </span>
-                        </td>
-                      )}
-                    </tr>
+                    <label key={r.id} className={cn("flex min-h-[40px] cursor-pointer items-center gap-2.5 rounded-control border px-3 py-2 text-t-body", on ? "border-ims-link bg-ims-info-bg text-ims-text" : "border-ims-border text-ims-body hover:bg-ims-hover")}>
+                      <input
+                        type="checkbox"
+                        className={cn(checkboxClass, "mt-0")}
+                        checked={on}
+                        onChange={(e) => setEditing({ ...editing, extra: e.target.checked ? [...editing.extra, r.id] : editing.extra.filter((x) => x !== r.id) })}
+                      />
+                      {r.name}
+                    </label>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-
-      <FormDialog open={Boolean(editing)} onClose={() => setEditing(null)} icon={KeyRound} title={`Roles of ${editing?.user?.name || ""}`} description="One person may hold several roles; segregation of duties always applies to the person. Changes are audited." submitLabel="Save roles" busy={busy} onSubmit={saveRoles}>
-        {editing && (
-          <FormBlock icon={UserCog} title="Role assignment">
-            <Field label="Main role" required hint="Sets the person's default visibility scope.">
-              <select value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value })} className={inputCls}>
-                {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-            </Field>
-            <div>
-              <p className="mb-1.5 text-[13px] font-medium text-slate-700">Additional roles</p>
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                {roles.filter((r) => r.id !== editing.role).map((r) => (
-                  <label key={r.id} className={cn("flex items-center gap-2 rounded-md border px-2.5 py-2 text-[13px]", editing.extra.includes(r.id) ? "border-primary bg-primary/5" : "border-slate-200")}>
-                    <input type="checkbox" checked={editing.extra.includes(r.id)} onChange={(e) => setEditing({ ...editing, extra: e.target.checked ? [...editing.extra, r.id] : editing.extra.filter((x) => x !== r.id) })} className="h-4 w-4 rounded border-slate-300 text-primary" />
-                    {r.name}
-                  </label>
-                ))}
               </div>
-            </div>
-            {conflictsFor(editCodes as string[]).length > 0 && (
-              <div className="space-y-1 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800">
-                {conflictsFor(editCodes as string[]).map((c) => <p key={c} className="flex items-start gap-1.5"><AlertTriangle size={13} className="mt-0.5 shrink-0" /> {c}</p>)}
+            </fieldset>
+            {editConflicts.length > 0 && (
+              <div role="alert" className="space-y-1 rounded-control border border-ims-danger/30 bg-ims-danger-bg px-3.5 py-2.5 text-t-small text-ims-danger">
+                {editConflicts.map((c) => <p key={c} className="flex items-start gap-1.5"><AlertTriangle size={14} className="mt-px shrink-0" aria-hidden /> {c}</p>)}
               </div>
             )}
-          </FormBlock>
+          </>
         )}
-      </FormDialog>
+      </Modal>
 
-      <Dialog open={Boolean(action)} onOpenChange={(o) => !o && setAction(null)}>
-        <DialogContent className="max-w-md bg-white">
-          <DialogHeader>
-            <DialogTitle>{action?.kind === "unlock" ? `Unlock ${action?.user.name}` : `Reset 2FA for ${action?.user.name}`}</DialogTitle>
-            <DialogDescription>
-              {action?.kind === "unlock" ? "Confirm the person's identity first (call or in person)." : "Use when the person lost their phone. They set up 2FA again at next sign-in."}
-            </DialogDescription>
-          </DialogHeader>
-          <label className="block">
-            <span className="mb-1 block text-[12.5px] font-medium text-slate-700">Reason <span className="text-red-600">*</span></span>
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} className="h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </label>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setAction(null)}>Cancel</Button>
-            <Button onClick={runAction} disabled={busy}>{action?.kind === "unlock" ? "Unlock account" : "Reset 2FA"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+      <ConfirmDialog
+        open={Boolean(action)}
+        onClose={() => setAction(null)}
+        title={action?.kind === "unlock" ? `Unlock ${action?.user.name}?` : `Reset 2FA for ${action?.user.name}?`}
+        description={action?.kind === "unlock" ? "Confirm the person's identity first (call or in person). They can sign in again at once." : "Use when the person lost their phone. They set up 2FA again at their next sign-in."}
+        confirmLabel={action?.kind === "unlock" ? "Unlock account" : "Reset 2FA"}
+        danger={action?.kind === "reset-2fa"}
+        reason={{ label: "Reason", placeholder: "Kept in the audit log", min: 5, required: true }}
+        onConfirm={runAction}
+      />
+    </Page>
   );
 }

@@ -6,25 +6,45 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "react-query";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, FolderTree, ListTree, Pencil, Plus, Search, Settings2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderTree, Pencil, Plus } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { errorMessage } from "@/lib/procurement";
 import { exportReport } from "@/lib/exporter";
-import { Button } from "@/components/ui/button";
-import { Badge, EmptyState, ListSkeleton, MetricGroup, PageHeader } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
 import { ImportButton } from "@/components/enterprise/ExcelImport";
 import { IMPORTS } from "@/lib/importConfigs";
-import { Field, FormBlock, FormDialog, inputCls, textareaCls } from "@/components/portal/kit";
+import {
+  Button,
+  Card,
+  Checkbox,
+  Column,
+  DataTable,
+  EmptyState,
+  Field,
+  FilterBar,
+  FilterSelect,
+  Input,
+  KpiBand,
+  Modal,
+  ModalSection,
+  Page,
+  PageHeader,
+  Pill,
+  Select,
+  StatusPill,
+  Textarea,
+  fmtNumber,
+  sentence,
+} from "@/components/ims";
 import { cn } from "@/utils";
 
 const TYPES = [
-  { value: "asset", label: "Assets", tone: "info" as const },
-  { value: "liability", label: "Liabilities", tone: "warning" as const },
-  { value: "net_assets", label: "Net assets", tone: "violet" as const },
-  { value: "revenue", label: "Revenue", tone: "success" as const },
-  { value: "expense", label: "Expenses", tone: "danger" as const },
+  { value: "asset", label: "Assets" },
+  { value: "liability", label: "Liabilities" },
+  { value: "net_assets", label: "Net assets" },
+  { value: "revenue", label: "Revenue" },
+  { value: "expense", label: "Expenses" },
 ];
 const SECTIONS: Record<string, string> = {
   current_assets: "Current assets", non_current_assets: "Non-current assets", current_liabilities: "Current liabilities",
@@ -152,192 +172,178 @@ export default function ChartOfAccounts() {
     });
 
   const headers = accounts.filter((a) => !a.is_posting && a.id !== editing?.id);
+  const set = (patch: Partial<Account>) => setEditing((e) => ({ ...(e || {}), ...patch }));
+
+  const columns: Column<{ a: Account; depth: number }>[] = [
+    {
+      key: "account",
+      header: "Account",
+      width: "46%",
+      cell: ({ a, depth }) => {
+        const hasKids = (children[a.id] || []).length > 0;
+        return (
+          <span className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: depth * 18 }}>
+            {hasKids ? (
+              <button
+                type="button"
+                onClick={() => setCollapsed((c) => ({ ...c, [a.id]: !c[a.id] }))}
+                aria-label={collapsed[a.id] && !term ? `Expand ${a.code}` : `Collapse ${a.code}`}
+                aria-expanded={!(collapsed[a.id] && !term)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ims-muted hover:bg-ims-subtle hover:text-ims-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus"
+              >
+                {collapsed[a.id] && !term ? <ChevronRight size={16} aria-hidden /> : <ChevronDown size={16} aria-hidden />}
+              </button>
+            ) : (
+              <span className="w-7 shrink-0" aria-hidden />
+            )}
+            <span className={cn("shrink-0 whitespace-nowrap font-mono text-t-small", a.is_posting ? "text-ims-body" : "font-semibold text-ims-text")}>{a.code}</span>
+            <span className={cn("min-w-0 truncate", a.is_posting ? "text-ims-text" : "font-bold text-ims-text")}>{a.name}</span>
+            {a.is_control && <Pill tone="info" className="ml-1">Control</Pill>}
+            {!a.is_posting && <Pill className="ml-1">Header</Pill>}
+            {!a.active && <StatusPill status="Inactive" className="ml-1" />}
+          </span>
+        );
+      },
+    },
+    { key: "type", header: "Type", nowrap: true, cell: ({ a }) => TYPES.find((x) => x.value === a.type)?.label || a.type },
+    { key: "statement", header: "Statement", cell: ({ a }) => SECTIONS[a.statement_section] || <span className="text-ims-faint">—</span> },
+    { key: "cashflow", header: "Cash flow", cell: ({ a }) => CASH_FLOW[a.cash_flow_class] || <span className="text-ims-faint">—</span> },
+    { key: "balance", header: "Balance", nowrap: true, cell: ({ a }) => (a.normal_balance ? sentence(a.normal_balance) : <span className="text-ims-faint">—</span>) },
+  ];
+
+  const filtered = Boolean(term || type !== "all");
 
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Setup" }, { label: "Chart of accounts" }]}
         title="Chart of accounts"
-        description="Accrual chart of accounts (IPSAS-style). Header accounts group posting accounts; only posting accounts receive transactions."
-        breadcrumbs={[{ title: "Setup", link: "#" }, { title: "Chart of accounts", link: "/dashboard/setup/accounts" }]}
-        actions={
-          <>
-            <ExportMenu onExport={doExport} permission={["view_master_data", "export_reports"]} disabled={!rows.length} />
-            <ImportButton config={IMPORTS.glAccounts} size="default" />
-            {canManage && <Button onClick={() => open()}><Plus size={15} /> New account</Button>}
-          </>
-        }
+        subtitle="Accrual chart (IPSAS-style): header accounts group the posting accounts that receive transactions."
+        primary={canManage ? { label: "New account", icon: Plus, onClick: () => open() } : undefined}
       />
-      <MetricGroup
-        title="Accounts"
-        icon={ListTree}
+      <KpiBand
         loading={q.isLoading}
-        columns={4}
-        metrics={[
-          { label: "Posting accounts", value: posting, sub: `${accounts.length} in total` },
-          { label: "Assets / liabilities", value: `${counts.asset || 0} / ${counts.liability || 0}` },
-          { label: "Revenue", value: counts.revenue || 0 },
-          { label: "Expenses", value: counts.expense || 0 },
+        items={[
+          { label: "Posting accounts", value: fmtNumber(posting), sub: `${fmtNumber(accounts.length)} in total` },
+          { label: "Assets / liabilities", value: `${counts.asset || 0} / ${counts.liability || 0}`, onClick: () => setType("asset") },
+          { label: "Revenue", value: fmtNumber(counts.revenue || 0), onClick: () => setType("revenue") },
+          { label: "Expenses", value: fmtNumber(counts.expense || 0), onClick: () => setType("expense") },
         ]}
       />
-      <section className="rounded-lg border border-slate-200 bg-white shadow-card">
-        <div className="flex flex-col gap-2 border-b border-slate-100 p-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
-            {[{ value: "all", label: "All" }, ...TYPES].map((t) => (
-              <button key={t.value} type="button" onClick={() => setType(t.value)} aria-pressed={type === t.value} className={cn("h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-medium", type === t.value ? "border-primary bg-primary text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-[12.5px] text-slate-600">
-              <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-primary" /> Inactive
-            </label>
-            <label className="relative w-full lg:w-64">
-              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code or name…" aria-label="Search accounts" className="h-9 w-full rounded-md border border-slate-200 pl-9 pr-3 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-            </label>
-          </div>
-        </div>
-        {q.isLoading ? (
-          <div className="p-4"><ListSkeleton rows={8} /></div>
-        ) : !rows.length ? (
-          <EmptyState icon={FolderTree} title="No accounts" text={term ? "No account matches your search." : "The chart of accounts is empty."} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="dnr-grid w-full min-w-[760px]">
-              <thead>
-                <tr>
-                  <th className="w-[46%]">Account</th>
-                  <th>Type</th>
-                  <th>Statement</th>
-                  <th>Cash flow</th>
-                  <th>Balance</th>
-                  {canManage && <th className="w-24" />}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(({ a, depth }) => {
-                  const hasKids = (children[a.id] || []).length > 0;
-                  const t = TYPES.find((x) => x.value === a.type);
-                  return (
-                    <tr key={a.id} className={cn(!a.is_posting && "bg-slate-50/70", !a.active && "opacity-60")}>
-                      <td>
-                        <span className="flex items-center gap-1.5" style={{ paddingLeft: depth * 18 }}>
-                          {hasKids ? (
-                            <button type="button" onClick={() => setCollapsed((c) => ({ ...c, [a.id]: !c[a.id] }))} aria-label={collapsed[a.id] ? "Expand" : "Collapse"} className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700">
-                              {collapsed[a.id] && !term ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-                            </button>
-                          ) : (
-                            <span className="w-5" />
-                          )}
-                          <span className={cn("font-mono text-[12.5px]", a.is_posting ? "text-slate-600" : "font-semibold text-slate-800")}>{a.code}</span>
-                          <span className={cn("truncate", a.is_posting ? "text-slate-800" : "font-semibold text-slate-900")}>{a.name}</span>
-                          {a.is_control && <Badge tone="violet" className="ml-1">Control</Badge>}
-                          {!a.is_posting && <Badge className="ml-1">Header</Badge>}
-                          {!a.active && <Badge className="ml-1">Inactive</Badge>}
-                        </span>
-                      </td>
-                      <td>{t && <Badge tone={t.tone}>{t.label}</Badge>}</td>
-                      <td className="text-[12.5px] text-slate-600">{SECTIONS[a.statement_section] || "—"}</td>
-                      <td className="text-[12.5px] text-slate-600">{CASH_FLOW[a.cash_flow_class] || "—"}</td>
-                      <td className="text-[12.5px] capitalize text-slate-600">{a.normal_balance}</td>
-                      {canManage && (
-                        <td className="text-right">
-                          <span className="inline-flex gap-0.5">
-                            {!a.is_posting && (
-                              <button type="button" onClick={() => open(undefined, a)} title="Add sub-account" aria-label={`Add sub-account under ${a.code}`} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-primaryDark">
-                                <Plus size={14} />
-                              </button>
-                            )}
-                            <button type="button" onClick={() => open(a)} title="Edit" aria-label={`Edit ${a.code}`} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-                              <Pencil size={14} />
-                            </button>
-                          </span>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <Card padded={false} className="overflow-hidden">
+        <FilterBar
+          search={{ value: search, onChange: setSearch, placeholder: "Search code or name" }}
+          chips={type !== "all" ? [{ key: "type", label: `Type: ${TYPES.find((t) => t.value === type)?.label}`, onRemove: () => setType("all") }] : []}
+          onClear={() => setType("all")}
+          right={
+            <>
+              <ImportButton config={IMPORTS.glAccounts} size="default" />
+              <ExportMenu onExport={doExport} permission={["view_master_data", "export_reports"]} disabled={!rows.length} />
+            </>
+          }
+        >
+          <FilterSelect label="Type" value={type === "all" ? "" : type} onChange={(v) => setType(v || "all")} options={TYPES} />
+          <Checkbox label="Show inactive" checked={showInactive} onChange={setShowInactive} className="items-center px-1 [&_input]:mt-0" />
+        </FilterBar>
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.a.id}
+          loading={q.isLoading}
+          error={q.isError ? q.error : undefined}
+          onRetry={() => q.refetch()}
+          minWidth={820}
+          caption="Chart of accounts"
+          rowClassName={(r) => cn(!r.a.is_posting && "bg-ims-thead", !r.a.active && "text-ims-muted")}
+          onRowClick={canManage ? (r) => open(r.a) : undefined}
+          rowActions={
+            canManage
+              ? (r) => [
+                  ...(!r.a.is_posting ? [{ label: "Add sub-account", icon: Plus, onSelect: () => open(undefined, r.a) }] : []),
+                  { label: "Edit", icon: Pencil, onSelect: () => open(r.a) },
+                ]
+              : undefined
+          }
+          empty={
+            <EmptyState
+              icon={FolderTree}
+              text={filtered ? "No account matches. Change the search or the type." : "The chart of accounts is empty."}
+              action={!filtered && canManage ? <Button variant="primary" icon={Plus} onClick={() => open()}>New account</Button> : undefined}
+            />
+          }
+        />
+      </Card>
 
-      <FormDialog
+      <Modal
         open={Boolean(editing)}
         onClose={() => setEditing(null)}
-        icon={ListTree}
+        size="lg"
         title={editing?.id ? `Edit ${editing.code}` : "New GL account"}
         description="Code, type and the posting flag are frozen once the account has postings. Accounts are never deleted — deactivate them."
-        submitLabel={editing?.id ? "Save account" : "Create account"}
-        busy={busy}
-        onSubmit={save}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+            <Button variant="primary" onClick={save} loading={busy}>{editing?.id ? "Save account" : "Create account"}</Button>
+          </>
+        }
       >
         {editing && (
           <>
-            <FormBlock icon={ListTree} title="Account">
+            <ModalSection title="Account">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Code" required error={tried && !editing.code?.trim() ? "Required" : null}>
-                  <input value={editing.code || ""} onChange={(e) => setEditing({ ...editing, code: e.target.value })} className={cn(inputCls, "font-mono")} placeholder="5217" />
+                <Field label="Code" required htmlFor="coa-code" error={tried && !editing.code?.trim() ? "Enter the account code, such as 5217." : null}>
+                  <Input id="coa-code" value={editing.code || ""} onChange={(e) => set({ code: e.target.value })} className="font-mono" placeholder="5217" invalid={tried && !editing.code?.trim()} />
                 </Field>
-                <Field label="Type" required>
-                  <select value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value, normal_balance: "" })} className={inputCls}>
+                <Field label="Type" required htmlFor="coa-type">
+                  <Select id="coa-type" value={editing.type} onChange={(e) => set({ type: e.target.value, normal_balance: "" })}>
                     {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label.replace(/s$/, "")}</option>)}
-                  </select>
+                  </Select>
                 </Field>
-                <Field label="Name" required className="sm:col-span-2" error={tried && !editing.name?.trim() ? "Required" : null}>
-                  <input value={editing.name || ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className={inputCls} />
+                <Field label="Name" required htmlFor="coa-name" className="sm:col-span-2" error={tried && !editing.name?.trim() ? "Enter the account name." : null}>
+                  <Input id="coa-name" value={editing.name || ""} onChange={(e) => set({ name: e.target.value })} invalid={tried && !editing.name?.trim()} />
                 </Field>
-                <Field label="Parent (header) account" className="sm:col-span-2" hint="Sub-accounts must have the same type as their parent.">
-                  <select value={editing.parent || ""} onChange={(e) => setEditing({ ...editing, parent: e.target.value })} className={inputCls}>
+                <Field label="Parent (header) account" htmlFor="coa-parent" className="sm:col-span-2" hint="Sub-accounts must have the same type as their parent.">
+                  <Select id="coa-parent" value={editing.parent || ""} onChange={(e) => set({ parent: e.target.value })}>
                     <option value="">— Top level —</option>
                     {headers.filter((h) => h.type === editing.type).map((h) => <option key={h.id} value={h.id}>{h.code} — {h.name}</option>)}
-                  </select>
+                  </Select>
                 </Field>
-                <label className="flex items-center gap-2.5 text-[13.5px] text-slate-700">
-                  <input type="checkbox" checked={Boolean(editing.is_posting)} onChange={(e) => setEditing({ ...editing, is_posting: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-primary" />
-                  Posting account (receives transactions)
-                </label>
-                <label className="flex items-center gap-2.5 text-[13.5px] text-slate-700">
-                  <input type="checkbox" checked={Boolean(editing.active)} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-primary" />
-                  Active
-                </label>
+                <Checkbox label="Posting account" hint="Receives transactions" checked={Boolean(editing.is_posting)} onChange={(v) => set({ is_posting: v })} />
+                <Checkbox label="Active" checked={Boolean(editing.active)} onChange={(v) => set({ active: v })} />
               </div>
-            </FormBlock>
-            <FormBlock icon={Settings2} title="Reporting">
+            </ModalSection>
+            <ModalSection title="Reporting">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Statement section" hint="Where it appears in the financial statements.">
-                  <select value={editing.statement_section || ""} onChange={(e) => setEditing({ ...editing, statement_section: e.target.value })} className={inputCls}>
+                <Field label="Statement section" htmlFor="coa-section" hint="Where it appears in the financial statements.">
+                  <Select id="coa-section" value={editing.statement_section || ""} onChange={(e) => set({ statement_section: e.target.value })}>
                     <option value="">— Inherit from parent —</option>
                     {Object.entries(SECTIONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
+                  </Select>
                 </Field>
-                <Field label="Cash flow class">
-                  <select value={editing.cash_flow_class || ""} onChange={(e) => setEditing({ ...editing, cash_flow_class: e.target.value })} className={inputCls}>
+                <Field label="Cash flow class" htmlFor="coa-cashflow">
+                  <Select id="coa-cashflow" value={editing.cash_flow_class || ""} onChange={(e) => set({ cash_flow_class: e.target.value })}>
                     <option value="">— Inherit from parent —</option>
                     {Object.entries(CASH_FLOW).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
+                  </Select>
                 </Field>
-                <Field label="Normal balance" hint="Defaults from the type (assets / expenses: debit).">
-                  <select value={editing.normal_balance || ""} onChange={(e) => setEditing({ ...editing, normal_balance: e.target.value })} className={inputCls}>
+                <Field label="Normal balance" htmlFor="coa-balance" hint="Defaults from the type (assets and expenses: debit).">
+                  <Select id="coa-balance" value={editing.normal_balance || ""} onChange={(e) => set({ normal_balance: e.target.value })}>
                     <option value="">— By type —</option>
                     <option value="debit">Debit</option>
                     <option value="credit">Credit</option>
-                  </select>
+                  </Select>
                 </Field>
-                <label className="mt-6 flex items-center gap-2.5 text-[13.5px] text-slate-700">
-                  <input type="checkbox" checked={Boolean(editing.is_control)} onChange={(e) => setEditing({ ...editing, is_control: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-primary" />
-                  Control account (sub-ledger only, no manual journals)
-                </label>
-                <Field label="Description" className="sm:col-span-2">
-                  <textarea value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} className={textareaCls} />
+                <div className="sm:pt-7">
+                  <Checkbox label="Control account" hint="Sub-ledger only, no manual journals" checked={Boolean(editing.is_control)} onChange={(v) => set({ is_control: v })} />
+                </div>
+                <Field label="Description" htmlFor="coa-description" className="sm:col-span-2">
+                  <Textarea id="coa-description" value={editing.description || ""} onChange={(e) => set({ description: e.target.value })} />
                 </Field>
               </div>
-            </FormBlock>
+            </ModalSection>
           </>
         )}
-      </FormDialog>
-    </div>
+      </Modal>
+    </Page>
   );
 }

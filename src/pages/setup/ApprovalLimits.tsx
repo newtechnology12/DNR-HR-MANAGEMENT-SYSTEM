@@ -9,23 +9,39 @@ import { toast } from "sonner";
 import { Info, Pencil, Plus, Scale, Trash2 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
-import { DOCUMENT_TYPE_LABELS, rwf } from "@/lib/ims";
+import { DOCUMENT_TYPE_LABELS } from "@/lib/ims";
 import { errorMessage } from "@/lib/procurement";
 import { exportReport } from "@/lib/exporter";
-import { Button } from "@/components/ui/button";
-import { Badge, EmptyState, ListSkeleton, PageHeader, Panel } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
 import { ImportButton } from "@/components/enterprise/ExcelImport";
 import { IMPORTS } from "@/lib/importConfigs";
-import { Field, FormBlock, FormDialog, inputCls, textareaCls } from "@/components/portal/kit";
-import { cn } from "@/utils";
+import {
+  Button,
+  Card,
+  Checkbox,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  Field,
+  Modal,
+  MoneyInput,
+  Num,
+  Page,
+  PageHeader,
+  Select,
+  StatusPill,
+  Textarea,
+} from "@/components/ims";
 
 export default function ApprovalLimits() {
   const { can } = usePermissions();
   const canManage = can("manage_approval_workflows");
   const queryClient = useQueryClient();
   const [editing, setEditing] = React.useState<any>(null);
+  const [removing, setRemoving] = React.useState<any>(null);
   const [busy, setBusy] = React.useState(false);
+  const [tried, setTried] = React.useState(false);
   const q = useQuery(["approval-limits"], async () => {
     const [limits, roles] = await Promise.all([
       pocketbase.collection("approval_limits").getFullList({ sort: "document_type", expand: "role" }),
@@ -35,6 +51,7 @@ export default function ApprovalLimits() {
   });
 
   async function save() {
+    setTried(true);
     if (!editing?.role) return toast.error("Choose a role.");
     setBusy(true);
     const data = { role: editing.role, document_type: editing.document_type || "", min_amount: 0, max_amount: Math.round(Number(editing.max_amount) || 0), active: Boolean(editing.active), notes: editing.notes || "" };
@@ -57,10 +74,12 @@ export default function ApprovalLimits() {
       queryClient.invalidateQueries(["approval-limits"]);
     } catch (e) {
       toast.error(errorMessage(e));
+      throw e;
     }
   }
 
   const limits: any[] = q.data?.limits || [];
+  const typeLabel = (r: any) => (r.document_type ? DOCUMENT_TYPE_LABELS[r.document_type] || r.document_type : "All documents");
   const doExport = (format: "xlsx" | "pdf" | "csv") =>
     exportReport({
       title: "Approval limits", rows: limits, format, what: "approval_limits",
@@ -73,82 +92,113 @@ export default function ApprovalLimits() {
       ],
     });
 
+  const openNew = () => { setTried(false); setEditing({ document_type: "purchase_order", active: true, max_amount: "" }); };
+  const openEdit = (r: any) => { setTried(false); setEditing({ ...r }); };
+
+  const columns: Column<any>[] = [
+    { key: "role", header: "Role", cell: (r) => <span className="font-semibold">{r.expand?.role?.name || "—"}</span> },
+    { key: "type", header: "Document type", cell: (r) => (r.document_type ? typeLabel(r) : <span className="text-ims-muted">All documents</span>) },
+    { key: "max", header: "May approve up to (RWF)", numeric: true, cell: (r) => (r.max_amount ? <Num value={r.max_amount} /> : <span className="text-ims-muted">No limit</span>) },
+    { key: "status", header: "Status", cell: (r) => <StatusPill status={r.active ? "Active" : "Inactive"} /> },
+    { key: "notes", header: "Notes", clamp: true, cell: (r) => r.notes || <span className="text-ims-faint">—</span> },
+  ];
+
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Setup" }, { label: "Approval limits" }]}
         title="Approval limits"
-        description="How much each role may approve on its own. Above the limit, the next level (e.g. the Secretary General) must also approve."
-        breadcrumbs={[{ title: "Setup", link: "#" }, { title: "Approval limits", link: "/dashboard/setup/approval-limits" }]}
+        subtitle="How much each role may approve on its own, per document type."
         actions={
           <>
             <ExportMenu onExport={doExport} permission={["view_master_data", "view_security_admin"]} disabled={!limits.length} />
             <ImportButton config={IMPORTS.approvalLimits} size="default" />
-            {canManage && <Button onClick={() => setEditing({ document_type: "purchase_order", active: true, max_amount: "" })}><Plus size={15} /> New limit</Button>}
           </>
         }
+        primary={canManage ? { label: "New limit", icon: Plus, onClick: openNew } : undefined}
       />
-      <p className="flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2.5 text-[12.5px] leading-relaxed text-blue-900">
-        <Info size={14} className="mt-0.5 shrink-0" />
-        A workflow step such as “Secretary General (above DAF limit)” only applies when the document amount is higher than the DAF limit for that document type. If no limit is set, the step always applies.
+      <p className="flex items-start gap-2 rounded-control bg-ims-info-bg px-3.5 py-2.5 text-t-small text-ims-info">
+        <Info size={15} className="mt-px shrink-0" aria-hidden />
+        <span>A workflow step such as “Secretary General (above DAF limit)” only applies when the document amount is higher than the DAF limit for that document type. If no limit is set, the step always applies.</span>
       </p>
-      <Panel bodyClassName="px-0 pb-0">
-        {q.isLoading ? (
-          <div className="p-4"><ListSkeleton rows={5} /></div>
-        ) : !limits.length ? (
-          <EmptyState icon={Scale} title="No approval limits" text="Every conditional step applies until limits are set." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="dnr-grid w-full min-w-[640px]">
-              <thead><tr><th>Role</th><th>Document type</th><th className="text-right">May approve up to</th><th>Status</th><th>Notes</th>{canManage && <th />}</tr></thead>
-              <tbody>
-                {limits.map((r) => (
-                  <tr key={r.id} className={cn(!r.active && "opacity-60")}>
-                    <td className="font-medium text-slate-900">{r.expand?.role?.name}</td>
-                    <td>{r.document_type ? DOCUMENT_TYPE_LABELS[r.document_type] || r.document_type : <span className="text-slate-500">All documents</span>}</td>
-                    <td className="text-right text-[14px] font-semibold tabular-nums text-slate-900">{r.max_amount ? rwf(r.max_amount) : <Badge tone="info">No limit</Badge>}</td>
-                    <td><Badge tone={r.active ? "success" : "neutral"}>{r.active ? "Active" : "Inactive"}</Badge></td>
-                    <td className="max-w-xs truncate text-[12.5px] text-slate-500" title={r.notes}>{r.notes || "—"}</td>
-                    {canManage && (
-                      <td className="text-right">
-                        <span className="inline-flex gap-0.5">
-                          <button type="button" onClick={() => setEditing({ ...r })} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Edit"><Pencil size={14} /></button>
-                          <button type="button" onClick={() => remove(r.id)} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove"><Trash2 size={14} /></button>
-                        </span>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <Card padded={false} className="overflow-hidden">
+        <DataTable
+          columns={columns}
+          rows={limits}
+          rowKey={(r) => r.id}
+          loading={q.isLoading}
+          error={q.isError ? q.error : undefined}
+          onRetry={() => q.refetch()}
+          minWidth={720}
+          caption="Approval limits"
+          rowClassName={(r) => !r.active && "text-ims-muted"}
+          onRowClick={canManage ? openEdit : undefined}
+          rowActions={
+            canManage
+              ? () => [
+                  { label: "Edit", icon: Pencil, onSelect: openEdit },
+                  { label: "Remove", icon: Trash2, danger: true, onSelect: (r) => setRemoving(r) },
+                ]
+              : undefined
+          }
+          empty={
+            <EmptyState
+              icon={Scale}
+              text="No approval limits yet. Every conditional step applies until limits are set."
+              action={canManage ? <Button variant="primary" icon={Plus} onClick={openNew}>New limit</Button> : undefined}
+            />
+          }
+        />
+      </Card>
+
+      <Modal
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title={editing?.id ? "Edit approval limit" : "New approval limit"}
+        description="Changes are audited and apply to documents submitted from now on."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+            <Button variant="primary" onClick={save} loading={busy}>Save limit</Button>
+          </>
+        }
+      >
+        {editing && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Role" required htmlFor="al-role" error={tried && !editing.role ? "Choose the role this limit applies to." : null}>
+              <Select id="al-role" value={editing.role || ""} onChange={(e) => setEditing({ ...editing, role: e.target.value })} invalid={tried && !editing.role}>
+                <option value="">Choose…</option>
+                {(q.data?.roles || []).filter((r: any) => !["SYS_ADMIN", "INTERNAL_AUDITOR", "MGMT_VIEWER", "STAFF"].includes(r.code)).map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Document type" htmlFor="al-type">
+              <Select id="al-type" value={editing.document_type || ""} onChange={(e) => setEditing({ ...editing, document_type: e.target.value })}>
+                <option value="">All documents</option>
+                {Object.entries(DOCUMENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </Select>
+            </Field>
+            <Field label="Maximum amount" htmlFor="al-max" hint="Leave empty or 0 for no upper limit.">
+              <MoneyInput id="al-max" value={editing.max_amount ?? ""} onChange={(v) => setEditing({ ...editing, max_amount: v })} />
+            </Field>
+            <div className="flex items-end pb-2.5">
+              <Checkbox label="Active" checked={Boolean(editing.active)} onChange={(v) => setEditing({ ...editing, active: v })} />
+            </div>
+            <Field label="Notes" htmlFor="al-notes" className="sm:col-span-2">
+              <Textarea id="al-notes" value={editing.notes || ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} />
+            </Field>
           </div>
         )}
-      </Panel>
+      </Modal>
 
-      <FormDialog open={Boolean(editing)} onClose={() => setEditing(null)} icon={Scale} title={editing?.id ? "Edit approval limit" : "New approval limit"} description="Changes are audited and apply to documents submitted from now on." submitLabel="Save limit" busy={busy} onSubmit={save}>
-        {editing && (
-          <FormBlock icon={Scale} title="Limit">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Role" required>
-                <select value={editing.role || ""} onChange={(e) => setEditing({ ...editing, role: e.target.value })} className={inputCls}>
-                  <option value="">Choose…</option>
-                  {(q.data?.roles || []).filter((r: any) => !["SYS_ADMIN", "INTERNAL_AUDITOR", "MGMT_VIEWER", "STAFF"].includes(r.code)).map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
-              </Field>
-              <Field label="Document type">
-                <select value={editing.document_type || ""} onChange={(e) => setEditing({ ...editing, document_type: e.target.value })} className={inputCls}>
-                  <option value="">All documents</option>
-                  {Object.entries(DOCUMENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-              </Field>
-              <Field label="Maximum amount (RWF)" hint="0 or empty = no upper limit">
-                <input type="number" min={0} step={1} value={editing.max_amount ?? ""} onChange={(e) => setEditing({ ...editing, max_amount: e.target.value })} className={cn(inputCls, "text-right tabular-nums")} />
-              </Field>
-              <label className="mt-7 flex items-center gap-2.5 text-[13.5px] text-slate-700"><input type="checkbox" checked={Boolean(editing.active)} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-primary" /> Active</label>
-              <Field label="Notes" className="sm:col-span-2"><textarea value={editing.notes || ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} className={textareaCls} /></Field>
-            </div>
-          </FormBlock>
-        )}
-      </FormDialog>
-    </div>
+      <ConfirmDialog
+        open={Boolean(removing)}
+        onClose={() => setRemoving(null)}
+        title={`Remove the limit for ${removing?.expand?.role?.name || "this role"}?`}
+        description={`${removing ? typeLabel(removing) : ""}: conditional steps that use this limit will always apply until a new limit is set.`}
+        confirmLabel="Remove"
+        danger
+        onConfirm={() => remove(removing.id)}
+      />
+    </Page>
   );
 }

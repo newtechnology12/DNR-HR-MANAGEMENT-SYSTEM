@@ -5,14 +5,29 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "react-query";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Mail, RefreshCw, Search, Send, Server, XCircle } from "lucide-react";
+import { CheckCircle2, Mail, RefreshCw, Send, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import useSettings from "@/hooks/useSettings";
 import { useAuth } from "@/context/auth.context";
 import { errorMessage } from "@/lib/procurement";
-import { Button } from "@/components/ui/button";
-import { Badge, EmptyState, ListSkeleton, Panel } from "@/components/enterprise/ui";
-import { Field, inputCls } from "@/components/portal/kit";
+import { ListSkeleton } from "@/components/enterprise/ui";
+import {
+  Button,
+  Card,
+  CardHeader,
+  Checkbox,
+  Column,
+  DataTable,
+  EmptyState,
+  Field,
+  FilterBar,
+  Input,
+  Pager,
+  Select,
+  StatusPill,
+  Tabs,
+  fmtDateTime,
+} from "@/components/ims";
 import { cn } from "@/utils";
 
 const PRESETS = [
@@ -21,11 +36,12 @@ const PRESETS = [
   { key: "custom", label: "Other mail server", host: "", port: "587", encryption: "starttls", note: "Ask your ICT team for the SMTP host, port and account." },
 ];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const STATUS: Record<string, { label: string; tone: "success" | "danger" | "warning" | "neutral"; icon: any }> = {
-  sent: { label: "Sent", tone: "success", icon: CheckCircle2 },
-  failed: { label: "Failed", tone: "danger", icon: XCircle },
-  skipped: { label: "Not sent", tone: "warning", icon: AlertTriangle },
-  queued: { label: "Queued", tone: "neutral", icon: Mail },
+/** Delivery states in the glossary words, with the detail as the note. */
+const STATUS: Record<string, { word: string; note: string }> = {
+  sent: { word: "Completed", note: "Sent" },
+  failed: { word: "Rejected", note: "Failed" },
+  skipped: { word: "Cancelled", note: "Not sent" },
+  queued: { word: "In progress", note: "Queued" },
 };
 
 export default function SmtpSettings() {
@@ -59,6 +75,7 @@ export default function SmtpSettings() {
     app_url: Boolean(v.app_url) && !/^https?:\/\/[^\s]+$/.test(String(v.app_url).trim()) && "Start with https:// (e.g. https://ims.ralga.gov.rw).",
   };
   const invalid = Object.values(errors).some(Boolean);
+  const err = (k: string) => (tried && errors[k]) || null;
 
   async function save() {
     setTried(true);
@@ -95,63 +112,87 @@ export default function SmtpSettings() {
     }
   }
 
-  if (!settings) return <div className="p-6"><ListSkeleton rows={6} /></div>;
+  if (!settings) return <Card as="div"><ListSkeleton rows={6} /></Card>;
   return (
-    <div className="max-w-4xl space-y-4 px-4 py-4">
-      <div>
-        <h2 className="text-[17px] font-semibold text-slate-900">E-mail</h2>
-        <p className="text-[13px] text-slate-500">Approvals, reminders, payslips and alerts are e-mailed to staff through this mail server. In-app notifications always work, with or without e-mail.</p>
-      </div>
-
-      <Panel title={<span className="flex items-center gap-2"><Server size={15} className="text-slate-400" /> Mail server</span>} subtitle="Saved settings are applied immediately — no restart needed.">
+    <div className="flex flex-col gap-4">
+      <Card as="div">
+        <CardHeader title="Mail server" subtitle="Approvals, reminders, payslips and alerts are e-mailed through this server. Saved settings apply at once, no restart needed." />
         <div className="space-y-4">
-          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-            <span>
-              <span className="block text-[13.5px] font-medium text-slate-900">Send e-mails</span>
-              <span className="block text-[12px] text-slate-500">When off, notifications stay in the app and the log shows them as not sent.</span>
-            </span>
-            <input type="checkbox" className="h-5 w-5 rounded border-slate-300 text-primary" checked={Boolean(v.smtp_enabled)} onChange={(e) => setV((x) => ({ ...x, smtp_enabled: e.target.checked }))} aria-label="Send e-mails" />
-          </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="rounded-control border border-ims-border bg-ims-thead px-3.5 py-3">
+            <Checkbox
+              id="smtp-enabled"
+              label={<span className="font-semibold">Send e-mails</span>}
+              hint="When off, notifications stay in the app and the log shows them as not sent. In-app notifications always work."
+              checked={Boolean(v.smtp_enabled)}
+              onChange={(c) => setV((x) => ({ ...x, smtp_enabled: c }))}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-t-small font-semibold text-ims-muted">Fill in for:</span>
             {PRESETS.map((p) => (
-              <button key={p.key} type="button" onClick={() => { setV((x) => ({ ...x, smtp_host: p.host || x.smtp_host, smtp_port: p.port, smtp_encryption: p.encryption })); toast.info(p.note); }}
-                className="rounded-full border border-slate-200 px-3 py-1 text-[12.5px] text-slate-700 hover:border-primary/50 hover:bg-primary/[0.04]">{p.label}</button>
+              <Button
+                key={p.key}
+                size="sm"
+                onClick={() => {
+                  setV((x) => ({ ...x, smtp_host: p.host || x.smtp_host, smtp_port: p.port, smtp_encryption: p.encryption }));
+                  toast.info(p.note);
+                }}
+              >
+                {p.label}
+              </Button>
             ))}
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
-            <Field label="SMTP server" required={Boolean(v.smtp_enabled)} error={tried && errors.smtp_host} className="sm:col-span-3"><input className={inputCls} value={v.smtp_host || ""} onChange={set("smtp_host")} placeholder="smtp.office365.com" autoComplete="off" /></Field>
-            <Field label="Port" required={Boolean(v.smtp_enabled)} error={tried && errors.smtp_port} className="sm:col-span-1"><input className={inputCls} inputMode="numeric" value={v.smtp_port || ""} onChange={set("smtp_port")} /></Field>
-            <Field label="Security" className="sm:col-span-2">
-              <select className={inputCls} value={v.smtp_encryption || "starttls"} onChange={set("smtp_encryption")}>
+            <Field label="SMTP server" htmlFor="smtp-host" required={Boolean(v.smtp_enabled)} error={err("smtp_host")} className="sm:col-span-3">
+              <Input id="smtp-host" value={v.smtp_host || ""} onChange={set("smtp_host")} placeholder="smtp.office365.com" autoComplete="off" invalid={Boolean(err("smtp_host"))} />
+            </Field>
+            <Field label="Port" htmlFor="smtp-port" required={Boolean(v.smtp_enabled)} error={err("smtp_port")} className="sm:col-span-1">
+              <Input id="smtp-port" inputMode="numeric" value={v.smtp_port || ""} onChange={set("smtp_port")} invalid={Boolean(err("smtp_port"))} />
+            </Field>
+            <Field label="Security" htmlFor="smtp-security" className="sm:col-span-2">
+              <Select id="smtp-security" value={v.smtp_encryption || "starttls"} onChange={set("smtp_encryption")}>
                 <option value="starttls">STARTTLS (port 587)</option>
                 <option value="ssl">SSL / TLS (port 465)</option>
                 <option value="none">None (internal relay only)</option>
-              </select>
+              </Select>
             </Field>
-            <Field label="Username" className="sm:col-span-3" hint="Usually the full mailbox address; leave empty for an internal relay without login."><input className={inputCls} value={v.smtp_username || ""} onChange={set("smtp_username")} autoComplete="off" /></Field>
-            <Field label="Password" className="sm:col-span-3" hint={settings.smtp_host ? "Leave empty to keep the saved password." : "Stored on the server only — never shown again."}>
-              <input type="password" className={inputCls} value={v.smtp_password || ""} onChange={set("smtp_password")} placeholder={settings.smtp_host ? "••••••••  (unchanged)" : ""} autoComplete="new-password" />
+            <Field label="Username" htmlFor="smtp-user" className="sm:col-span-3" hint="Usually the full mailbox address; leave empty for an internal relay without login.">
+              <Input id="smtp-user" value={v.smtp_username || ""} onChange={set("smtp_username")} autoComplete="off" />
             </Field>
-            <Field label="Sender address" required={Boolean(v.smtp_enabled)} error={tried && errors.smtp_from_email} className="sm:col-span-3"><input className={inputCls} value={v.smtp_from_email || ""} onChange={set("smtp_from_email")} placeholder="noreply@ralga.gov.rw" /></Field>
-            <Field label="Sender name" className="sm:col-span-3"><input className={inputCls} value={v.smtp_from_name || ""} onChange={set("smtp_from_name")} placeholder="RALGA IMS" /></Field>
-            <Field label="Address of the system" error={tried && errors.app_url} hint="Used for the “Open in RALGA IMS” button in e-mails." className="sm:col-span-6"><input className={inputCls} value={v.app_url || ""} onChange={set("app_url")} placeholder="https://ims.ralga.gov.rw" /></Field>
+            <Field label="Password" htmlFor="smtp-password" className="sm:col-span-3" hint={settings.smtp_host ? "Leave empty to keep the saved password." : "Stored on the server only — never shown again."}>
+              <Input id="smtp-password" type="password" value={v.smtp_password || ""} onChange={set("smtp_password")} placeholder={settings.smtp_host ? "••••••••  (unchanged)" : ""} autoComplete="new-password" />
+            </Field>
+            <Field label="Sender address" htmlFor="smtp-from" required={Boolean(v.smtp_enabled)} error={err("smtp_from_email")} className="sm:col-span-3">
+              <Input id="smtp-from" value={v.smtp_from_email || ""} onChange={set("smtp_from_email")} placeholder="noreply@ralga.gov.rw" invalid={Boolean(err("smtp_from_email"))} />
+            </Field>
+            <Field label="Sender name" htmlFor="smtp-from-name" className="sm:col-span-3">
+              <Input id="smtp-from-name" value={v.smtp_from_name || ""} onChange={set("smtp_from_name")} placeholder="RALGA IMS" />
+            </Field>
+            <Field label="Address of the system" htmlFor="smtp-app-url" error={err("app_url")} hint="Used for the “Open in RALGA IMS” button in e-mails." className="sm:col-span-6">
+              <Input id="smtp-app-url" value={v.app_url || ""} onChange={set("app_url")} placeholder="https://ims.ralga.gov.rw" invalid={Boolean(err("app_url"))} />
+            </Field>
           </div>
-          <div className="flex justify-end"><Button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save e-mail settings"}</Button></div>
+          <div className="flex justify-end border-t border-ims-divider pt-4">
+            <Button variant="primary" onClick={save} loading={busy}>Save e-mail settings</Button>
+          </div>
         </div>
-      </Panel>
+      </Card>
 
-      <Panel title={<span className="flex items-center gap-2"><Send size={15} className="text-slate-400" /> Send a test e-mail</span>} subtitle="Uses the saved settings. Save first if you changed anything above.">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input className={cn(inputCls, "sm:max-w-sm")} value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="name@ralga.gov.rw" aria-label="Send the test to" />
-          <Button onClick={test} disabled={testing}><Send size={14} /> {testing ? "Sending…" : "Send test"}</Button>
+      <Card as="div">
+        <CardHeader title="Send a test e-mail" subtitle="Uses the saved settings. Save first if you changed anything above." />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <Field label="Send the test to" htmlFor="smtp-test-to" className="sm:w-[360px]">
+            <Input id="smtp-test-to" type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="name@ralga.gov.rw" />
+          </Field>
+          <Button icon={Send} onClick={test} loading={testing}>{testing ? "Sending…" : "Send test"}</Button>
         </div>
         {lastTest && (
-          <p className={cn("mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-[12.5px]", lastTest.status === "sent" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800")}>
-            {lastTest.status === "sent" ? <CheckCircle2 size={14} className="mt-0.5 shrink-0" /> : <XCircle size={14} className="mt-0.5 shrink-0" />}
+          <p role="status" className={cn("mt-3 flex items-start gap-2 rounded-control px-3.5 py-2.5 text-t-small", lastTest.status === "sent" ? "bg-ims-success-bg text-ims-success" : "bg-ims-danger-bg text-ims-danger")}>
+            {lastTest.status === "sent" ? <CheckCircle2 size={15} className="mt-px shrink-0" aria-hidden /> : <XCircle size={15} className="mt-px shrink-0" aria-hidden />}
             {lastTest.status === "sent" ? "Delivered to the mail server. Check the inbox (and the spam folder the first time)." : `${lastTest.error || "Not sent."}`}
           </p>
         )}
-      </Panel>
+      </Card>
 
       <MailLog />
     </div>
@@ -167,54 +208,62 @@ function MailLog() {
   async function retry(id: string) {
     try {
       const r: any = await pocketbase.send(`/api/ims/mail/${id}/retry`, { method: "POST" });
-      if (r.status === "sent") toast.success("Sent");
-      else toast.error(r.error || "Not sent");
+      if (r.status === "sent") toast.success("E-mail sent");
+      else toast.error(r.error || "The e-mail was not sent. Check the mail server settings and try again.");
       queryClient.invalidateQueries(["mail-log"]);
     } catch (e) {
       toast.error(errorMessage(e));
     }
   }
   const d = log.data;
+  const columns: Column<any>[] = [
+    { key: "when", header: "When", nowrap: true, cell: (m) => fmtDateTime(m.created) },
+    { key: "to", header: "To", clamp: true, cell: (m) => m.to },
+    { key: "subject", header: "Subject", clamp: true, cell: (m) => m.subject, sub: (m) => m.error || null },
+    {
+      key: "status",
+      header: "Status",
+      cell: (m) => {
+        const s = STATUS[m.status] || STATUS.queued;
+        return <StatusPill status={s.word} sub={s.note} />;
+      },
+    },
+  ];
   return (
-    <Panel title={<span className="flex items-center gap-2"><Mail size={15} className="text-slate-400" /> E-mail log</span>} subtitle="Every e-mail the system tried to send." bodyClassName="px-0">
-      <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-        {[["", "All"], ["sent", `Sent ${d ? `(${d.counts.sent})` : ""}`], ["failed", `Failed ${d ? `(${d.counts.failed})` : ""}`], ["skipped", `Not sent ${d ? `(${d.counts.skipped})` : ""}`]].map(([k, l]) => (
-          <button key={k} type="button" onClick={() => { setStatus(k); setPage(1); }} className={cn("rounded-full px-3 py-1 text-[12.5px] font-medium", status === k ? "bg-ralga-navy text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>{l}</button>
-        ))}
-        <label className="relative ml-auto">
-          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input className={cn(inputCls, "h-9 w-56 pl-8")} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Recipient or subject" />
-        </label>
+    <Card padded={false} className="overflow-hidden">
+      <div className="px-5 pt-5">
+        <CardHeader className="mb-2" title="E-mail log" subtitle="Every e-mail the system tried to send." />
       </div>
-      {d && !d.smtp_enabled && <p className="mx-4 mb-3 rounded-md bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">E-mail sending is off or not set up yet, so new messages are logged as “Not sent”.</p>}
-      {log.isLoading ? <div className="px-4"><ListSkeleton rows={4} /></div> : !d?.items.length ? <EmptyState icon={Mail} text="No e-mail yet." /> : (
-        <div className="overflow-x-auto">
-          <table className="dnr-grid w-full min-w-[720px]">
-            <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th><th className="w-20" /></tr></thead>
-            <tbody>
-              {d.items.map((m: any) => {
-                const s = STATUS[m.status] || STATUS.queued;
-                return (
-                  <tr key={m.id}>
-                    <td className="whitespace-nowrap text-[12.5px] text-slate-600">{new Date(String(m.created).replace(" ", "T")).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</td>
-                    <td className="text-[12.5px]">{m.to}</td>
-                    <td className="max-w-[300px]"><span className="block truncate text-[13px]">{m.subject}</span>{m.error && <span className="block truncate text-[11.5px] text-slate-500" title={m.error}>{m.error}</span>}</td>
-                    <td><Badge tone={s.tone}><s.icon size={12} className="mr-1 inline" />{s.label}</Badge></td>
-                    <td className="text-right">{m.status !== "sent" && <button type="button" onClick={() => retry(m.id)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-primaryDark hover:bg-primary/[0.06]"><RefreshCw size={12} /> Retry</button>}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      <Tabs
+        inset
+        label="E-mail status"
+        active={status || "all"}
+        onChange={(k) => { setStatus(k === "all" ? "" : k); setPage(1); }}
+        tabs={[
+          { key: "all", label: "All" },
+          { key: "sent", label: "Sent", count: d?.counts.sent },
+          { key: "failed", label: "Failed", count: d?.counts.failed },
+          { key: "skipped", label: "Not sent", count: d?.counts.skipped },
+        ]}
+      />
+      <FilterBar search={{ value: q, onChange: (val) => { setQ(val); setPage(1); }, placeholder: "Search recipient or subject" }} />
+      {d && !d.smtp_enabled && (
+        <p className="mx-4 mb-3 rounded-control bg-ims-warning-bg px-3.5 py-2.5 text-t-small text-ims-warning sm:mx-5">E-mail sending is off or not set up yet, so new messages are logged as “Not sent”.</p>
       )}
-      {d && d.totalPages > 1 && (
-        <div className="flex items-center justify-end gap-2 px-4 pt-3 text-[12.5px] text-slate-600">
-          <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-          <span>Page {d.page} of {d.totalPages}</span>
-          <Button size="sm" variant="outline" disabled={page >= d.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-        </div>
-      )}
-    </Panel>
+      <DataTable
+        columns={columns}
+        rows={d?.items || []}
+        rowKey={(m) => m.id}
+        loading={log.isLoading}
+        fetching={log.isFetching}
+        error={log.isError ? log.error : undefined}
+        onRetry={() => log.refetch()}
+        minWidth={760}
+        caption="E-mail log"
+        rowActions={(m) => (m.status !== "sent" ? [{ label: "Retry", icon: RefreshCw, onSelect: () => retry(m.id) }] : [])}
+        empty={<EmptyState icon={Mail} text={q || status ? "No e-mail matches. Change the search or choose another tab." : "No e-mail yet."} />}
+        footer={d && d.totalItems > 0 ? <Pager page={d.page} perPage={d.perPage || 25} total={d.totalItems} onPage={setPage} /> : null}
+      />
+    </Card>
   );
 }
