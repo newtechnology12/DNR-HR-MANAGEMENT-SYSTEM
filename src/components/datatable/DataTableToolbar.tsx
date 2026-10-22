@@ -59,7 +59,7 @@ export function DataTableToolbar<TData>({
         })}
 
         {isFiltered && (
-          <button type="button" onClick={() => table.resetColumnFilters()} className="h-9 px-1.5 text-[13.5px] font-bold text-ims-link hover:underline">
+          <button type="button" onClick={() => table.resetColumnFilters()} className="h-9 px-1.5 text-t-body font-bold text-ims-link hover:underline">
             Clear filters
           </button>
         )}

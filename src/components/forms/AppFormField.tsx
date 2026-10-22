@@ -25,17 +25,17 @@ export default function AppFormField({
         <FormItem>
           <FormLabel>
             <Label
-              className="mb-1 text-[12.5px] font-medium text-slate-700"
+              className="mb-1 text-t-small font-medium text-ims-body"
               htmlFor={label}
             >
               {label}
-              {required && <span className="ml-0.5 text-red-600">*</span>}
+              {required && <span className="ml-0.5 text-ims-danger">*</span>}
             </Label>
           </FormLabel>
           <FormControl>
             <Input
               className={cn({
-                "!border-red-500": fieldState.error,
+                "!border-ims-danger": fieldState.error,
               })}
               placeholder={placeholder}
               {...field}

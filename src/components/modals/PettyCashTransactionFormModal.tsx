@@ -19,14 +19,14 @@ import {
   import AppFormAsyncSelect from "@/components/forms/AppFormAsyncSelect";
   
   const formSchema = z.object({
-    date: z.date({ required_error: "Please choose a date" }),
-    amount: z.number().min(1, { message: "Please enter an amount" }),
-    description: z.string().min(1, { message: "Please enter a description" }),
-    type: z.enum(["income", "expense"], { required_error: "Please choose a type" }),
-    account: z.string().min(1, { message: "Please choose an account" }),
-    category: z.string().min(1, { message: "Please choose a category" }),
-    user: z.string().min(1, { message: "Please choose a user" }),
-    location: z.string().min(1, { message: "Please choose a location" }),
+    date: z.date({ required_error: "Choose a date" }),
+    amount: z.number().min(1, { message: "Enter an amount" }),
+    description: z.string().min(1, { message: "Enter a description" }),
+    type: z.enum(["income", "expense"], { required_error: "Choose a type" }),
+    account: z.string().min(1, { message: "Choose an account" }),
+    category: z.string().min(1, { message: "Choose a category" }),
+    user: z.string().min(1, { message: "Choose a user" }),
+    location: z.string().min(1, { message: "Choose a location" }),
     receipt: z.string().optional(),
   });
   

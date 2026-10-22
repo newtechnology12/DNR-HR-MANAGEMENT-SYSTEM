@@ -64,7 +64,7 @@ function AsyncSelectField({
 const DropdownIndicator = (props) => {
   return (
     <div {...props}>
-      <ChevronDown size={15} className="text-slate-500" />
+      <ChevronDown size={15} className="text-ims-muted" />
     </div>
   );
 };
@@ -72,7 +72,7 @@ const DropdownIndicator = (props) => {
 const ClearIndicator = (props) => {
   return (
     <div {...props}>
-      <X size={15} className="text-slate-500" />
+      <X size={15} className="text-ims-muted" />
     </div>
   );
 };
@@ -80,7 +80,7 @@ const ClearIndicator = (props) => {
 const MultiValueRemove = (props) => {
   return (
     <div {...props}>
-      <X size={16} className="text-slate-600" />
+      <X size={16} className="text-ims-body" />
     </div>
   );
 };
@@ -125,41 +125,41 @@ function Option(props) {
 }
 
 const controlStyles = {
-  base: "min-h-[38px] border rounded-md bg-white shadow-sm hover:cursor-pointer px-1 py-[1px] transition-[border-color,box-shadow]",
+  base: "min-h-[38px] border rounded-md bg-ims-card shadow-sm hover:cursor-pointer px-1 py-[1px] transition-[border-color,box-shadow]",
   focus: "border-primary ring-[3px] ring-primary/15",
-  nonFocus: "border-slate-300 hover:border-slate-400",
+  nonFocus: "border-ims-field hover:border-slate-400",
 };
-const placeholderStyles = "text-slate-400 !text-[13.5px] pl-1 py-0.5";
+const placeholderStyles = "text-ims-faint !text-t-body pl-1 py-0.5";
 const selectInputStyles =
-  "pl-1 !text-[12.3px] text-slate-500 font-medium py-0.5";
+  "pl-1 !text-[12.3px] text-ims-muted font-medium py-0.5";
 const valueContainerStyles = "p-1 gap-1";
 const singleValueStyles =
-  "text-[13.5px] text-slate-900 ml-1";
+  "text-t-body text-ims-text ml-1";
 const multiValueStyles =
   "bg-gray-100 rounded-[3px] items-center py-0.5 pl-2 pr-1 gap-1.5";
 const multiValueLabelStyles = "leading-6 py-0.5";
 const multiValueRemoveStyles =
-  "border border-gray-200 bg-white hover:bg-red-50 hover:text-red-800 text-gray-500 hover:border-red-300 rounded-[3px]";
+  "border border-gray-200 bg-ims-card hover:bg-ims-danger-bg hover:text-ims-danger text-gray-500 hover:border-ims-danger/30 rounded-[3px]";
 const indicatorsContainerStyles = "p-1 flex items-center gap-2";
 const clearIndicatorStyles =
-  "text-gray-500 p-1 rounded-[3px] hover:bg-red-50 hover:text-red-800";
+  "text-gray-500 p-1 rounded-[3px] hover:bg-ims-danger-bg hover:text-ims-danger";
 const indicatorSeparatorStyles = "bg-gray-200 mt-[4px] h-[18px]";
 const dropdownIndicatorStyles =
   "p-1 hover:bg-gray-100 text-gray-500 rounded-[3px] hover:text-black";
 const menuStyles =
-  "p-1 mt-1 border shadow-lg border-slate-200 bg-white rounded-md";
+  "p-1 mt-1 border shadow-lg border-ims-border bg-ims-card rounded-md";
 const groupHeadingStyles = "ml-3 mt-2 mb-1 text-gray-500 text-sm";
 const optionStyles = {
-  base: "hover:cursor-pointer my-0.5 truncate flex text-slate-700 capitalize !text-[13px] px-3 py-[7px] rounded",
+  base: "hover:cursor-pointer my-0.5 truncate flex text-ims-body capitalize !text-t-small px-3 py-[7px] rounded",
   focus: "bg-gray-100 active:bg-gray-200",
   selected:
-    "after:content-['✔'] !flex items-center bg-slate-100 after:ml-2 after:text-green-500 text-gray-500",
+    "after:content-['✔'] !flex items-center bg-ims-subtle after:ml-2 after:text-ims-success text-gray-500",
 };
 const noOptionsMessageStyles =
-  "text-gray-500 p-2 text-[13px] font-medium py-3  py-4 rounded-sm";
+  "text-gray-500 p-2 text-t-small font-medium py-3  py-4 rounded-sm";
 
 const loadingMessageStyles =
-  "text-gray-500 p-2 text-[13px] font-medium py-3  py-4 rounded-sm";
+  "text-gray-500 p-2 text-t-small font-medium py-3  py-4 rounded-sm";
 
 const ReactSelect = (props) => (
   <Select
@@ -199,7 +199,7 @@ const ReactSelect = (props) => (
           controlStyles.base,
           props.className,
           {
-            "!border-red-500": props?.error,
+            "!border-ims-danger": props?.error,
           }
         ),
       placeholder: () => placeholderStyles,

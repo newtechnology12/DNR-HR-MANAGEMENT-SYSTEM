@@ -178,10 +178,10 @@ export function AutoValue({ label, value, icon: Icon }: { label: string; value?:
   return (
     <div className="min-w-0">
       <p className="mb-1.5 text-t-label text-ims-text">{label}</p>
-      <div className="flex h-control items-center gap-2 rounded-control border border-dashed border-ims-field bg-ims-subtle px-3 text-[14px] text-ims-text">
+      <div className="flex h-control items-center gap-2 rounded-control border border-dashed border-ims-field bg-ims-subtle px-3 text-t-body text-ims-text">
         {Icon && <Icon size={15} className="shrink-0 text-ims-faint" />}
         <span className="truncate">{value || "—"}</span>
-        <span className="ml-auto shrink-0 rounded bg-ims-card px-1.5 py-0.5 text-[11px] font-semibold text-ims-muted">Filled in for you</span>
+        <span className="ml-auto shrink-0 rounded bg-ims-card px-1.5 py-0.5 text-t-hint font-semibold text-ims-muted">Filled in for you</span>
       </div>
     </div>
   );
@@ -200,7 +200,7 @@ export function Segmented<T extends string>({ value, onChange, options, classNam
           onClick={() => onChange(o.value)}
           title={o.hint}
           className={cn(
-            "min-h-[38px] rounded-md px-2 text-[13.5px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus",
+            "min-h-[38px] rounded-md px-2 text-t-body font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus",
             value === o.value ? "bg-ims-card text-ims-primary ring-1 ring-ims-border" : "text-ims-muted hover:text-ims-text"
           )}
         >
@@ -235,7 +235,7 @@ export function ChoiceCards<T extends string>({ value, onChange, options, column
               {active && <span className="h-2 w-2 rounded-full bg-ims-link" />}
             </span>
             <span className="min-w-0">
-              <span className="flex items-center gap-1.5 text-[14px] font-bold text-ims-text">
+              <span className="flex items-center gap-1.5 text-t-body font-bold text-ims-text">
                 {o.icon && <o.icon size={14} className="text-ims-muted" />}
                 {o.label}
               </span>
@@ -310,7 +310,7 @@ export function FileDrop({ files, onChange, multiple = true, max = 10, accept = 
         )}
       >
         <UploadCloud size={22} className="text-ims-link" aria-hidden />
-        <p className="text-[14px] font-bold text-ims-text">{label}</p>
+        <p className="text-t-body font-bold text-ims-text">{label}</p>
         <p className="text-t-hint text-ims-muted">{hint || `Tap to choose${multiple ? " (several allowed)" : ""} or drag here · PDF, Word, Excel, images · max ${MAX_MB} MB`}</p>
         <input ref={input} type="file" className="hidden" accept={accept} multiple={multiple} onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
       </div>
@@ -448,7 +448,7 @@ export function Chip({ active, onClick, children, count }: { active: boolean; on
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus",
+        "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-3.5 text-t-small font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus",
         active ? "border-ims-primary bg-ims-primary text-white" : "border-ims-field bg-ims-card text-ims-muted hover:text-ims-text"
       )}
     >
@@ -509,7 +509,7 @@ export function FormDialog({
 export function FormBlock({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h3 className="flex items-center gap-2 text-[14px] font-bold text-ims-text"><Icon size={15} className="text-ims-faint" aria-hidden /> {title}</h3>
+      <h3 className="flex items-center gap-2 text-t-body font-bold text-ims-text"><Icon size={15} className="text-ims-faint" aria-hidden /> {title}</h3>
       {children}
     </section>
   );

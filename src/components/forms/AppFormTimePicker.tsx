@@ -27,11 +27,11 @@ export default function AppFormTimePicker({
         <FormItem className="flex flex-col gap-0">
           <FormLabel>
             <Label
-              className="text-[13px] mb-1 block dark:text-slate-300 text-slate-600"
+              className="text-t-small mb-1 block dark:text-ims-faint text-ims-body"
               htmlFor={label}
             >
               {label}
-              {required && <span className="ml-0.5 text-red-600">*</span>}
+              {required && <span className="ml-0.5 text-ims-danger">*</span>}
             </Label>
           </FormLabel>
           <FormControl>

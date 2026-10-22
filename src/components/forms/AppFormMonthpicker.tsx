@@ -20,9 +20,9 @@ export default function AppFormMonthPicker({
       render={({ field, fieldState }) => (
         <FormItem>
           <FormLabel>
-            <Label className="mb-1 text-[12.5px] font-medium text-slate-700" htmlFor={label}>
+            <Label className="mb-1 text-t-small font-medium text-ims-body" htmlFor={label}>
               {label}
-              {required && <span className="ml-0.5 text-red-600">*</span>}
+              {required && <span className="ml-0.5 text-ims-danger">*</span>}
             </Label>
           </FormLabel>
           <FormControl>
@@ -95,14 +95,14 @@ const MonthPicker = ({ error, value, onChange }) => {
       className={cn(
         "flex pr-2 rounded-[4px] overflow-hidden items-center border space-x-4-",
         {
-          "border-red-500": error,
+          "border-ims-danger": error,
         }
       )}
     >
       <div className="pr-2 border-r">
         <select
           // disabled
-          className="px-3 text-slate-500  py-[10px] text-sm select rounded-none"
+          className="px-3 text-ims-muted  py-[10px] text-sm select rounded-none"
           value={selectedYear || ""}
           onChange={handleYearChange}
         >
@@ -111,7 +111,7 @@ const MonthPicker = ({ error, value, onChange }) => {
         </select>
       </div>
       <select
-        className="px-3 py-[10px] text-slate-500 text-sm select flex-1 rounded-none"
+        className="px-3 py-[10px] text-ims-muted text-sm select flex-1 rounded-none"
         value={selectedMonth || ""}
         onChange={handleMonthChange}
       >

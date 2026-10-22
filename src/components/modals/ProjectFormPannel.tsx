@@ -93,7 +93,7 @@ import {
               </span>
             </DialogTitle>
             <DialogDescription>
-              <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+              <span className="px-2 py-0 text-sm text-ims-muted leading-7">
                 Fill in the fields to {project ? "edit" : "create"} a project.
               </span>
             </DialogDescription>
@@ -173,7 +173,7 @@ import {
                 <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                   <Button
                     onClick={() => form.reset()}
-                    className="w-full text-slate-600"
+                    className="w-full text-ims-body"
                     size="sm"
                     type="button"
                     variant="outline"

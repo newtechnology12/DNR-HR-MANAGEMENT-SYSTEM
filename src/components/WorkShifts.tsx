@@ -163,7 +163,7 @@ export default function WorkShifts() {
                   `/dashboard/reports/work-periods/${workPeriodId}/shifts/${row.original.id}`
                 );
               }}
-              className="text-green-500"
+              className="text-ims-success"
               variant="link"
             >
               Update report
@@ -188,8 +188,8 @@ export default function WorkShifts() {
               }}
               className={
                 row.original.original?.ended_at
-                  ? "text-blue-500"
-                  : "text-red-500"
+                  ? "text-ims-link"
+                  : "text-ims-danger"
               }
               variant="link"
             >

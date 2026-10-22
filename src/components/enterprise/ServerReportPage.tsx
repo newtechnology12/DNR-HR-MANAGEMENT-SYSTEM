@@ -163,7 +163,7 @@ export default function ServerReportPage({
             ) : filters.includes("to") ? (
               <span className="inline-flex items-center gap-1.5">
                 <span className="text-t-small font-semibold text-ims-muted">As of</span>
-                <DatePicker value={f.to} onChange={(to) => setF({ ...f, to })} className="h-button w-[150px] text-[13.5px]" />
+                <DatePicker value={f.to} onChange={(to) => setF({ ...f, to })} className="h-button w-[150px] text-t-body" />
               </span>
             ) : null}
             {filters.includes("supplier") && <FilterSelect label="Supplier" value={f.supplier} onChange={(v) => setF({ ...f, supplier: v })} options={(ref.data?.suppliers || []).map((s: any) => ({ value: s.id, label: s.name }))} />}

@@ -49,9 +49,9 @@ function LeavesTakenVsRemaining({ employee }) {
       <div className={cn("flex flex-col items-center h-full justify-evenly")}>
         {status === "loading" && (
           <div className="w-full flex h-full justify-center items-center">
-            <div className="h-[170px] animate-pulse flex items-center relative  justify-center w-[170px] bg-slate-200 rounded-full">
-              <div className="h-[130px] w-[130px] bg-white rounded-full"></div>
-              <div className="w-[100px] right-0 bg-white h-[7px] absolute"></div>
+            <div className="h-[170px] animate-pulse flex items-center relative  justify-center w-[170px] bg-ims-divider rounded-full">
+              <div className="h-[130px] w-[130px] bg-ims-card rounded-full"></div>
+              <div className="w-[100px] right-0 bg-ims-card h-[7px] absolute"></div>
             </div>
           </div>
         )}
@@ -95,7 +95,7 @@ function LeavesTakenVsRemaining({ employee }) {
                         className="h-3 w-6 rounded-md"
                         style={{ backgroundColor: item.color }}
                       ></div>
-                      <span className="text-[13px] text-slate-600 capitalize font-medium">
+                      <span className="text-t-small text-ims-body capitalize font-medium">
                         {item.name}({item.value})
                       </span>
                     </div>
@@ -109,7 +109,7 @@ function LeavesTakenVsRemaining({ employee }) {
 
       {status === "error" && (
         <div className="flex items-center justify-center h-full">
-          <span className="text-[13px] font-medium text-slate-500">
+          <span className="text-t-small font-medium text-ims-muted">
             {error["message"] || "Something went wrong"}
           </span>
         </div>

@@ -32,9 +32,9 @@ export default function AppFormSelect({
       render={({ field, fieldState }) => (
         <FormItem>
           <FormLabel>
-            <Label className="mb-1 text-[12.5px] font-medium text-slate-700" htmlFor={label}>
+            <Label className="mb-1 text-t-small font-medium text-ims-body" htmlFor={label}>
               {label}
-              {required && <span className="ml-0.5 text-red-600">*</span>}
+              {required && <span className="ml-0.5 text-ims-danger">*</span>}
             </Label>
           </FormLabel>
           <FormControl>
@@ -45,12 +45,12 @@ export default function AppFormSelect({
             >
               <SelectTrigger
                 className={cn("w-full", {
-                  "!border-red-500": fieldState.error,
+                  "!border-ims-danger": fieldState.error,
                 })}
               >
                 <SelectValue placeholder={placeholder} />
               </SelectTrigger>
-              <SelectContent className="bg-white">
+              <SelectContent className="bg-ims-card">
                 <SelectGroup>
                   {options.map((e, i) => {
                     return (

@@ -111,7 +111,7 @@ export function ActionPlansModal({ open, setOpen, record, onComplete }: any) {
   const handleAddHours = () => {
     const { date, startTime, endTime } = hoursInput;
     if (!date || !startTime || !endTime) {
-      toast.error("Please fill all fields.");
+      toast.error("Fill all fields.");
       return;
     }
 
@@ -129,8 +129,8 @@ export function ActionPlansModal({ open, setOpen, record, onComplete }: any) {
     console.log("Form values on submit:", values);
 
     if (!values.title || !values.start_date || !values.end_date) {
-      setError("Please fill all required fields.");
-      toast.error("Please fill all required fields.");
+      setError("Fill all required fields.");
+      toast.error("Fill all required fields.");
       return;
     }
 
@@ -179,7 +179,7 @@ export function ActionPlansModal({ open, setOpen, record, onComplete }: any) {
                 <div className="mb-3 px-2">
                   <Alert variant="destructive" className="py-2 mt-3 rounded-[4px] flex items-center">
                     <AlertCircleIcon className="h-4 -mt-[5px] mr-3 w-4" />
-                    <AlertTitle className="text-[13px] font-medium !m-0">{error}</AlertTitle>
+                    <AlertTitle className="text-t-small font-medium !m-0">{error}</AlertTitle>
                   </Alert>
                 </div>
               )}
@@ -333,7 +333,7 @@ export function ActionPlansModal({ open, setOpen, record, onComplete }: any) {
                     form.reset(getDefaultValues({}));
                     setError("");
                   }}
-                  className="w-full text-slate-600"
+                  className="w-full text-ims-body"
                   size="sm"
                   variant="outline"
                 >

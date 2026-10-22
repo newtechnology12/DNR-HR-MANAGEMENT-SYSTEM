@@ -32,7 +32,7 @@ export default function Component() {
       task: "Furniture Delivery",
       time: { Mon: "2:00", Thu: "2:00" },
       status: "+87:00",
-      statusColor: "text-green-500",
+      statusColor: "text-ims-success",
     },
     {
       id: "B",
@@ -40,7 +40,7 @@ export default function Component() {
       task: "S00076 - Customer Care (Prepaid Hours)",
       time: { Mon: "0:30" },
       status: "+01:30",
-      statusColor: "text-green-500",
+      statusColor: "text-ims-success",
     },
     {
       id: "C",
@@ -48,7 +48,7 @@ export default function Component() {
       task: "Product improvements",
       time: { Mon: "2:45" },
       status: "+16:30",
-      statusColor: "text-green-500",
+      statusColor: "text-ims-success",
     },
   ])
 

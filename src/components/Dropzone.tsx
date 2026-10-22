@@ -85,7 +85,7 @@ export default function Dropzone({
       {...getRootProps()}
       className={`w-full border-dashed relative cursor-pointer py-4 ${
         error || fileError
-          ? "hover:bg-red-100 hover:bg-opacity-70 bg-red-50 border-red-200"
+          ? "hover:bg-ims-danger-bg hover:bg-opacity-70 bg-ims-danger-bg border-ims-danger/30"
           : "hover:bg-gray-100 border-gray-200 "
       } border-2 flex-col  min-h-[100px] my-4 rounded-md flex items-center justify-center gap-3`}
     >
@@ -100,7 +100,7 @@ export default function Dropzone({
               setPreviewUrl(null);
             }}
           >
-            <Trash size={20} className="text-red-800" />
+            <Trash size={20} className="text-ims-danger" />
           </a>
         ) : (
           <UploadCloud size={16} className="text-primary" />
@@ -110,15 +110,15 @@ export default function Dropzone({
             <a
               target="_blank"
               href={formatPreviewLink(preview || file)}
-              className="text-[13px] cursor-pointer underline"
+              className="text-t-small cursor-pointer underline"
             >
               {file?.name || file}
             </a>
           ) : (
-            <span className="text-[13px]">{label}</span>
+            <span className="text-t-small">{label}</span>
           )}
           {(error || fileError) && (
-            <span className="text-red-500 capitalize mt-3 text-[13px] font-medium block text-center">
+            <span className="text-ims-danger capitalize mt-3 text-t-small font-medium block text-center">
               {error ? "* " + error : ""}
               {fileError ? "* " + fileError : ""}
             </span>

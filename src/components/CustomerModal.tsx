@@ -63,8 +63,8 @@ function Customers({ onSelect }: any) {
 
   return (
     <div className="px-0">
-      <div className="bg-white px-2 pt-3 sm:pt-0 pb-2 border-b">
-        <div className="flex relative py-[8px] rounded-[4px] border border-slate-200 px-4 text-slate-600 z-40 bg-slate-100 items-center gap-3 justify-between">
+      <div className="bg-ims-card px-2 pt-3 sm:pt-0 pb-2 border-b">
+        <div className="flex relative py-[8px] rounded-[4px] border border-ims-border px-4 text-ims-body z-40 bg-ims-subtle items-center gap-3 justify-between">
           <input
             placeholder="Search customer here.."
             className="w-full text-sm outline-none bg-transparent"
@@ -94,7 +94,7 @@ function Customers({ onSelect }: any) {
                 <h4 className="font-semibold text-[15px] mt-4">
                   No Customer Found
                 </h4>
-                <p className="text-[15px] max-w-sm leading-8 text-slate-500">
+                <p className="text-[15px] max-w-sm leading-8 text-ims-muted">
                   No customers match your search. Try a different name.
                 </p>
               </div>
@@ -107,17 +107,17 @@ function Customers({ onSelect }: any) {
                   <div
                     key={i}
                     onClick={() => onSelect(e)}
-                    className="px-3  border-b hover:bg-slate-50 cursor-pointer py-[10px] sm:py-1"
+                    className="px-3  border-b hover:bg-ims-thead cursor-pointer py-[10px] sm:py-1"
                   >
                     <div className="flex items-center gap-3">
                       <div>
                         <Avatar path="" name={e.names} />
                       </div>
                       <div className="space-y-1">
-                        <h4 className="text-[12.5px] capitalize font-medium">
+                        <h4 className="text-t-small capitalize font-medium">
                           {e.names}
                         </h4>
-                        <p className="text-[12.5px] text-slate-500">
+                        <p className="text-t-small text-ims-muted">
                           {e.phone}
                         </p>
                       </div>

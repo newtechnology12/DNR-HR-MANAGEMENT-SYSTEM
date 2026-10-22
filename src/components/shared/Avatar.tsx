@@ -59,7 +59,7 @@ export default function Avatar({
     <AvatarRoot className={className}>
       <AvatarImage src={path} />
       <AvatarFallback
-        className={cn("bg-blue-200 text-sm text-blue-500", textClass)}
+        className={cn("bg-ims-info-bg text-sm text-ims-link", textClass)}
       >
         {name.split(" ")[0][0].toLocaleUpperCase()}
         {name.split(" ")[name.split(" ").length - 1][0]?.toLocaleUpperCase()}

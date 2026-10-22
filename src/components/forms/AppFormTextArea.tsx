@@ -24,15 +24,15 @@ export default function AppFormTextArea({
       render={({ field, fieldState }) => (
         <FormItem>
           <FormLabel>
-            <Label className="mb-1 text-[12.5px] font-medium text-slate-700" htmlFor={label}>
+            <Label className="mb-1 text-t-small font-medium text-ims-body" htmlFor={label}>
               {label}
-              {required && <span className="ml-0.5 text-red-600">*</span>}
+              {required && <span className="ml-0.5 text-ims-danger">*</span>}
             </Label>
           </FormLabel>
           <FormControl>
             <Textarea
               className={cn("leading-8", {
-                "!border-red-500": fieldState.error,
+                "!border-ims-danger": fieldState.error,
               })}
               placeholder={placeholder}
               {...field}

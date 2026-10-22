@@ -19,7 +19,7 @@ export default function CheckBoxWord({
         defaultChecked={checked}
         checked={check}
       />
-      <span className="m-0 p-0 leading-none mt-0.5 text-sm text-slate-600 capitalize">
+      <span className="m-0 p-0 leading-none mt-0.5 text-sm text-ims-body capitalize">
         {text}
       </span>
     </div>

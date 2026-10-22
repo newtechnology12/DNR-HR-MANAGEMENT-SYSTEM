@@ -26,7 +26,7 @@ function CalendarDateRangePicker({ className, date, setDate }: any) {
             id="date"
             variant={"outline"}
             className={cn(
-              "w-fit justify-start hover:bg-white text-left font-normal",
+              "w-fit justify-start hover:bg-ims-card text-left font-normal",
               !date && "text-muted-foreground"
             )}
           >
@@ -46,7 +46,7 @@ function CalendarDateRangePicker({ className, date, setDate }: any) {
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-auto calender-range-picker bg-white p-0"
+          className="w-auto calender-range-picker bg-ims-card p-0"
           align="end"
         >
           {/* <Calendar

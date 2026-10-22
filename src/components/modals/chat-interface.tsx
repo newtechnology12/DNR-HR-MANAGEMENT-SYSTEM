@@ -102,7 +102,7 @@ export default function Component() {
         <ScrollArea className="flex-1 p-4">
           <div className="space-y-4">
             {/* Financial Stats */}
-            <div className="bg-muted p-4 rounded-lg">
+            <div className="bg-muted p-4 rounded-control">
               <div className="grid grid-cols-4 gap-4 mb-4">
                 <div>
                   <div className="text-sm text-muted-foreground">MRR</div>
@@ -110,11 +110,11 @@ export default function Component() {
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Net New</div>
-                  <div className="text-2xl font-bold text-green-500">$413</div>
+                  <div className="text-2xl font-bold text-ims-success">$413</div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Churn</div>
-                  <div className="text-2xl font-bold text-red-500">-$1,018</div>
+                  <div className="text-2xl font-bold text-ims-danger">-$1,018</div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Growth</div>
@@ -137,7 +137,7 @@ export default function Component() {
                     <span className="font-semibold">Mitchell Admin</span>
                     <span className="text-sm text-muted-foreground">6 minutes ago</span>
                   </div>
-                  <p className="text-sm bg-muted p-2 rounded-lg mt-1">
+                  <p className="text-sm bg-muted p-2 rounded-control mt-1">
                     You&apos;re muted, Laurie 🤐
                   </p>
                 </div>
@@ -185,7 +185,7 @@ export default function Component() {
                 <AvatarFallback>{user[0]}</AvatarFallback>
               </Avatar>
               <span className="text-sm">{user}</span>
-              <div className="ml-auto h-2 w-2 rounded-full bg-green-500" />
+              <div className="ml-auto h-2 w-2 rounded-full bg-ims-success" />
             </div>
           ))}
         </div>

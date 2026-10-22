@@ -17,10 +17,10 @@ import {
   import AppFormAsyncSelect from "@/components/forms/AppFormAsyncSelect";
   
   const formSchema = z.object({
-    name: z.string().min(1, { message: "Please enter a name" }),
-    balance: z.number().min(0, { message: "Please enter a valid balance" }),
-    description: z.string().min(1, { message: "Please enter a description" }),
-    group: z.string().min(1, { message: "Please choose a group" }),
+    name: z.string().min(1, { message: "Enter a name" }),
+    balance: z.number().min(0, { message: "Enter a valid balance" }),
+    description: z.string().min(1, { message: "Enter a description" }),
+    group: z.string().min(1, { message: "Choose a group" }),
   });
   
   const getDefaultValues = (data?: any) => ({

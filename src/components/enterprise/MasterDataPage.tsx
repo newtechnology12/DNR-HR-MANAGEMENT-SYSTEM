@@ -224,7 +224,7 @@ export default function MasterDataPage<T extends { id: string }>({
                   ) : f.type === "relation" ? (
                     <RelationSelect f={f} value={editing?.[f.name] || ""} onChange={(v) => set(f.name, v)} />
                   ) : f.type === "bool" ? (
-                    <label className="flex h-10 items-center gap-2.5 text-[13.5px] text-ims-body">
+                    <label className="flex h-10 items-center gap-2.5 text-t-body text-ims-body">
                       <input type="checkbox" checked={Boolean(editing?.[f.name])} onChange={(e) => set(f.name, e.target.checked)} className="h-4 w-4 rounded border-ims-field text-primary focus:ring-primary" />
                       {f.placeholder || "Yes"}
                     </label>

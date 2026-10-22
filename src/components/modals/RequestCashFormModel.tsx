@@ -137,7 +137,7 @@ export default function CashRequestFormModal({ open, setOpen, record, onComplete
             {record ? "Update Cash Request" : "Create New Cash Request"}
           </DialogTitle>
           <DialogDescription>
-            Please fill in the details for your cash request. All fields are required unless marked as optional.
+            Fill in the details for your cash request. All fields are required unless marked as optional.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

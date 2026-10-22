@@ -45,7 +45,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
         <Alert variant="destructive" className="m-4">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Something went wrong!</AlertTitle>
-          <p className="text-sm">{this.state.error?.message || 'Please try again or contact support.'}</p>
+          <p className="text-sm">{this.state.error?.message || 'Try again or contact support.'}</p>
           <Button
             variant="outline"
             size="sm"
@@ -150,7 +150,7 @@ function ServiceCategoryFormModal({ open, setOpen, record, onComplete }: any) {
               </span>
             </DialogTitle>
             <DialogDescription>
-              <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+              <span className="px-2 py-0 text-sm text-ims-muted leading-7">
                 Fill in the fields or import from Excel to create new service categories.
               </span>
             </DialogDescription>
@@ -158,7 +158,7 @@ function ServiceCategoryFormModal({ open, setOpen, record, onComplete }: any) {
 
           <div className="px-2 mb-4">
             <div className="flex items-center justify-center w-full">
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-control cursor-pointer hover:bg-gray-50">
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   <Upload className="w-8 h-8 mb-2 text-gray-500" />
                   <p className="mb-2 text-sm text-gray-500">
@@ -181,7 +181,7 @@ function ServiceCategoryFormModal({ open, setOpen, record, onComplete }: any) {
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
+            <div className="relative flex justify-center text-xs">
               <span className="bg-background px-2 text-muted-foreground">Or</span>
             </div>
           </div>
@@ -192,7 +192,7 @@ function ServiceCategoryFormModal({ open, setOpen, record, onComplete }: any) {
                 <div className="mb-3 px-2">
                   <Alert variant="destructive" className="py-2 mt-3- rounded-[4px] flex items-center">
                     <AlertCircle className="h-4 -mt-[5px] mr-3 w-4" />
-                    <AlertTitle className="text-[13px] font-medium fon !m-0">
+                    <AlertTitle className="text-t-small font-medium fon !m-0">
                       {error}
                     </AlertTitle>
                   </Alert>
@@ -216,7 +216,7 @@ function ServiceCategoryFormModal({ open, setOpen, record, onComplete }: any) {
                   <Button
                     type="button"
                     onClick={() => form.reset()}
-                    className="w-full text-slate-600"
+                    className="w-full text-ims-body"
                     size="sm"
                     variant="outline"
                   >

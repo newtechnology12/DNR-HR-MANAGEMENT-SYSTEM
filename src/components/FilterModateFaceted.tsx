@@ -102,7 +102,7 @@ export default function FilterModateFaceted({
       <span className="text-xs leading-none">Choose the {type}:</span>
       <div className="relative">
         {count > 0 && (
-          <span className="bg-primary text-white text-[10px] absolute right-0 rounded-full flex items-center justify-center w-4 h-4 -top-2">
+          <span className="bg-primary text-white text-t-hint absolute right-0 rounded-full flex items-center justify-center w-4 h-4 -top-2">
             {count}
           </span>
         )}
@@ -131,7 +131,7 @@ export default function FilterModateFaceted({
                 )}
               </div>
               {isLoading ? (
-                <p className="text-gray-500 p-2 bg-gray-50 text-[13px] font-medium py-3 rounded-sm css-1xwp231-LoadingMessage2 text-center">
+                <p className="text-gray-500 p-2 bg-gray-50 text-t-small font-medium py-3 rounded-sm css-1xwp231-LoadingMessage2 text-center">
                   Loading...
                 </p>
               ) : (
@@ -151,7 +151,7 @@ export default function FilterModateFaceted({
                           >
                             <div
                               className={cn(
-                                "mr-2 flex h-4 w-4 text-slate-500 font-medium items-center justify-center rounded-sm border border-slate-400",
+                                "mr-2 flex h-4 w-4 text-ims-muted font-medium items-center justify-center rounded-sm border border-slate-400",
                                 isSelected
                                   ? "bg-primary border-primary text-white"
                                   : "opacity-50 [&_svg]:invisible"
@@ -159,7 +159,7 @@ export default function FilterModateFaceted({
                             >
                               <CheckIcon className={cn("h-3 w-3")} />
                             </div>
-                            <span className="font-medium capitalize text-[12.5px]">
+                            <span className="font-medium capitalize text-t-small">
                               {option.label}
                             </span>
                           </CommandItem>
@@ -174,7 +174,7 @@ export default function FilterModateFaceted({
                       <CommandGroup>
                         <CommandItem
                           onSelect={() => reset()}
-                          className="justify-center text-slate-600 text-[13px] font-medium text-center"
+                          className="justify-center text-ims-body text-t-small font-medium text-center"
                         >
                           Clear filters
                         </CommandItem>
@@ -192,7 +192,7 @@ export default function FilterModateFaceted({
               return (
                 <button
                   key={i}
-                  className="inline-flex items-center outline-none border py-0.5 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2 dark:border-slate-800 dark:focus:ring-slate-300 border-transparent bg-slate-100 text-slate-900 hover:bg-slate-100/80 dark:bg-slate-800 dark:text-slate-50 dark:hover:bg-slate-800/80 rounded-sm capitalize px-1 font-normal"
+                  className="inline-flex items-center outline-none border py-0.5 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2 dark:border-slate-800 dark:focus:ring-ims-field border-transparent bg-ims-subtle text-ims-text hover:bg-ims-subtle/80 dark:bg-slate-800 dark:text-slate-50 dark:hover:bg-slate-800/80 rounded-sm capitalize px-1 font-normal"
                 >
                   {option}
                   <CgClose className="ml-2" onClick={() => remove(option)} />

@@ -16,7 +16,7 @@ export default function ViewDatails({
         <DialogTrigger>
           <button
             className={cn(
-              "my-2 inline-flex flex-1 items-center justify-center whitespace-nowrap bg-cyan-500 hover:bg-opacity-80 rounded-sm text-[12px] font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 dark:focus-visible:ring-slate-300 text-slate-50 px-4 py-2 w-full"
+              "my-2 inline-flex flex-1 items-center justify-center whitespace-nowrap bg-cyan-500 hover:bg-opacity-80 rounded-sm text-t-hint font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 dark:focus-visible:ring-ims-field text-slate-50 px-4 py-2 w-full"
             )}
           >
             View Datails
@@ -30,7 +30,7 @@ export default function ViewDatails({
       <AlertDialogCancel>
         <button
           className={cn(
-            "my-2 inline-flex flex-1 items-center justify-center whitespace-nowrap bg-cyan-500 hover:bg-opacity-80 rounded-sm text-[12px] font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 dark:focus-visible:ring-slate-300 text-slate-50 px-4 py-2 w-full"
+            "my-2 inline-flex flex-1 items-center justify-center whitespace-nowrap bg-cyan-500 hover:bg-opacity-80 rounded-sm text-t-hint font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 dark:focus-visible:ring-ims-field text-slate-50 px-4 py-2 w-full"
           )}
         >
           View Datails

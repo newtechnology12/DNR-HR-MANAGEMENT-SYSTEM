@@ -59,7 +59,7 @@ const PopoutSelect = ({
       components={{
         DropdownIndicator: () =>
           optionsQuery.status !== "loading" && (
-            <Search className="mr-0 text-slate-600" size={16} />
+            <Search className="mr-0 text-ims-body" size={16} />
           ),
         Option,
         IndicatorSeparator: () => "",
@@ -139,36 +139,36 @@ function Option(props) {
 }
 
 const controlStyles = {
-  base: "border rounded-[3px] bg-white hover:cursor-pointer- px-1 py-[2.5px]",
+  base: "border rounded-[3px] bg-ims-card hover:cursor-pointer- px-1 py-[2.5px]",
   focus: "border-primary ring-1- ring-primary-",
-  nonFocus: "border-gray-200 hover:border-slate-200 hover:bg-slate-100",
+  nonFocus: "border-gray-200 hover:border-ims-border hover:bg-ims-subtle",
 };
-const placeholderStyles = "text-gray-500 !text-[13px] font-medium pl-1 py-0.5";
-const selectInputStyles = "pl-1 !text-[13px] text-slate-500 font-medium py-0.5";
+const placeholderStyles = "text-gray-500 !text-t-small font-medium pl-1 py-0.5";
+const selectInputStyles = "pl-1 !text-t-small text-ims-muted font-medium py-0.5";
 const valueContainerStyles = "p-1 gap-1";
 const singleValueStyles =
-  "leading-7 text-[13px] text-slate-500 font-medium ml-1";
+  "leading-7 text-t-small text-ims-muted font-medium ml-1";
 const multiValueStyles =
   "bg-gray-100 rounded-[3px] items-center py-0.5 pl-2 pr-1 gap-1.5";
 const multiValueLabelStyles = "leading-6 py-0.5";
 const multiValueRemoveStyles =
-  "border border-gray-200 bg-white hover:bg-red-50 hover:text-red-800 text-gray-500 hover:border-red-300 rounded-[3px]";
+  "border border-gray-200 bg-ims-card hover:bg-ims-danger-bg hover:text-ims-danger text-gray-500 hover:border-ims-danger/30 rounded-[3px]";
 const indicatorsContainerStyles = "p-1 flex items-center gap-2";
 const clearIndicatorStyles =
-  "text-gray-500 p-1 rounded-[3px] hover:bg-red-50 hover:text-red-800";
+  "text-gray-500 p-1 rounded-[3px] hover:bg-ims-danger-bg hover:text-ims-danger";
 const indicatorSeparatorStyles = "bg-gray-200 mt-[4px] h-[18px]";
 const dropdownIndicatorStyles =
   "p-1 hover:bg-gray-100 text-gray-500 rounded-[3px] hover:text-black";
-const menuStyles = "py-[6px] rounded-b-[3px] px-2 mt-2 bg-white";
+const menuStyles = "py-[6px] rounded-b-[3px] px-2 mt-2 bg-ims-card";
 const groupHeadingStyles = "ml-3 mt-2 mb-1 text-gray-500 text-sm";
 const optionStyles = {
-  base: "hover:cursor-pointer my-1 truncate flex text-slate-500 capitalize font-medium !text-[13px] px-[10px] py-[9px] rounded-[3px]",
+  base: "hover:cursor-pointer my-1 truncate flex text-ims-muted capitalize font-medium !text-t-small px-[10px] py-[9px] rounded-[3px]",
   focus: "bg-gray-100 active:bg-gray-200",
   selected:
-    "!flex items-center bg-slate-100 after:ml-2 after:text-green-500 text-gray-500",
+    "!flex items-center bg-ims-subtle after:ml-2 after:text-ims-success text-gray-500",
 };
 const noOptionsMessageStyles =
-  "text-gray-500 p-2 bg-gray-50- text-[13px] font-medium py-6 rounded-sm";
+  "text-gray-500 p-2 bg-gray-50- text-t-small font-medium py-6 rounded-sm";
 
 const loadingMessageStyles =
-  "text-gray-500 p-2 bg-gray-50 text-[13px] font-medium py-3 rounded-sm";
+  "text-gray-500 p-2 bg-gray-50 text-t-small font-medium py-3 rounded-sm";

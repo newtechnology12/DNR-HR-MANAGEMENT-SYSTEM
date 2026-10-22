@@ -194,14 +194,14 @@ export default function DropdownMenu({
       <DropdownMenuTrigger className="outline-none">
         {triggerComponet}
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="ml-auto -right-5 absolute min-w-[250px] px-2 pb-2 z-50 bg-white">
+      <DropdownMenuContent className="ml-auto -right-5 absolute min-w-[250px] px-2 pb-2 z-50 bg-ims-card">
         <DropdownMenuLabel className="text-base">{labelName}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {menuItem.map((val, indx) => {
           return (
             <DropdownMenuItem
               key={indx}
-              className="cursor-pointer text-slate-800 hover:text-white hover:bg-primary "
+              className="cursor-pointer text-ims-text hover:text-white hover:bg-primary "
             >
               <div className="flex items-center gap-4">
                 <div className="text-lg">{val.icon}</div>
@@ -238,7 +238,7 @@ export function DropdownMenuSmall({
       <DropdownMenuTrigger className="outline-none">
         {triggerComponet}
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="ml-auto -right-3 absolute px-2 pb-2 z-50 bg-white">
+      <DropdownMenuContent className="ml-auto -right-3 absolute px-2 pb-2 z-50 bg-ims-card">
         <DropdownMenuSeparator />
         {menuItem.map((val, indx) => {
           return (
@@ -246,7 +246,7 @@ export function DropdownMenuSmall({
               onClick={() => setUsageTime(val)}
               checked={value === val}
               key={indx}
-              className="cursor-pointer text-slate-800 hover:text-white hover:bg-primary "
+              className="cursor-pointer text-ims-text hover:text-white hover:bg-primary "
             >
               {val}
             </DropdownMenuCheckboxItem>

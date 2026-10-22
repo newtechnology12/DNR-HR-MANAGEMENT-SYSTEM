@@ -44,7 +44,7 @@ export default function ConfirmModal({
             className="py-2 -mt-2 rounded-[4px] flex items-center"
           >
             <AlertCircleIcon className="h-4 -mt-[5px] mr-3 w-4" />
-            <AlertTitle className="text-[13px] font-medium fon !m-0">
+            <AlertTitle className="text-t-small font-medium fon !m-0">
               {error}
             </AlertTitle>
           </Alert>

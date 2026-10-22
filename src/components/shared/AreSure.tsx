@@ -64,13 +64,13 @@ export default function AreSure({ status,data,onDone,setOrder }: { status: strin
         <div className="flex items-center gap-2">
           <div
             className={cn(
-              "h-14 text-[16px] uppercase w-14 bg-slate-200 flex items-center justify-center text-slate-500 rounded-[4px]",
+              "h-14 text-[16px] w-14 bg-ims-divider flex items-center justify-center text-ims-muted rounded-[4px]",
               {
                 "bg-cyan-500 text-white": status === "Queue",
-                "bg-orange-500 text-white": status === "Cooking",
-                "bg-blue-500 text-white": status === "Ready",
+                "bg-ims-orange text-white": status === "Cooking",
+                "bg-ims-link text-white": status === "Ready",
                 "bg-primary text-white": status === "Completed",
-                "bg-red-500 text-white": status === "Canceled",
+                "bg-ims-danger text-white": status === "Canceled",
               }
             )}
           >
@@ -78,19 +78,19 @@ export default function AreSure({ status,data,onDone,setOrder }: { status: strin
           </div>
           <div className="flex flex-col items-start">
             <h4 className="text-[14.5px] font-medium">#Order {data?.code}</h4>
-            <p className="text-[12.5px] text-slate-500 font-medium">{data?.itemCount} items</p>
+            <p className="text-t-small text-ims-muted font-medium">{data?.itemCount} items</p>
           </div>
         </div>
         <div className="flex justify-end items-end gap-2 flex-col">
           <div
             className={cn(
-              "text-[12px] bg-opacity-55 flex items-center gap-2 px-3 py-[4px] rounded-full",
+              "text-t-hint bg-opacity-55 flex items-center gap-2 px-3 py-[4px] rounded-full",
               {
                 "bg-cyan-500/15 text-cyan-500": status === "Queue",
-                "bg-orange-500/15 text-orange-500": status === "Cooking",
-                "bg-blue-500/15 text-blue-500": status === "Ready",
+                "bg-ims-orange text-ims-orange": status === "Cooking",
+                "bg-ims-link text-ims-link": status === "Ready",
                 "bg-primary/15 text-primary": status === "Completed",
-                "bg-red-500/15 text-red-500": status === "Canceled",
+                "bg-ims-danger text-ims-danger": status === "Canceled",
               }
             )}
           >
@@ -105,13 +105,13 @@ export default function AreSure({ status,data,onDone,setOrder }: { status: strin
             <div
               className={cn("h-2 w-2 rounded-full", {
                 "bg-cyan-500 text-white": status === "Queue",
-                "bg-orange-500 text-white": status === "Cooking",
-                "bg-blue-500 text-white": status === "Ready",
+                "bg-ims-orange text-white": status === "Cooking",
+                "bg-ims-link text-white": status === "Ready",
                 "bg-primary text-white": status === "Completed",
-                "bg-red-500 text-white": status === "Canceled",
+                "bg-ims-danger text-white": status === "Canceled",
               })}
             ></div>
-            <span className="text-xs text-slate-600">
+            <span className="text-xs text-ims-body">
               It's {status?.toLowerCase()}
             </span>
           </div>
@@ -140,11 +140,11 @@ export default function AreSure({ status,data,onDone,setOrder }: { status: strin
           
           className={cn("hover:bg-opacity-80", {
             "bg-cyan-500 hover:bg-cyan-500 text-white": status === "Queue",
-            "bg-orange-500 hover:bg-orange-500 text-white":
+            "bg-ims-orange hover:bg-ims-orange text-white":
               status === "Cooking",
-            "bg-blue-500 hover:bg-blue-500 text-white": status === "Ready",
+            "bg-ims-link hover:bg-ims-link text-white": status === "Ready",
             "bg-primary hover:bg-primary text-white": status === "Completed",
-            "bg-red-500 hover:bg-red-500 text-white": status === "Canceled",
+            "bg-ims-danger hover:bg-ims-danger text-white": status === "Canceled",
           })}
         >
         {isUpdatingOrder && (

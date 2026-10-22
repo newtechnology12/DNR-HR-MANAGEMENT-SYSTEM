@@ -142,7 +142,7 @@ export default function ClientFormModal({ open, setOpen, onComplete, client }: a
                 <Button
                   type="button"
                   onClick={() => form.reset()}
-                  className="w-full text-slate-600"
+                  className="w-full text-ims-body"
                   size="sm"
                   variant="outline"
                 >

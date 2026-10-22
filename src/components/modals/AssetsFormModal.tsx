@@ -142,7 +142,7 @@ export function AssetsFormModal({ open, setOpen, record, onComplete }: any) {
               </span>
             </DialogTitle>
             <DialogDescription>
-              <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+              <span className="px-2 py-0 text-sm text-ims-muted leading-7">
                 Fill in the fields to create a new asset allocation.
               </span>
             </DialogDescription>
@@ -256,7 +256,7 @@ export function AssetsFormModal({ open, setOpen, record, onComplete }: any) {
                   <Button
                     type="button"
                     onClick={() => form.reset()}
-                    className="w-full text-slate-600"
+                    className="w-full text-ims-body"
                     size="sm"
                     variant="outline"
                   >

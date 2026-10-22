@@ -28,12 +28,12 @@ export function ProtectedRoute({ entity, children }: { entity: string | string[]
   } else {
     return (
       <div>
-        <div className="flex bg-white  max-w-2xl rounded-sm border border-slate-200 mx-auto my-12 items-center justify-center flex-col gap-4 py-24">
-          <div className="bg-red-200 border-[6px] border-red-100 h-16 w-16 rounded-full flex items-center justify-center">
+        <div className="flex bg-ims-card  max-w-2xl rounded-sm border border-ims-border mx-auto my-12 items-center justify-center flex-col gap-4 py-24">
+          <div className="bg-ims-danger-bg border-[6px] border-ims-danger/30 h-16 w-16 rounded-full flex items-center justify-center">
             <svg
               viewBox="0 0 24 24"
               fill="none"
-              className="h-6 w-6 text-red-500"
+              className="h-6 w-6 text-ims-danger"
               xmlns="http://www.w3.org/2000/svg"
             >
               <g id="SVGRepo_bgCarrier" strokeWidth={0} />
@@ -57,7 +57,7 @@ export function ProtectedRoute({ entity, children }: { entity: string | string[]
           </div>
           <div className="flex flex-col gap-2 text-center">
             <h4 className="font-semibold text-[15px]">Access denied</h4>
-            <h4 className="font-medium text-slate-500 leading-7 text-sm">
+            <h4 className="font-medium text-ims-muted leading-7 text-sm">
               You do not have permission to access this page,
               <br /> contact your admin.
             </h4>

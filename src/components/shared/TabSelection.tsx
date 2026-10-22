@@ -22,14 +22,14 @@ export default function TabSelection({
         <ScrollArea className="w-full whitespace-nowrap overflow-auto">
           {whichOne === "display" && (
             <>
-              <TabsList className="flex bg-white border-t items-center border-b justify-around w-full flex-wrap sm:flex-nowrap">
+              <TabsList className="flex bg-ims-card border-t items-center border-b justify-around w-full flex-wrap sm:flex-nowrap">
                 {options.map((e, i) => {
                   return (
                     <TabsTrigger
                       value={e}
                       key={i}
                       className={cn(
-                        "cursor-pointer px-4 capitalize !text-base !pt-2 text-center relative w-full- text-slate-700 text-[13px] sm:text-sm py-3 font-medium "
+                        "cursor-pointer px-4 capitalize !text-base !pt-2 text-center relative w-full- text-ims-body text-t-small sm:text-sm py-3 font-medium "
                       )}
                       onClick={() => {
                         handleStatus(e);

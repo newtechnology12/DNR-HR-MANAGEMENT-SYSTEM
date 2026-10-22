@@ -24,9 +24,9 @@ export default function AppFormCombobox({
       render={({ field, fieldState }) => (
         <FormItem className="flex flex-col gap-1 mt-1">
           <FormLabel>
-            <Label className="mb-1 text-[12.5px] font-medium text-slate-700" htmlFor={label}>
+            <Label className="mb-1 text-t-small font-medium text-ims-body" htmlFor={label}>
               {label}
-              {required && <span className="ml-0.5 text-red-600">*</span>}
+              {required && <span className="ml-0.5 text-ims-danger">*</span>}
             </Label>
           </FormLabel>
           <FormControl>

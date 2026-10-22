@@ -122,7 +122,7 @@ export function Initials({ name, className }: { name?: string; className?: strin
     .map((p) => p[0]?.toUpperCase())
     .join("");
   return (
-    <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ims-subtle text-[11px] font-bold text-ims-body", className)} aria-hidden>
+    <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ims-subtle text-t-hint font-bold text-ims-body", className)} aria-hidden>
       {initials || "?"}
     </span>
   );

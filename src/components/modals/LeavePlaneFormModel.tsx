@@ -23,11 +23,11 @@ function capitalizeFirstLetter(str) {
 }
 
 const formSchema = z.object({
-  employee: z.string().min(1, { message: "Please choose an employee" }),
-  type: z.string().min(1, { message: "Please choose a leave type" }),
-  status: z.string().min(1, { message: "Please choose a leave status" }),
-  start: z.date({ required_error: "Please choose a start date" }),
-  end: z.date({ required_error: "Please choose an end date" }),
+  employee: z.string().min(1, { message: "Choose an employee" }),
+  type: z.string().min(1, { message: "Choose a leave type" }),
+  status: z.string().min(1, { message: "Choose a leave status" }),
+  start: z.date({ required_error: "Choose a start date" }),
+  end: z.date({ required_error: "Choose an end date" }),
   Leaveduration: z.number().min(1, { message: "Leave duration must be at least 1 day" }),
   reason: z.string().optional(),
 });
@@ -169,7 +169,7 @@ export function LeavePlanFormModal({
             </span>
           </DialogTitle>
           <DialogDescription>
-            <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+            <span className="px-2 py-0 text-sm text-ims-muted leading-7">
               Fill in the fields to {record ? "update" : "create"} a leave.
             </span>
           </DialogDescription>
@@ -180,7 +180,7 @@ export function LeavePlanFormModal({
               <div className="mb-3 px-2">
                 <Alert variant="destructive" className="py-2 mt-3 rounded-[4px] flex items-center">
                   <AlertCircleIcon className="h-4 -mt-[5px] mr-3 w-4" />
-                  <AlertTitle className="text-[13px] font-medium !m-0">{error}</AlertTitle>
+                  <AlertTitle className="text-t-small font-medium !m-0">{error}</AlertTitle>
                 </Alert>
               </div>
             )}
@@ -231,7 +231,7 @@ export function LeavePlanFormModal({
                           {...field}
                           type="number"
                           disabled
-                          className="w-full h-10 px-3 text-sm border rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-50"
+                          className="w-full h-10 px-3 text-sm border rounded-md focus:ring-2 focus:ring-ims-link focus:outline-none bg-gray-50"
                           placeholder="Leave Duration"
                         />
                       </div>
@@ -251,7 +251,7 @@ export function LeavePlanFormModal({
                 <Button
                   type="button"
                   onClick={handleReset}
-                  className="w-full text-slate-600"
+                  className="w-full text-ims-body"
                   size="sm"
                   variant="outline"
                 >

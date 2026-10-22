@@ -243,7 +243,7 @@ export default function ReportList({ employeeId }: { employeeId: string }) {
       <div className="px-4">
         <div className="flex pb-2 items-start justify-between space-y-2">
           <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-[17px] font-semibold capitalize tracking-tight">
+            <h2 className="text-t-section font-semibold capitalize tracking-tight">
               Reports
             </h2>
             <BreadCrumb

@@ -48,41 +48,41 @@ function Content({ order, isReciept, isKitchen }) {
       <div className="px-4 pb-4">
         <table className="w-full">
           <tr>
-            <td className="text-[13.5px] py-2 font-medium">
+            <td className="text-t-body py-2 font-medium">
               {isReciept ? "Reciept" : "Invoice"} Number:
             </td>
-            <td className="text-[13.5px] py-2  text-slate-500 px-4 font-medium">
+            <td className="text-t-body py-2  text-ims-muted px-4 font-medium">
               #{order.code}
             </td>
           </tr>
           <tr>
-            <td className="text-[13.5px] py-2  font-medium">Waiter:</td>
-            <td className="text-[13.5px] py-2  text-slate-500 px-4 font-medium">
+            <td className="text-t-body py-2  font-medium">Waiter:</td>
+            <td className="text-t-body py-2  text-ims-muted px-4 font-medium">
               {order.expand.waiter?.name}
             </td>
           </tr>
           {order.customer && (
             <tr>
-              <td className="text-[13.5px] py-2  font-medium">Customer:</td>
-              <td className="text-[13.5px] py-2  text-slate-500 px-4 font-medium">
+              <td className="text-t-body py-2  font-medium">Customer:</td>
+              <td className="text-t-body py-2  text-ims-muted px-4 font-medium">
                 {order.customer.name}
               </td>
             </tr>
           )}
         </table>
         <div>
-          <div className="w-full h-[1px] bg-slate-200"></div>
+          <div className="w-full h-[1px] bg-ims-divider"></div>
           <div className="pt-1">
             <table className="table-auto w-full">
               <thead>
                 <tr>
-                  <th className="text-left uppercase py-2  text-slate-700 text-[12.5px] font-medium">
+                  <th className="text-left py-2 text-ims-body text-t-small font-medium">
                     Name
                   </th>
-                  <th className="text-left uppercase py-2  text-slate-700 text-[12.5px] font-medium">
+                  <th className="text-left py-2 text-ims-body text-t-small font-medium">
                     quantity
                   </th>
-                  <th className="text-right uppercase py-2  text-slate-700 text-[12.5px] font-medium">
+                  <th className="text-right py-2 text-ims-body text-t-small font-medium">
                     price
                   </th>
                 </tr>
@@ -91,13 +91,13 @@ function Content({ order, isReciept, isKitchen }) {
                 {order.items.map((e, i) => {
                   return (
                     <tr key={i}>
-                      <td className="text-left py-2  text-slate-500 capitalize text-[12.5px] font-medium">
+                      <td className="text-left py-2  text-ims-muted capitalize text-t-small font-medium">
                         {e.expand.menu.name}
                       </td>
-                      <td className="text-left py-2  text-slate-500 capitalize text-[12.5px] font-medium">
+                      <td className="text-left py-2  text-ims-muted capitalize text-t-small font-medium">
                         {e.quantity}
                       </td>
-                      <td className="text-right py-2  text-slate-500 capitalize text-[12.5px] font-medium">
+                      <td className="text-right py-2  text-ims-muted capitalize text-t-small font-medium">
                         {(e.amount * e.quantity).toLocaleString()}
                       </td>
                     </tr>
@@ -106,18 +106,18 @@ function Content({ order, isReciept, isKitchen }) {
               </tbody>
             </table>
             {order.items.length === 0 && (
-              <div className="text-[13px] font-medium text-center text-slate-500 justify-center py-8">
+              <div className="text-t-small font-medium text-center text-ims-muted justify-center py-8">
                 {order.items.length === 0 && <>Order is empty</>}
               </div>
             )}
 
-            <div className="w-full my-2 h-[1px] bg-slate-200"></div>
+            <div className="w-full my-2 h-[1px] bg-ims-divider"></div>
 
             <div className="flex pb-3- pt-1 items-center justify-between">
-              <h4 className="font-medium text-slate-800 text-[12.5px]">
+              <h4 className="font-medium text-ims-text text-t-small">
                 Total
               </h4>
-              <span className="font-semibold text-slate-500  text-[13px]">
+              <span className="font-semibold text-ims-muted  text-t-small">
                 {(order?.subTotal | 0).toLocaleString()} FRW
               </span>
             </div>

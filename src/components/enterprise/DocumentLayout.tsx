@@ -54,7 +54,7 @@ export function ControlBar({
                 return (
                   <li key={s.key} aria-current={active ? "step" : undefined} className="flex items-center gap-1">
                     {i > 0 && <span className={cn("h-px w-5 sm:w-8", done || active ? "bg-ims-link" : "bg-ims-border")} aria-hidden />}
-                    <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold", done ? "bg-ims-link text-white" : active ? "bg-ims-primary text-white" : "border border-ims-border bg-ims-card text-ims-faint")} aria-hidden>
+                    <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-t-hint font-bold", done ? "bg-ims-link text-white" : active ? "bg-ims-primary text-white" : "border border-ims-border bg-ims-card text-ims-faint")} aria-hidden>
                       {done ? <Check size={12} /> : i + 1}
                     </span>
                     <span className={cn("whitespace-nowrap text-t-small", active ? "font-bold text-ims-text" : done ? "text-ims-body" : "text-ims-muted")}>{s.label}</span>

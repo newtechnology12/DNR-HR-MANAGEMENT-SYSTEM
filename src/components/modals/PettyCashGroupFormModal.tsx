@@ -16,8 +16,8 @@ import {
   import AppFormField from "@/components/forms/AppFormField";
   
   const formSchema = z.object({
-    name: z.string().min(1, { message: "Please enter a name" }),
-    description: z.string().min(1, { message: "Please enter a description" }),
+    name: z.string().min(1, { message: "Enter a name" }),
+    description: z.string().min(1, { message: "Enter a description" }),
   });
   
   const getDefaultValues = (data?: any) => ({

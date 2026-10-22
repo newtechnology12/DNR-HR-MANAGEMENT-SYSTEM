@@ -22,13 +22,13 @@ import AppFormTextArea from "../forms/AppFormTextArea";
 import AppFormSelect from "../forms/AppFormSelect";
 
 const formSchema = z.object({
-  manager: z.string().min(1, { message: "Please choose an manager" }),
-  name: z.string().min(1, { message: "Please enter a branch name" }),
-  location: z.string().min(1, { message: "Please enter a branch location" }),
-  status: z.string().min(1, { message: "Please choose a branch status" }),
+  manager: z.string().min(1, { message: "Choose an manager" }),
+  name: z.string().min(1, { message: "Enter a branch name" }),
+  location: z.string().min(1, { message: "Enter a branch location" }),
+  status: z.string().min(1, { message: "Choose a branch status" }),
   description: z
     .string()
-    .min(1, { message: "Please enter a branch description" }),
+    .min(1, { message: "Enter a branch description" }),
 });
 
 const getDefaultValues = (data?: any) => {
@@ -107,7 +107,7 @@ export function BranchFormModal({
             </span>
           </DialogTitle>
           <DialogDescription>
-            <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+            <span className="px-2 py-0 text-sm text-ims-muted leading-7">
               Fill in the fields to {record ? "Update" : "Create a new"} leave.
             </span>
           </DialogDescription>
@@ -162,7 +162,7 @@ export function BranchFormModal({
                 <Button
                   type="button"
                   onClick={() => form.reset()}
-                  className="w-full text-slate-600"
+                  className="w-full text-ims-body"
                   size="sm"
                   variant="outline"
                 >

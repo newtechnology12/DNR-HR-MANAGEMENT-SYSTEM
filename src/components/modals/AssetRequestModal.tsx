@@ -102,7 +102,7 @@ export function AssetRequestModal({
               </span>
             </DialogTitle>
             <DialogDescription>
-              <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+              <span className="px-2 py-0 text-sm text-ims-muted leading-7">
                 Fill in the fields to create a new request.
               </span>
             </DialogDescription>
@@ -116,7 +116,7 @@ export function AssetRequestModal({
                     className="py-2 mt-3- rounded-[4px] flex items-center"
                   >
                     <AlertCircleIcon className="h-4 -mt-[5px] mr-3 w-4" />
-                    <AlertTitle className="text-[13px] font-medium fon !m-0">
+                    <AlertTitle className="text-t-small font-medium fon !m-0">
                       {error}
                     </AlertTitle>
                   </Alert>
@@ -163,7 +163,7 @@ export function AssetRequestModal({
                       form.reset();
                       setError("");
                     }}
-                    className="w-full text-slate-600"
+                    className="w-full text-ims-body"
                     size="sm"
                     variant="outline"
                   >

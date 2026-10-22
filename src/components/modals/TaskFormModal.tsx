@@ -108,7 +108,7 @@ import {
               </span>
             </DialogTitle>
             <DialogDescription>
-              <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+              <span className="px-2 py-0 text-sm text-ims-muted leading-7">
                 Fill in the fields to {record ? "update" : "create a new"} task.
               </span>
             </DialogDescription>
@@ -166,7 +166,7 @@ import {
                   <Button
                     type="button"
                     onClick={() => form.reset()}
-                    className="w-full text-slate-600"
+                    className="w-full text-ims-body"
                     size="sm"
                     variant="outline"
                   >
@@ -189,7 +189,7 @@ import {
           </Form>
           {fileLink && (
             <div className="mt-4 px-2">
-              <a href={fileLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
+              <a href={fileLink} target="_blank" rel="noopener noreferrer" className="text-ims-link underline">
                 View Task File
               </a>
             </div>

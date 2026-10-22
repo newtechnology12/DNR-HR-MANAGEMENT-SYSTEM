@@ -111,7 +111,7 @@ import {
               </span>
             </DialogTitle>
             <DialogDescription>
-              <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+              <span className="px-2 py-0 text-sm text-ims-muted leading-7">
                 Fill in the fields to {record ? "update" : "create a new"} report.
               </span>
             </DialogDescription>
@@ -152,7 +152,7 @@ import {
                   <Button
                     type="button"
                     onClick={() => form.reset()}
-                    className="w-full text-slate-600"
+                    className="w-full text-ims-body"
                     size="sm"
                     variant="outline"
                   >
@@ -177,7 +177,7 @@ import {
             <div className="mt-4 px-2">
               {fileLinks.map((link, index) => (
                 <div key={index}>
-                  <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
+                  <a href={link} target="_blank" rel="noopener noreferrer" className="text-ims-link underline">
                     View File {index + 1}
                   </a>
                 </div>

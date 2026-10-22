@@ -210,7 +210,7 @@ export function ShiftsHistory() {
         shift={shiftToShow}
       />
       <div className="px-1 py-1">
-        <div className="w-full pt-3 px-3 rounded-[4px] border bg-white">
+        <div className="w-full pt-3 px-3 rounded-[4px] border bg-ims-card">
           <div className="rounded-[4px] border">
             <Table>
               <TableHeader>

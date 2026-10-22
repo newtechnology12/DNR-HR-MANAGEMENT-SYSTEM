@@ -1,11 +1,10 @@
 export default function ErrorCard() {
   return (
-    <div className="flex px-4 text-center items-center py-24 justify-center gap-2 flex-col max-w-sm mx-auto">
+    <div className="mx-auto flex max-w-sm flex-col items-center justify-center gap-2 px-4 py-24 text-center">
       <img className="h-20 w-20" src="/images/alert.png" alt="" />
-      <h4 className="font-semibold text-white mt-4">Something went wrong</h4>
-      <p className="text-[15px] max-w-sm text-slate-400 leading-7 text-wrap">
-        Please try to see if you can refresh the page and see it everything will
-        be ok !!
+      <h4 className="mt-4 text-t-section text-ims-text">Something went wrong</h4>
+      <p className="max-w-sm text-t-body text-ims-muted">
+        This part of the page could not be shown. Reload the page; if it happens again, tell the RALGA ICT unit.
       </p>
     </div>
   );

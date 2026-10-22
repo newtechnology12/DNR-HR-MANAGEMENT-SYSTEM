@@ -26,7 +26,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "justify-center whitespace-nowrap gap-0.5 text-xs px-3 py-1 flex-wrap sm:flex-nowrap sm:px-6 sm:py-2 sm:text-base text-slate-700 ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50  data-[state=active]:text-white h-full flex items-center sm:gap-2 rounded-sm",
+      "justify-center whitespace-nowrap gap-0.5 text-xs px-3 py-1 flex-wrap sm:flex-nowrap sm:px-6 sm:py-2 sm:text-base text-ims-body ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50  data-[state=active]:text-white h-full flex items-center sm:gap-2 rounded-sm",
       className
     )}
     {...props}
@@ -61,7 +61,7 @@ export default function Tabs({
   return (
     <TabsRoot defaultValue="0" className="w-full">
       <div className="flex flex-col items-center sticky sm:top-4 top-0">
-        <TabsList className="bg-white rounded-sm w-fit px-3 py-2.5 border">
+        <TabsList className="bg-ims-card rounded-sm w-fit px-3 py-2.5 border">
           {tabsTriggers.map((value, idx) => {
             return (
               <TabsTrigger
@@ -69,10 +69,10 @@ export default function Tabs({
                 value={idx.toString()}
                 className={cn({
                   "data-[state=active]:bg-cyan-500": idx === 0,
-                  "data-[state=active]:bg-orange-500": idx === 1,
-                  "data-[state=active]:bg-blue-500": idx === 2,
+                  "data-[state=active]:bg-ims-orange": idx === 1,
+                  "data-[state=active]:bg-ims-link": idx === 2,
                   "data-[state=active]:bg-primary": idx === 3,
-                  "data-[state=active]:bg-red-500": idx === 4,
+                  "data-[state=active]:bg-ims-danger": idx === 4,
                 })}
               >
                 {value}

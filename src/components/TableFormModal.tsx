@@ -129,7 +129,7 @@ export default function TableFormModal({
                     />
                   </div>
                   <div>
-                    <h4 className="font-medium text-[13px] text-slate-600 mb-[8px]">
+                    <h4 className="font-medium text-t-small text-ims-body mb-[8px]">
                       Seats
                     </h4>
                     <div className="flex flex-wrap items-center gap-[10px]">
@@ -139,7 +139,7 @@ export default function TableFormModal({
                             onClick={() => form.setValue("seats", e)}
                             key={i}
                             className={cn(
-                              "h-10 w-10 border hover:bg-slate-50 cursor-pointer border-slate-200 text-slate-500 rounded-[3px] font-medium flex items-center justify-center text-[13px]",
+                              "h-10 w-10 border hover:bg-ims-thead cursor-pointer border-ims-border text-ims-muted rounded-[3px] font-medium flex items-center justify-center text-t-small",
                               {
                                 "border-primary bg-primary text-primary bg-opacity-5":
                                   e === seats,

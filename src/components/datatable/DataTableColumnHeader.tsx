@@ -22,7 +22,7 @@ function DataTableColumnHeader<TData, TValue>({
     <button
       type="button"
       onClick={() => column.toggleSorting(sorted === "desc" ? false : true)}
-      className={cn("inline-flex items-center gap-1 rounded-sm text-[12.5px] font-semibold text-ims-muted hover:text-ims-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus", sorted && "text-ims-text", className)}
+      className={cn("inline-flex items-center gap-1 rounded-sm text-t-small font-semibold text-ims-muted hover:text-ims-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus", sorted && "text-ims-text", className)}
       aria-label={`Sort by ${title}`}
     >
       <span className="truncate">{title}</span>

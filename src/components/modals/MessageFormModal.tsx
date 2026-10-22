@@ -97,7 +97,7 @@ import {
               </span>
             </DialogTitle>
             <DialogDescription>
-              <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+              <span className="px-2 py-0 text-sm text-ims-muted leading-7">
                 Fill in the fields to {record ? "update" : "create a new"} message.
               </span>
             </DialogDescription>
@@ -128,7 +128,7 @@ import {
                   <Button
                     type="button"
                     onClick={() => form.reset()}
-                    className="w-full text-slate-600"
+                    className="w-full text-ims-body"
                     size="sm"
                     variant="outline"
                   >

@@ -158,7 +158,7 @@ export function DataTableFacetedFilter<TData, TValue>({
         </Button>
       </PopoverTrigger>
       {type === "date" ? (
-        <PopoverContent className="w-auto bg-white p-0">
+        <PopoverContent className="w-auto bg-ims-card p-0">
           <Calendar
             initialFocus
             mode="range"
@@ -174,7 +174,7 @@ export function DataTableFacetedFilter<TData, TValue>({
           </a>
         </PopoverContent>
       ) : type === "async-options" ? (
-        <PopoverContent className="w-auto bg-white p-0">
+        <PopoverContent className="w-auto bg-ims-card p-0">
           <PopoutSelect
             open={open}
             name={name}
@@ -222,7 +222,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                         {option.icon && (
                           <option.icon className="mr-2 h-4 w-4 text-ims-muted" />
                         )}
-                        <span className="font-medium capitalize text-[12.5px]">
+                        <span className="font-medium capitalize text-t-small">
                           {option.label}
                         </span>
                       </CommandItem>
@@ -237,7 +237,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                   <CommandGroup>
                     <CommandItem
                       onSelect={() => column?.setFilterValue(undefined)}
-                      className="justify-center text-ims-body text-[13px] font-medium text-center"
+                      className="justify-center text-ims-body text-t-small font-medium text-center"
                     >
                       Clear filters
                     </CommandItem>

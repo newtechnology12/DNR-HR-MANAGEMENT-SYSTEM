@@ -80,7 +80,7 @@ export default function Attachments({
         >
           {busy ? <Loader2 size={18} className="animate-spin text-ims-link" /> : <Upload size={18} className="text-ims-faint" />}
           <span><span className="font-medium text-ims-link">Add documents</span> — choose files or drop them here</span>
-          <span className="text-[11.5px] text-ims-muted">{hint || "PDF, images, Word, Excel… up to 20 MB each"}</span>
+          <span className="text-t-hint text-ims-muted">{hint || "PDF, images, Word, Excel… up to 20 MB each"}</span>
           <input type="file" multiple className="hidden" disabled={busy} onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
         </label>
       )}
@@ -92,15 +92,15 @@ export default function Attachments({
             const Icon = iconFor(f);
             const url = pocketbase.files.getUrl(record, f);
             return (
-              <li key={f} className="flex items-center gap-3 rounded-lg border border-ims-border bg-ims-card p-2.5">
+              <li key={f} className="flex items-center gap-3 rounded-control border border-ims-border bg-ims-card p-2.5">
                 {IMAGE.test(f) ? (
                   <a href={url} target="_blank" rel="noreferrer" className="shrink-0"><img src={pocketbase.files.getUrl(record, f, { thumb: "100x100" })} alt="" className="h-11 w-11 rounded object-cover" /></a>
                 ) : (
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-ims-subtle text-ims-muted"><Icon size={20} /></span>
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-medium text-ims-text" title={displayName(f)}>{displayName(f)}</span>
-                  <span className="flex items-center gap-2 text-[12px]">
+                  <span className="block truncate text-t-small font-medium text-ims-text" title={displayName(f)}>{displayName(f)}</span>
+                  <span className="flex items-center gap-2 text-t-hint">
                     <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ims-link hover:underline"><ExternalLink size={12} /> Open</a>
                     <a href={`${url}?download=1`} className="inline-flex items-center gap-1 text-ims-body hover:underline"><Download size={12} /> Download</a>
                   </span>

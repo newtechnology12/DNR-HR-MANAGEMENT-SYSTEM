@@ -117,7 +117,7 @@ export function EmployeeReportModal({
     if (isValid) {
       setStep(2); // Move to Step 2
     } else {
-      toast.error("Please fill out all required fields before proceeding.");
+      toast.error("Fill out all required fields before proceeding.");
     }
   };
 
@@ -131,7 +131,7 @@ export function EmployeeReportModal({
             </span>
           </DialogTitle>
           <DialogDescription>
-            <span className="px-2 py-0 text-sm text-slate-500 leading-7">
+            <span className="px-2 py-0 text-sm text-ims-muted leading-7">
               Fill in the fields to {record ? "update" : "submit"} your report.
             </span>
           </DialogDescription>
@@ -261,7 +261,7 @@ export function EmployeeReportModal({
                     <Button
                       type="button"
                       onClick={() => form.reset()}
-                      className="w-full text-slate-600"
+                      className="w-full text-ims-body"
                       size="sm"
                       variant="outline"
                     >
@@ -283,7 +283,7 @@ export function EmployeeReportModal({
                     <Button
                       type="button"
                       onClick={() => setStep(1)}
-                      className="w-full text-slate-600"
+                      className="w-full text-ims-body"
                       size="sm"
                       variant="outline"
                     >

@@ -225,8 +225,8 @@ export function BulkAttendanceModal({ open, setOpen, onComplete }: any) {
 
   const handleSubmit = () => {
     try {
-      if (!file) return setfileError("Please upload a file.");
-      if (!branch) return setbrachError("Please select a branch");
+      if (!file) return setfileError("Upload a file.");
+      if (!branch) return setbrachError("Select a branch");
 
       setbrachError(undefined);
       setfileError(undefined);
@@ -360,14 +360,14 @@ export function BulkAttendanceModal({ open, setOpen, onComplete }: any) {
               className="py-2 mt-3 rounded-[4px] flex items-center"
             >
               <AlertCircleIcon className="h-4 -mt-[5px] mr-3 w-4" />
-              <AlertTitle className="text-[13px] font-medium fon !m-0">
+              <AlertTitle className="text-t-small font-medium fon !m-0">
                 {error}
               </AlertTitle>
             </Alert>
           )}
           {errors?.length ? (
-            <div className="bg-red-50 px-2 py-1 border-red-100 border rounded-md mb-2 mt-3">
-              <ul className="list-decimal pl-5 my-2 text-sm space-y-3 text-red-500">
+            <div className="bg-ims-danger-bg px-2 py-1 border-ims-danger/30 border rounded-md mb-2 mt-3">
+              <ul className="list-decimal pl-5 my-2 text-sm space-y-3 text-ims-danger">
                 {errors?.map((e: any) => {
                   return <li>{e}</li>;
                 })}
@@ -379,7 +379,7 @@ export function BulkAttendanceModal({ open, setOpen, onComplete }: any) {
               {...getRootProps()}
               className={`w-full border-dashed relative cursor-pointer py-4 ${
                 fileError
-                  ? "hover:bg-red-100 hover:bg-opacity-70 bg-red-50 border-red-200"
+                  ? "hover:bg-ims-danger-bg hover:bg-opacity-70 bg-ims-danger-bg border-ims-danger/30"
                   : "hover:bg-gray-100 border-gray-200 "
               } border-2 flex-col  min-h-[100px] my-4 rounded-md flex items-center justify-center gap-3`}
             >
@@ -393,7 +393,7 @@ export function BulkAttendanceModal({ open, setOpen, onComplete }: any) {
                       setFile(null);
                     }}
                   >
-                    <Trash size={20} className="text-red-800" />
+                    <Trash size={20} className="text-ims-danger" />
                   </a>
                 ) : (
                   <UploadCloud size={26} className="text-primary" />
@@ -403,13 +403,13 @@ export function BulkAttendanceModal({ open, setOpen, onComplete }: any) {
                     <a
                       target="_blank"
                       href={file}
-                      className="text-[13px] cursor-pointer underline"
+                      className="text-t-small cursor-pointer underline"
                     >
                       {file?.name}
                     </a>
                   ) : (
                     <div className="flex items-center gap-2 flex-col justify-center">
-                      <span className="text-[14.5px] font-medium text-slate-800">
+                      <span className="text-[14.5px] font-medium text-ims-text">
                         Drag and drop files or{" "}
                         <a
                           href="#"
@@ -418,13 +418,13 @@ export function BulkAttendanceModal({ open, setOpen, onComplete }: any) {
                           Browse
                         </a>
                       </span>
-                      <span className="text-sm text-slate-500">
+                      <span className="text-sm text-ims-muted">
                         Supported formats: {allowedExtensions.map((e) => e)}
                       </span>
                     </div>
                   )}
                   {fileError && (
-                    <span className="text-red-500 capitalize mt-3 text-[13px] font-medium block text-center">
+                    <span className="text-ims-danger capitalize mt-3 text-t-small font-medium block text-center">
                       {fileError ? "* " + fileError : ""}
                     </span>
                   )}
@@ -456,8 +456,8 @@ export function BulkAttendanceModal({ open, setOpen, onComplete }: any) {
               />
             </div>
             {!errors?.length ? (
-              <div className="bg-slate-50 px-2 py-1 border-slate-100 border rounded-md mb-2 mt-3">
-                <ul className="list-decimal pl-5 my-2 text-sm space-y-3 text-slate-500">
+              <div className="bg-ims-thead px-2 py-1 border-ims-divider border rounded-md mb-2 mt-3">
+                <ul className="list-decimal pl-5 my-2 text-sm space-y-3 text-ims-muted">
                   <li>
                     Download the template{" "}
                     <a

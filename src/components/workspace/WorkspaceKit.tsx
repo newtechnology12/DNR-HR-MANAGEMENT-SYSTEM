@@ -45,7 +45,7 @@ export function WHead({ title, subtitle, right, className }: { title: React.Reac
 }
 
 export function WLink({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) {
-  return <Link to={to} className={cn("text-[13px] font-bold text-ims-link hover:text-ims-primary hover:underline", className)}>{children}</Link>;
+  return <Link to={to} className={cn("text-t-small font-bold text-ims-link hover:text-ims-primary hover:underline", className)}>{children}</Link>;
 }
 
 // Workspace tones → the ims pill tones (status glossary colours).
@@ -77,7 +77,7 @@ export function ClockCard() {
         <div className={cn("text-[15px] font-extrabold tabular-nums", clock.state === "in" ? "text-ims-success" : "text-ims-text")}>{clock.loading ? "…" : value}</div>
       </div>
       {clock.state === "done" ? (
-        <span className="inline-flex h-control items-center rounded-control bg-ims-success-bg px-4 text-[14px] font-bold text-ims-success">Done for today</span>
+        <span className="inline-flex h-control items-center rounded-control bg-ims-success-bg px-4 text-t-body font-bold text-ims-success">Done for today</span>
       ) : (
         <button
           type="button"
@@ -366,7 +366,7 @@ export function LeaveBalance({ b }: { b: any }) {
   const pct = (n: number) => `${ent ? Math.max(0, Math.min(100, (n / ent) * 100)) : 0}%`;
   return (
     <>
-      <div><span className="text-[30px] font-extrabold tabular-nums">{left}</span> <span className="text-[15px] font-bold text-ims-muted">days left</span></div>
+      <div><span className="text-t-title font-extrabold tabular-nums">{left}</span> <span className="text-[15px] font-bold text-ims-muted">days left</span></div>
       <div role="img" aria-label={`${ent} days: ${taken} taken, ${pending} pending, ${after} available after approval`} className="flex h-2.5 overflow-hidden rounded-pill bg-ims-neutral-bg">
         <span style={{ width: pct(taken) }} className="bg-ims-primary" />
         <span style={{ width: pct(pending) }} className="bg-ims-priority-high/70" />
