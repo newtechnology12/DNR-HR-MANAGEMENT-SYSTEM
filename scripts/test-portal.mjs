@@ -131,14 +131,23 @@ await check("an approved leave can no longer be edited by the employee", async (
   await expectStatus(employee.collection("leaves").update(leave.id, { reason: "changed" }), 404);
 });
 await check("an employee cannot approve their own expense", async () => {
-  const x = await employee.collection("prepayments").create({ employee: me.id, amount: 15000, description: "Taxi to district office", date: day(0) });
-  cleanup.push(() => admin.collection("prepayments").delete(x.id));
-  await expectStatus(employee.collection("prepayments").update(x.id, { status: "approved" }), 403, "own");
+  const cat = await admin.collection("expenses_categories").getFirstListItem('kind = "claim" && active = true');
+  const x = await employee.send("/api/ims/staff-expenses", { method: "POST", body: { category: cat.id, amount: 5000, description: "Taxi to the district office for the portal test", date: day(0), pay_by: "cash" } });
+  cleanup.push(async () => {
+    for (const col of ["approval_actions", "approval_requests"]) for (const a of await admin.collection(col).getFullList({ filter: `document_id = "${x.id}"`, fields: "id" })) await admin.collection(col).delete(a.id);
+    await admin.collection("prepayments").delete(x.id);
+  });
+  const approval = (await admin.collection("prepayments").getOne(x.id)).approval;
+  await expectStatus(employee.send(`/api/dnr/approvals/${approval}/act`, { method: "POST", body: { action: "approve", comment: "mine" } }), 403);
+  await expectStatus(employee.collection("prepayments").update(x.id, { status: "approved" }), 403);
 });
-await check("expense categories cannot be duplicated", async () => {
-  const c = await employee.collection("expenses_categories").create({ name: "Test category for portal" });
+await check("expense categories are set up by Finance and cannot be duplicated", async () => {
+  const daf = await login("finance@dnr-hr.rw");
+  const account = (await admin.collection("gl_accounts").getFirstListItem('code = "5201"')).id;
+  await expectStatus(employee.collection("expenses_categories").create({ name: "Test category for portal", kind: "claim", gl_account: account }), 400); // create rule
+  const c = await daf.collection("expenses_categories").create({ name: "Test category for portal", kind: "claim", gl_account: account });
   cleanup.push(() => admin.collection("expenses_categories").delete(c.id));
-  await expectStatus(employee.collection("expenses_categories").create({ name: "  test CATEGORY for portal " }), 400, "already exists");
+  await expectStatus(daf.collection("expenses_categories").create({ name: "  test CATEGORY for portal ", kind: "claim", gl_account: account }), 400, "already exists");
 });
 
 console.log("\nAction plans");

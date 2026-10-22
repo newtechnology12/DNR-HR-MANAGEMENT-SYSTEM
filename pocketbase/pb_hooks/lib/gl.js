@@ -201,7 +201,7 @@ function cancelJournal(dao, auth, id, input, meta) {
   return j;
 }
 
-const SOURCE_LABEL = { payroll: "the payroll", payroll_payment: "the payroll", payment_voucher: "the payment voucher", supplier_invoice: "the supplier invoice", cash_receipt: "the receipt", bank_transfer: "the transfer", statement_line: "the bank statement line", depreciation_run: "the depreciation run", asset_disposal: "the disposal", asset: "the asset", asset_opening: "the opening register", bank_opening: "the bank account" };
+const SOURCE_LABEL = { payroll: "the payroll", payroll_payment: "the payroll", payment_voucher: "the payment voucher", supplier_invoice: "the supplier invoice", cash_receipt: "the receipt", bank_transfer: "the transfer", statement_line: "the bank statement line", depreciation_run: "the depreciation run", asset_disposal: "the disposal", asset: "the asset", asset_opening: "the opening register", bank_opening: "the bank account", staff_expense: "the staff expense" };
 
 /** A posted manual journal is corrected by a reversal (the DAF). Automatic journals are reversed from their document. */
 function reverseJournal(dao, auth, id, input, meta) {

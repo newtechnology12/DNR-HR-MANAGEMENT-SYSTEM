@@ -214,6 +214,7 @@ const DEFAULT_SEQUENCES = {
   depreciation_run: { name: "Depreciation run", prefix: "DEP" },
   asset_verification: { name: "Asset count", prefix: "AVF" },
   period_reopen: { name: "Period re-opening", prefix: "RPR" },
+  staff_expense: { name: "Staff expense or advance", prefix: "EXP" },
   role_change: { name: "Permission change", prefix: "PCR" },
   supplier_bank_change: { name: "Supplier bank details change", prefix: "BCH" },
 };

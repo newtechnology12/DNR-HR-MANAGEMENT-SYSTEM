@@ -160,17 +160,17 @@ function documentAmount(type, doc) {
   if (type === "payment_voucher") return r0(doc.getFloat("gross_amount"));
   return r0(doc.getFloat("total") || doc.getFloat("amount"));
 }
-const DOC_COLLECTION = { purchase_requisition: "purchase_requisitions", purchase_order: "purchase_orders", payment_voucher: "payment_vouchers" };
+const DOC_COLLECTION = { purchase_requisition: "purchase_requisitions", purchase_order: "purchase_orders", payment_voucher: "payment_vouchers", staff_expense: "prepayments" };
 
 /** POST /api/ims/budget/overrides — the DAF lets one document exceed its line, with a reason. */
 function grantOverride(dao, actor, input, meta) {
   core.requirePermission(dao, actor, "override_budget", "override budget control");
   const type = String(input.document_type || "");
-  if (!DOC_COLLECTION[type]) throw new BadRequestError("Overrides apply to requisitions, purchase orders and payment vouchers.");
+  if (!DOC_COLLECTION[type]) throw new BadRequestError("Overrides apply to requisitions, purchase orders, payment vouchers and staff expenses.");
   const doc = load(dao, DOC_COLLECTION[type], String(input.document_id || ""), "Document");
   const reason = String(input.reason || "").trim();
   if (reason.length < 15) throw new BadRequestError("Explain why this spend may exceed the budget (at least 15 characters). The reason is reported to the Internal Auditor.");
-  const owner = doc.getString("requester") || doc.getString("buyer") || doc.getString("prepared_by");
+  const owner = doc.getString("requester") || doc.getString("buyer") || doc.getString("prepared_by") || doc.getString("employee");
   if (owner === actor.id) throw new ForbiddenError("Segregation of duties: you cannot override the budget for your own document.");
   const lineId = doc.getString("budget_line");
   if (!lineId) throw new BadRequestError(`${doc.getString("number")} has no budget line.`);

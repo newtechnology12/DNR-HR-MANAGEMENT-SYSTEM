@@ -109,7 +109,7 @@
   "nav.myPerformance": "Imihigo n’isuzuma",
   "nav.myDocuments": "Inyandiko zanjye",
   "nav.myRequisitions": "Ubusabe bwo kugura",
-  "nav.myExpenses": "Amafaranga n’isanduku nto",
+  "nav.myExpenses": "Amafaranga n’avansi",
   "nav.myEquipment": "Ubusabe bw’ibikoresho",
   "nav.help": "Ubufasha n’amabwiriza ya HR",
   "nav.attendanceCorrections": "Gukosora kwitaba",
@@ -124,5 +124,7 @@
   "nav.assetCounts": "Kubarura umutungo",
   "nav.assetRequests": "Gusaba ibikoresho",
   "nav.assetReports": "Raporo z'umutungo",
-  "nav.assetCategories": "Ibyiciro n'igabanuka"
+  "nav.assetCategories": "Ibyiciro n'igabanuka",
+  "nav.staffExpenses": "Amafaranga y’abakozi n’avansi",
+  "nav.group.expenses": "Imodoka na raporo z’amafaranga"
 }

@@ -26,7 +26,6 @@ import SmtpSettings from "./pages/dashboard/SmtpSettings";
 import AttendaceSettings from "./pages/dashboard/AttendaceSettings";
 import Branches from "./pages/dashboard/Branches";
 import EmployeeProfile from "./pages/dashboard/EmployeeProfile";
-import PrePayments from "./pages/dashboard/PrePayments";
 import Performance from "./pages/dashboard/Performance";
 import PerfomanceForm from "./pages/dashboard/PerfomanceForm";
 import Designations from "./pages/dashboard/Designations";
@@ -35,9 +34,6 @@ import WeeklyPlans from "./pages/dashboard/WeeklyPlane";
 import RequestCash from "./pages/dashboard/RequestCash";
 import Reason from "./pages/dashboard/Reason";
 import ClientManagement from "./pages/dashboard/clients";
-import Accounts from "./pages/dashboard/Accounts";
-import AccountTransactions from "./components/AccountTransactions";
-import PettyCashRequests from "./pages/dashboard/PettyCashRequests";
 import ExpensesReport from "./pages/dashboard/ExpensesReport";
 import EmployeeTimesheet from "./pages/dashboard/EmployeeTimesheet";
 import TimesheetReport from "./pages/dashboard/TimesheetReport";
@@ -98,6 +94,10 @@ const TrialBalance = lazy(() => import("./pages/ledger/TrialBalance"));
 const AccountLedger = lazy(() => import("./pages/ledger/AccountLedger"));
 const PeriodClose = lazy(() => import("./pages/ledger/PeriodClose"));
 const PostingAccounts = lazy(() => import("./pages/setup/PostingAccounts"));
+// Staff expenses and advances (paid from the cash books, posted to the ledger); replace the old petty-cash pages.
+const StaffExpenses = lazy(() => import("./pages/finance/StaffExpenses"));
+const StaffExpenseDetail = lazy(() => import("./pages/finance/StaffExpenseDetail"));
+const EXPENSE_USERS = ["view_expenses", "view_employee_prepayments", "record_payments", "approve_or_reject_expense"];
 const SalaryPayments = lazy(() => import("./pages/treasury/SalaryPayments"));
 const AssetsOverview = lazy(() => import("./pages/assets/AssetsOverview"));
 const AssetRegister = lazy(() => import("./pages/assets/AssetRegister"));
@@ -311,6 +311,7 @@ const router = createBrowserRouter([
                     ["my/performance", <MyPerformance />],
                     ["my/documents", <MyDocuments />],
                     ["my/expenses", <MyExpenses />],
+                    ["my/expenses/:expenseId", <StaffExpenseDetail />],
                     ["my/equipment", <MyEquipment />],
                   ] as [string, JSX.Element][]).map(([path, page]) => ({
                     path,
@@ -435,14 +436,7 @@ const router = createBrowserRouter([
                       </ProtectedRoute>
                     ),
                   },
-                  {
-                    path: "prepayments",
-                    element: (
-                      <ProtectedRoute entity="view_employee_prepayments">
-                        <PrePayments />
-                      </ProtectedRoute>
-                    ),
-                  },
+                  { path: "prepayments", element: <Navigate to="/dashboard/finance/staff-expenses" replace /> },
                   
                   {
                     path: "departments",
@@ -571,30 +565,12 @@ const router = createBrowserRouter([
               {
                 path: "finance",
                 children: [
-                  {
-                    path: "petty-cash-accounts",
-                    element: (
-                      <ProtectedRoute entity="view_petty_cash_accounts">
-                        <Accounts />
-                      </ProtectedRoute>
-                    ),
-                  },
-                  {
-                    path: "petty-cash-accounts/:accountId",
-                    element: (
-                      <ProtectedRoute entity="view_petty_cash_requests">
-                        <AccountTransactions />
-                      </ProtectedRoute>
-                    ),
-                  },
-                  {
-                    path: "petty-cash-requests",
-                    element: (
-                      <ProtectedRoute entity="view_petty_cash_requests">
-                        <PettyCashRequests />
-                      </ProtectedRoute>
-                    ),
-                  },
+                  // the old floats are now cash books (Bank & cash); petty cash requests are staff expenses
+                  { path: "petty-cash-accounts", element: <Navigate to="/dashboard/treasury/accounts" replace /> },
+                  { path: "petty-cash-accounts/:accountId", element: <Navigate to="/dashboard/treasury/accounts" replace /> },
+                  { path: "petty-cash-requests", element: <Navigate to="/dashboard/finance/staff-expenses" replace /> },
+                  { path: "staff-expenses", element: <ProtectedRoute entity={EXPENSE_USERS}><StaffExpenses /></ProtectedRoute> },
+                  { path: "staff-expenses/:expenseId", element: <ProtectedRoute entity={EXPENSE_USERS}><StaffExpenseDetail /></ProtectedRoute> },
                   {
                     path: "carmanagement",
                     element: (

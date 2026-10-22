@@ -60,7 +60,7 @@ npm run seed:ralga
 # 3. Frontend (http://localhost:5173, proxies /api to the backend)
 npm run dev:frontend
 
-# 4. API tests on a freshly seeded server (must stay green: 340 checks in 14 suites)
+# 4. API tests on a freshly seeded server (must stay green: 351 checks in 15 suites)
 npm run test:api
 ```
 
@@ -403,6 +403,33 @@ and press *Confirm* (the source is recorded in the audit log).
 5. **Rollback:** stop the service, restore the previous release's files, restore the pre-release backup,
    start the service.
 
+## Staff expenses and advances
+
+My workspace → Expenses & advances (every member of staff); Payables → Staff expenses & advances (Finance, the
+Cashier, heads of department).
+
+- **Asking:** a member of staff asks to be reimbursed for money spent on RALGA's work (a claim, with the receipt or
+  the trip details) or for a salary advance, and says how to be paid (mobile money number, cash or bank transfer).
+  Requests are only ever for oneself; claims older than 90 days, future dates and amounts above the category's
+  ceiling are refused.
+- **Categories** (Finance): each claim category is charged to an expense account (local transport and missions 5207,
+  stationery 5201, telephone and internet 5203, repairs 5205, meetings 5209, printing 5215); the salary advance
+  category posts to staff advances (1120). A claim is charged to the budget line of the requester's department for
+  that account — checked when it is sent, recorded as an actual when approved.
+- **Approval:** head of department, then the Director of Finance (approval engine: delegations, reminders, never
+  one's own request; when the DAF already approved as head of department, the Secretary General gives the second
+  approval). Returned requests are corrected and sent again; the requester can withdraw a request while it waits;
+  the DAF can cancel an approved one (its amount goes back to the budget line).
+- **Payment** (the Cashier, never their own): cash from a petty cash book, mobile money or a bank transfer from a
+  bank account — checked like any payment (open month, after the last reconciliation, enough money, no restricted
+  donor account). The cash book entry and the journal are written together: a claim debits its expense account
+  (department, funding source, budget line), an advance debits staff advances; the account paid from is credited.
+  The member of staff is told when it is paid.
+- **Advances:** one at a time, at most half of the last net pay. Only an advance actually paid is deducted by the
+  next payroll, once; approving that payroll credits staff advances and marks the advance recovered.
+- The previous system's floats, transactions and petty cash requests are history (read-only): money now moves only
+  through the cash books, so the cash books, the ledger and the budget always agree.
+
 ## General ledger and period close
 
 General ledger in the menu: the Accountant prepares, the DAF approves and closes, the Internal Auditor reads, the SG
@@ -413,7 +440,8 @@ decides re-openings. Nobody else reads the ledger (checked by the server).
   invoiced* 2114 for a capital item / Cr accounts payable 2101); payment vouchers when paid (Dr accounts payable, or
   the expense of a direct voucher / Cr the bank and withholding tax payable 2108); receipts (Dr bank / Cr the income
   account); transfers between accounts; bank charges and interest recorded from a statement; opening balances of
-  bank and cash accounts (against the accumulated surplus 3101); depreciation, capitalisations and disposals.
+  bank and cash accounts (against the accumulated surplus 3101); staff expenses and advances when paid;
+  depreciation, capitalisations and disposals.
   Cancelling or reversing the document reverses its journal. Every journal links to its document and every
   document to its journal. *Backfill* (DAF) posts documents recorded before these rules; running it twice posts
   nothing.
@@ -468,5 +496,9 @@ preparer ≠ approver, drafts and rejected journals kept out of the ledger, post
 journals corrected from their document, recurring journals generated once and never into a closed month, the trial
 balance balancing and agreeing with the account ledgers, every document reaching the ledger with the bank books and
 payables equal to the GL, months closed in order after the checklist, re-opening approved by the SG, a backfill that
-posts nothing twice). Run them on a freshly seeded server
+posts nothing twice) and staff expenses (requests only for oneself and only through the server, amount and date
+checks, head of department then DAF, the budget actual, payment by the Cashier from an account of the right kind with
+enough money, the cash book equal to the ledger, advances one at a time, posted to staff advances without names and
+deducted by the payroll only once paid, returned / withdrawn / cancelled requests, the old floats closed, categories
+set up by Finance). Run them on a freshly seeded server
 (`npm run seed:ralga` first): some checks use the seeded documents.

@@ -139,6 +139,36 @@ function voucherPaid(dao, v, account, entry, actor, meta) {
   return j;
 }
 
+// ------------------------------------------------------------------ staff expenses
+/**
+ * A staff expense paid from a cash book: a claim debits its expense account (department, funding source and budget
+ * line), a salary advance debits staff advances (recovered by the payroll); the cash account is credited. Advances
+ * carry no name in the ledger — like salaries, they stay with the people who handle them.
+ */
+function staffExpense(dao, r, account, entry, actor, meta) {
+  if (r.getString("journal")) return null;
+  const amount = r0(r.getFloat("amount"));
+  if (amount <= 0) return null;
+  const advance = r.getString("kind") === "advance";
+  const number = r.getString("number");
+  const employee = find(dao, "users", r.getString("employee"));
+  const category = find(dao, "expenses_categories", r.getString("expenseCategory"));
+  const what = advance ? `Salary advance ${number}` : `${category ? category.getString("name") : "Staff expense"} — ${employee ? employee.getString("name") : number}`;
+  const d = advance ? { department: r.getString("department") } : dims(dao, r.getString("budget_line"), { department: r.getString("department"), funding_source: r.getString("funding_source") });
+  const j = ledger.post(dao, {
+    date: openDay(dao, day(entry.getString("entry_date"))), source: { type: "staff_expense", id: r.id, number },
+    description: (advance ? what : `${number} — ${what}`).slice(0, 500), actor, meta, what: `the payment of ${number}`,
+    lines: [
+      Object.assign({ account: r.getString("gl_account"), debit: amount, description: (advance ? what : `${what}: ${r.getString("description")}`).slice(0, 300) }, d),
+      { account: account.getString("gl_account"), credit: amount, funding_source: account.getString("funding_source"), description: `${account.getString("code")} · ${String(r.getString("payment_method")).replace(/_/g, " ")} ${r.getString("payment_reference")}`.trim().slice(0, 300) },
+    ],
+  });
+  r.set("journal", j.id);
+  entry.set("journal", j.id);
+  dao.saveRecord(entry);
+  return j;
+}
+
 // ------------------------------------------------------------------ bank and cash
 /**
  * One journal for the cash book entries of one document: the bank side of each entry against its counter-account
@@ -324,4 +354,4 @@ function backfill(dao, actor, meta) {
   return out;
 }
 
-module.exports = { openDay, dims, invoice, invoiceCancelled, voucherPaid, receipt, transfer, statementEntry, reversal, bankOpening, bankOpeningChanged, backfill };
+module.exports = { openDay, dims, invoice, invoiceCancelled, voucherPaid, staffExpense, receipt, transfer, statementEntry, reversal, bankOpening, bankOpeningChanged, backfill };

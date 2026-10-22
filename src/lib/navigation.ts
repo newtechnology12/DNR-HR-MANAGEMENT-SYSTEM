@@ -60,7 +60,7 @@ export const NAVIGATION: NavGroup[] = [
     label: "Requests",
     items: [
       { key: "myRequisitions", label: "Purchase requisitions", link: "/dashboard/procurement/requisitions", icon: ClipboardList, perms: ["create_purchase_requisition"], hideIf: ["view_purchase_requisitions", "approve_purchase_requisitions"] },
-      { key: "myExpenses", label: "Expenses & petty cash", link: "/dashboard/my/expenses", icon: Banknote, perms: ["create_expense", "access_employee_portal"] },
+      { key: "myExpenses", label: "Expenses & advances", link: "/dashboard/my/expenses", icon: Banknote, perms: ["create_expense", "access_employee_portal"] },
       { key: "myEquipment", label: "Equipment requests", link: "/dashboard/my/equipment", icon: Laptop, perms: ["view_assets_requests", "access_employee_portal"] },
     ],
   },
@@ -98,6 +98,7 @@ export const NAVIGATION: NavGroup[] = [
       { key: "invoices", label: "Supplier invoices", link: "/dashboard/finance/invoices", icon: Receipt, perms: ["view_invoices", "manage_invoices", "resolve_invoice_exceptions", "approve_invoices", "record_payments"] },
       { key: "vouchers", label: "Payment vouchers", link: "/dashboard/finance/vouchers", icon: FileCheck2, perms: ["view_payment_vouchers", "manage_payment_vouchers", "approve_payment_vouchers", "record_payments"] },
       { key: "payments", label: "Payments", link: "/dashboard/finance/payments", icon: Banknote, perms: ["view_invoices", "view_payment_vouchers", "record_payments"] },
+      { key: "staffExpenses", label: "Staff expenses & advances", link: "/dashboard/finance/staff-expenses", icon: CircleDollarSign, perms: ["view_expenses", "view_employee_prepayments", "record_payments", "approve_or_reject_expense"] },
       { key: "payablesReports", label: "Payables reports", link: "/dashboard/finance/reports", icon: BarChart3, perms: ["view_payment_vouchers", "manage_payment_vouchers", "view_invoices", "export_invoices"] },
     ],
   },
@@ -162,11 +163,8 @@ export const NAVIGATION: NavGroup[] = [
   },
   {
     key: "expenses",
-    label: "Petty cash & expenses",
+    label: "Vehicles & expense reports",
     items: [
-      { key: "expenseRequests", label: "Expense requests", link: "/dashboard/hr/prepayments", icon: CircleDollarSign, perms: ["view_expenses"] },
-      { key: "pettyCashAccounts", label: "Petty cash accounts", link: "/dashboard/finance/petty-cash-accounts", icon: Coins, perms: ["view_petty_cash_accounts"] },
-      { key: "pettyCashRequests", label: "Petty cash requests", link: "/dashboard/finance/petty-cash-requests", icon: GitPullRequest, perms: ["view_petty_cash_requests"] },
       { key: "carManagement", label: "Vehicle requests", link: "/dashboard/finance/carmanagement", icon: CarFront, perms: ["view_petty_cash_requests"] },
       { key: "expenseReports", label: "Expense reports", link: "/dashboard/reports/expense-reports", icon: BarChart3, perms: ["view_expense_reports"] },
     ],

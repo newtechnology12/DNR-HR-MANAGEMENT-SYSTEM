@@ -321,6 +321,20 @@ const DOCS = {
       requester: doc.getString("prepared_by"), number: doc.getString("number"), title: doc.getString("description").slice(0, 200),
     }),
   },
+  // Staff expenses and salary advances: head of department → DAF; paid by the Cashier from a cash book.
+  staff_expense: {
+    collection: "prepayments",
+    approvePermission: "approve_or_reject_expense",
+    label: "staff expense",
+    link: (id) => `/dashboard/finance/staff-expenses/${id}`,
+    status: { pending: "pending_approval", approved: "approved", rejected: "rejected", returned: "returned", cancelled: "cancelled" },
+    // The member of staff the money is for can never approve it.
+    context: (doc) => ({
+      amount: Math.round(doc.getFloat("amount")), currency: "RWF", department: doc.getString("department"), category: "", branch: "",
+      funding_source: doc.getString("funding_source"), requester: doc.getString("employee"), number: doc.getString("number"),
+      title: `${doc.getString("kind") === "advance" ? "Salary advance" : "Expense claim"}: ${doc.getString("description")}`.slice(0, 200),
+    }),
+  },
   period_reopen: {
     collection: "period_reopen_requests",
     approvePermission: "reopen_periods",

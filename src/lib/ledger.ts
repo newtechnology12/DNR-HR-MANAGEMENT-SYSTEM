@@ -41,6 +41,7 @@ export const JOURNAL_SOURCES: Record<string, string> = {
   bank_transfer: "Transfer",
   statement_line: "Bank statement line",
   bank_opening: "Bank opening balance",
+  staff_expense: "Staff expense or advance",
   depreciation_run: "Depreciation",
   asset_disposal: "Asset disposal",
   asset: "Asset capitalisation",

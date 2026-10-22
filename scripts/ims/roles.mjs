@@ -182,7 +182,8 @@ export const MATRIX = {
   // ---------------------------------------------------------------- petty cash & staff expenses
   view_expenses: [...FINANCE_READERS, "CASHIER"],
   create_expense: ALL_STAFF.filter((c) => c !== "INTERNAL_AUDITOR"),
-  approve_or_reject_expense: ["DAF"],
+  // staff expenses and salary advances: the head of department first, then the DAF; the SG when the DAF is the requester
+  approve_or_reject_expense: ["DAF", "HOD", "SG"],
   view_expense_reports: [...FINANCE_READERS, "CASHIER"],
   view_employee_prepayments: ["DAF", "ACCOUNTANT", "HR_PAYROLL", "INTERNAL_AUDITOR"],
   create_employee_prepayments: ["ACCOUNTANT"],

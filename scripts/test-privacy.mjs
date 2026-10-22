@@ -176,22 +176,16 @@ await check("store & asset officer sees every equipment request", async () => {
 });
 
 console.log("\nNobody decides on their own request");
-await check("a staff petty cash request is always created as pending", async () => {
-  const r = await staff.collection("petty_cash_requests").create({ amount: 1000, notes: "privacy test", requested_by: id(staff), status: "approved", approved_by: id(staff) });
-  created.push(["petty_cash_requests", r.id]);
-  assert(r.status === "pending" && !r.approved_by, `created as ${r.status}`);
-  await refused(staff.collection("petty_cash_requests").update(r.id, { status: "approved" }), "approve");
-  await refused(cashier.collection("petty_cash_requests").update(r.id, { status: "approved" }), "approve");
-  const ok = await daf.collection("petty_cash_requests").update(r.id, { status: "approved", approved_by: id(daf) });
-  assert(ok.status === "approved", "DAF could not approve");
+await check("petty cash requests are closed: money is asked for as a staff expense, decided through the approvals", async () => {
+  await refused(staff.collection("petty_cash_requests").create({ amount: 1000, notes: "privacy test", requested_by: id(staff) }));
+  await refused(daf.collection("petty_cash_requests").create({ amount: 1000, notes: "privacy test (DAF)", requested_by: id(daf) }));
+  const any = (await admin.collection("petty_cash_requests").getList(1, 1)).items[0];
+  if (any) await refused(daf.collection("petty_cash_requests").update(any.id, { status: "approved" }), "approve");
 });
-await check("the DAF cannot approve their own petty cash", async () => {
-  const r = await daf.collection("petty_cash_requests").create({ amount: 1000, notes: "privacy test (DAF)", requested_by: id(daf) });
-  created.push(["petty_cash_requests", r.id]);
-  await refused(daf.collection("petty_cash_requests").update(r.id, { status: "approved" }), "own request");
-});
-await check("staff cannot raise petty cash in a colleague's name", async () => {
-  await refused(staff.collection("petty_cash_requests").create({ amount: 1000, notes: "privacy test", requested_by: other.id }));
+await check("staff cannot raise an expense in a colleague's name or decide one directly", async () => {
+  await refused(staff.collection("prepayments").create({ employee: other.id, amount: 1000, description: "privacy test", status: "approved" }));
+  const mine = (await staff.collection("prepayments").getList(1, 1)).items[0];
+  if (mine) await refused(staff.collection("prepayments").update(mine.id, { status: "approved" }));
 });
 await check("equipment request: only the store officer decides, never the requester", async () => {
   const r = await staff.collection("assets_requests").create({ notes: "privacy test", requested_by: id(staff), status: "approved" });

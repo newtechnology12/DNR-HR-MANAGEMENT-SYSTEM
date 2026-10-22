@@ -200,14 +200,15 @@ function calculate(dao, year, month, branch) {
   for (const d of dao.findRecordsByFilter("departments", "id != ''", "", 500, 0) || []) depts[d.id] = d.getString("name");
   const desigs = {};
   for (const d of dao.findRecordsByFilter("designations", "id != ''", "", 1000, 0) || []) desigs[d.id] = d.getString("name");
-  // Approved salary advances not yet recovered.
-  const advanceCats = {};
-  for (const c of dao.findRecordsByFilter("expenses_categories", "id != ''", "", 500, 0) || []) if (/advance/i.test(c.getString("name"))) advanceCats[c.id] = true;
+  // Salary advances paid out to staff (staff expenses) by the month end and not yet recovered. An advance already on
+  // the payslip of another month's payroll (not cancelled or rejected) stays there: it is never deducted twice.
   const advances = {};
-  for (const x of dao.findRecordsByFilter("prepayments", "status = 'approved' && payroll = ''", "", 10000, 0) || []) {
-    if (!advanceCats[x.getString("expenseCategory")]) continue;
-    const d = x.getString("date") || x.getString("created");
-    if (d && d.slice(0, 10) > monthEnd.toISOString().slice(0, 10)) continue;
+  const lastDay = monthEnd.toISOString().slice(0, 10);
+  for (const x of dao.findRecordsByFilter("prepayments", "kind = 'advance' && status = 'paid' && recovered_in = ''", "paid_at", 10000, 0) || []) {
+    const d = x.getString("paid_at");
+    if (!d || d.slice(0, 10) > lastDay) continue;
+    const held = dao.findRecordsByFilter("employees_payrolls", "prepayments ~ {:x} && (period_year != {:y} || period_month != {:m}) && payroll_status != 'cancelled' && payroll_status != 'rejected'", "", 1, 0, { x: x.id, y: year, m: month }) || [];
+    if (held.length) continue;
     (advances[x.getString("employee")] = advances[x.getString("employee")] || []).push(x);
   }
 
@@ -345,13 +346,6 @@ function markPaid(dao, auth, id, input, meta) {
   const slips = dao.findRecordsByFilter("employees_payrolls", "payroll = {:p}", "", 5000, 0, { p: p.id }) || [];
   let repaid = 0;
   for (const sl of slips) {
-    for (const pid of sl.getStringSlice("prepayments") || []) {
-      try {
-        const x = dao.findRecordById("prepayments", pid);
-        x.set("payroll", p.id);
-        dao.saveRecord(x);
-      } catch (_) {}
-    }
     // loan instalments recovered through this payroll
     for (const d of core.parseJson(sl, "loan_deductions", []) || []) {
       let loan;
@@ -584,6 +578,24 @@ function onApproved(dao, p, actor, meta) {
     date, source: { type: "payroll", id: p.id, number: p.getString("number") }, description: `Payroll ${p.getString("period_label")}`, actor, meta,
     what: `the ${p.getString("period_label")} payroll`, lines,
   });
+  // the salary advances deducted on the payslips are recovered by this payroll (the journal credits staff advances)
+  const recoveredAt = new Date().toISOString();
+  for (const sl of slips) {
+    for (const pid of sl.getStringSlice("prepayments") || []) {
+      let x;
+      try {
+        x = dao.findRecordById("prepayments", pid);
+      } catch (_) {
+        continue;
+      }
+      if (x.getString("kind") !== "advance" || x.getString("status") !== "paid") continue;
+      x.set("status", "recovered");
+      x.set("recovered_in", p.id);
+      x.set("recovered_at", recoveredAt);
+      dao.saveRecord(x);
+      core.audit(dao, { actor, action: "advance_recovered", collection: "prepayments", recordId: x.id, label: x.getString("number"), comment: `Deducted in the ${p.getString("period_label")} payroll`, meta });
+    }
+  }
   // budget actuals: payroll is never stopped by the budget, but overruns are shown
   const byLine = {};
   for (const c of charged) byLine[c.line.id] = { line: c.line, amount: (byLine[c.line.id] ? byLine[c.line.id].amount : 0) + c.amount };
