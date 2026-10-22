@@ -149,7 +149,7 @@ export default function UiKit() {
             search={{ value: search, onChange: setSearch, placeholder: "Search number, title or requester" }}
             chips={chips}
             onClear={() => { setStatus(""); setDept(""); setRange(["", ""]); }}
-            right={<ExportMenu onExport={() => notify.info("Exports the rows you can see, with the RALGA header.")} />}
+            right={<ExportMenu onExport={() => { notify.info("Exports the rows you can see, with the RALGA header."); }} />}
           >
             <FilterSelect label="Status" value={status} onChange={setStatus} options={[{ value: "pending_approval", label: "Pending approval" }, { value: "approved", label: "Approved" }, { value: "returned", label: "Returned" }]} />
             <FilterSelect label="Department" value={dept} onChange={setDept} options={[{ value: "Finance and Administration", label: "Finance and Administration" }, { value: "Capacity Building", label: "Capacity Building" }]} />

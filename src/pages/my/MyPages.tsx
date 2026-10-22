@@ -7,7 +7,7 @@ import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "react-query";
 import { format } from "date-fns";
-import { CalendarRange, Laptop, Plus, Wallet } from "lucide-react";
+import { CalendarRange, Laptop, Plus } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useAuth } from "@/context/auth.context";
 import { useRoles } from "@/context/roles.context";
@@ -18,7 +18,6 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/procurement";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LeaveFormModal } from "@/components/modals/LeaveFormModal";
-import { PettryCashRequestModal } from "@/components/modals/PettryCashRequestModal";
 import EmployeeAttendances from "@/pages/dashboard/EmployeeAttendances";
 import EmployeeLeaves from "@/pages/dashboard/EmployeeLeaves";
 import EmployeePrePayments from "@/pages/dashboard/EmployeePrePayments";
@@ -33,13 +32,10 @@ import {
 import CorrectionDialog, { CORRECTION_REASONS } from "@/components/workspace/CorrectionDialog";
 import {
   Button,
-  Column,
-  DataTable,
   EmptyState,
   Field,
   FilterSelect,
   Modal,
-  Num,
   Pill,
   Select,
   StatusPill,
@@ -293,44 +289,14 @@ export function MyDocuments() {
   );
 }
 
-// ------------------------------------------------------------------ expenses & petty cash
+// ------------------------------------------------------------------ expenses & advances
 export function MyExpenses() {
   const { uid } = useUid();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "petty" || params.get("new") === "petty" ? "petty" : "expenses";
-  const [pettyOpen, setPettyOpen] = React.useState(params.get("new") === "petty");
-  const petty = useQuery(["my-petty", uid], () => pocketbase.collection("petty_cash_requests").getFullList({ filter: `requested_by = "${uid}"`, sort: "-created", expand: "approved_by,rejected_by" }), { enabled: Boolean(uid) });
-  const rows = (petty.data || []) as any[];
-  const columns: Column<any>[] = [
-    { key: "notes", header: "For", clamp: true, cell: (r) => r.notes || "Cash request" },
-    { key: "amount", header: "Amount (RWF)", numeric: true, cell: (r) => <Num value={r.amount} />, total: <Num value={rows.reduce((a, r) => a + (Number(r.amount) || 0), 0)} /> },
-    { key: "status", header: "Status", cell: (r) => <StatusPill status={word(r.status)} sub={r.status === "approved" ? "Collect the cash from finance" : r.status === "rejected" ? r.rejected_reason : r.status === "pending" || !r.status ? "With finance" : undefined} /> },
-    { key: "created", header: "Asked", nowrap: true, align: "right", cell: (r) => <span className="text-ims-muted">{fmtWhen(r.created)}</span> },
-  ];
+  const [params] = useSearchParams();
   return (
     <main className={myPage}>
-      <MyHeader
-        title="Expenses & petty cash"
-        subtitle="Expenses you paid for RALGA (refunded after approval) and small cash advances from petty cash."
-        actions={tab === "petty" && <Button variant="primary" icon={Plus} onClick={() => setPettyOpen(true)}>Request petty cash</Button>}
-      />
-      <Tabs label="Expenses and petty cash" tabs={[{ key: "expenses", label: "Expense requests" }, { key: "petty", label: "Petty cash", count: petty.data ? rows.length : undefined }]} active={tab} onChange={(k) => setParams(k === "petty" ? { tab: "petty" } : {})} />
-      {tab === "expenses" ? (
-        <WCard><EmployeePrePayments employeeId={uid} autoOpen={params.get("new") === "expense"} /></WCard>
-      ) : (
-        <WCard flush className="overflow-hidden">
-          <DataTable
-            columns={columns}
-            rows={rows}
-            rowKey={(r) => r.id}
-            loading={petty.isLoading}
-            minWidth={600}
-            caption="My petty cash requests"
-            empty={<EmptyState icon={Wallet} text="No petty cash request yet. Use it for small urgent payments such as a courier, transport or small supplies." action={<Button variant="primary" icon={Plus} onClick={() => setPettyOpen(true)}>Request petty cash</Button>} />}
-          />
-        </WCard>
-      )}
-      <PettryCashRequestModal open={pettyOpen} setOpen={(o: boolean) => setPettyOpen(o)} record={null} employeeId={uid} onComplete={() => { setPettyOpen(false); petty.refetch(); }} />
+      <MyHeader title="Expenses & advances" subtitle="Money you spent for RALGA, refunded after approval, and salary advances." />
+      <WCard><EmployeePrePayments employeeId={uid} autoOpen={params.get("new") === "expense"} /></WCard>
     </main>
   );
 }

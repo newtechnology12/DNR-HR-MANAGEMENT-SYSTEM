@@ -20,7 +20,7 @@ import { errorMessage } from "@/lib/procurement";
 import { ITEM_STATUS, PLAN_STATUS, TYPE_INFO, plansApi } from "@/lib/plans";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LeaveFormModal } from "@/components/modals/LeaveFormModal";
-import { PettryCashRequestModal } from "@/components/modals/PettryCashRequestModal";
+import ExpenseRequestDialog from "@/components/expenses/ExpenseRequestDialog";
 import { PayslipDialog, payrollOf } from "@/pages/hr/payroll/Payslip";
 import {
   AttendanceCalendar, AttendanceNotice, ClockCard, LeaveBalance, Pill, RequestTable, RequestTabs, ReqTab, WCard, WHead, WLink, btnNavyOutline, btnOutline, btnPrimary,
@@ -43,7 +43,7 @@ export default function MyDashboard() {
   const year = new Date().getFullYear();
   const workingDays: string[] = settings?.working_days?.length ? settings.working_days : DEFAULT_WORKING_DAYS;
   const [tab, setTab] = React.useState<ReqTab>("all");
-  const [dialog, setDialog] = React.useState<"" | "correction" | "leave" | "petty" | "equipment">("");
+  const [dialog, setDialog] = React.useState<"" | "correction" | "leave" | "expense" | "equipment">("");
   const [slip, setSlip] = React.useState<any>(null);
   const [hidePay, togglePay] = usePayHidden();
 
@@ -102,7 +102,7 @@ export default function MyDashboard() {
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-[18px]">
             <div>
               <h2 className="text-t-section">My requests</h2>
-              <div className="text-t-small text-ims-muted">Leave, expenses, petty cash, equipment and purchases</div>
+              <div className="text-t-small text-ims-muted">Leave, expenses and advances, equipment and purchases</div>
             </div>
             <RequestTabs rows={all} tab={tab} onTab={setTab} />
           </div>
@@ -110,8 +110,7 @@ export default function MyDashboard() {
             <span className="mr-0.5 self-center text-t-small font-bold text-ims-muted">New:</span>
             {[
               ["Leave", () => setDialog("leave"), canPerform("access_employee_portal")],
-              ["Expense", () => navigate("/dashboard/my/expenses?new=expense"), canPerform("create_expense")],
-              ["Petty cash", () => setDialog("petty"), canPerform("access_employee_portal")],
+              ["Expense or advance", () => setDialog("expense"), canPerform("create_expense") || canPerform("access_employee_portal")],
               ["Equipment", () => navigate("/dashboard/my/equipment?new=1"), canPerform("view_assets_requests")],
               ["Purchase requisition", () => navigate("/dashboard/procurement/requisitions/new"), canPerform("create_purchase_requisition")],
             ].filter((x) => x[2]).map(([l, fn]) => (
@@ -174,7 +173,7 @@ export default function MyDashboard() {
 
       <CorrectionDialog open={dialog === "correction"} onClose={() => setDialog("")} days={cal.absent} uid={uid} />
       <LeaveFormModal open={dialog === "leave"} setOpen={(o: boolean) => !o && setDialog("")} record={null} employeeId={uid} onComplete={() => { setDialog(""); refresh(); }} />
-      <PettryCashRequestModal open={dialog === "petty"} setOpen={(o: boolean) => !o && setDialog("")} record={null} employeeId={uid} onComplete={() => { setDialog(""); refresh(); }} />
+      <ExpenseRequestDialog open={dialog === "expense"} onClose={() => setDialog("")} onSaved={() => { setDialog(""); refresh(); }} />
       {slip && <PayslipDialog slip={slip} payroll={payrollOf(slip)} onClose={() => setSlip(null)} />}
     </Page>
   );
