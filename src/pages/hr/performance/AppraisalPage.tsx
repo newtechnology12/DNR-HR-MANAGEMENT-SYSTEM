@@ -1,28 +1,66 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, ChevronDown, Lock, MessageSquareWarning, RefreshCw, Send, Share2 } from "lucide-react";
+import { CheckCircle2, CornerUpLeft, Lock, MessageSquare, MessageSquareWarning, RefreshCw, Send, Share2 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge, EmptyState, StatusBadge } from "@/components/enterprise/ui";
+import { StatusBadge } from "@/components/enterprise/ui";
 import { errorMessage } from "@/lib/procurement";
-import { APPRAISAL_STATUS, CLAIM_STATUS, GRADE_TONE, Section, appraisalApi, gradeOf, scoreOf } from "@/lib/hr";
-import { Field, showDate, textareaCls, useMe } from "@/components/portal/kit";
+import { APPRAISAL_STATUS, CLAIM_STATUS, Section, appraisalApi, gradeOf, scoreOf } from "@/lib/hr";
+import { Segmented, useMe } from "@/components/portal/kit";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  DetailHeader,
+  Details,
+  EmptyState,
+  Field,
+  KpiBand,
+  Modal,
+  Num,
+  Page,
+  Tabs,
+  Textarea,
+  TwoLine,
+  fmtDate,
+  fmtNumber,
+} from "@/components/ims";
 import { cn } from "@/utils";
 
 const LOCKED = ["shared", "acknowledged", "finalized"];
+const LIST = "/dashboard/hr/performance";
+
+/** Grades are scores, not statuses: a coloured dot and the text ("C · Meets expectations"). */
+export const GRADE_DOT: Record<string, string> = { A: "bg-ims-success", B: "bg-ims-success/55", C: "bg-ims-link", D: "bg-ims-priority-high", E: "bg-ims-danger" };
+
+export function Grade({ grade, label, prefix, small }: { grade?: string | null; label?: string | null; prefix?: string; small?: boolean }) {
+  if (!grade) return <span className="text-ims-faint">—</span>;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-ims-text", small ? "text-t-small" : "text-t-body")}>
+      <span className={cn("h-2 w-2 shrink-0 rounded-full", GRADE_DOT[grade] || "bg-ims-faint")} aria-hidden />
+      <span className="font-semibold">{prefix ? `${prefix} ${grade}` : grade}</span>
+      {label && <span className="text-ims-body">· {label}</span>}
+    </span>
+  );
+}
+
+type TabKey = "evaluate" | "scores" | "activity" | "claims";
 
 export default function AppraisalPage() {
   const { appraisalId } = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const me = useMe();
   const { canPerform } = useRoles();
   const [sharing, setSharing] = React.useState(false);
+  const [finalising, setFinalising] = React.useState(false);
+  const [tab, setTab] = React.useState<TabKey | null>(null);
 
   const q = useQuery(["appraisal", appraisalId], async () => {
     const a: any = await pocketbase.collection("appraisals").getOne(appraisalId!, { expand: "employee,department,evaluators,cycle" });
@@ -39,7 +77,7 @@ export default function AppraisalPage() {
   };
   const act = useMutation(({ action, body }: { action: "finalize" | "refresh" | "share"; body?: any }) => appraisalApi.action(appraisalId!, action, body || {}), {
     onSuccess: (_, v) => {
-      toast.success(v.action === "finalize" ? "Appraisal finalised" : v.action === "share" ? "Results shared — the employee has been notified" : "Activity score refreshed");
+      toast.success(v.action === "finalize" ? "Appraisal finalised and locked" : v.action === "share" ? "Results shared and the employee notified" : "Activity score refreshed");
       setSharing(false);
       refresh();
     },
@@ -48,8 +86,29 @@ export default function AppraisalPage() {
     },
   });
 
-  if (q.isLoading || me.isLoading) return <div className="mx-auto max-w-5xl space-y-3 p-4"><Skeleton className="h-10 w-72" /><Skeleton className="h-96 w-full" /></div>;
-  if (!q.data) return <div className="p-4"><EmptyState icon={Lock} title="Appraisal not available" text="Only the employee (after results are shared), their evaluators and HR can open it." /></div>;
+  if (q.isLoading || me.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-80 w-full" />
+      </Page>
+    );
+  }
+  if (!q.data) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState
+            icon={Lock}
+            text="This appraisal is not available. Only the employee (once the results are shared), the evaluators and HR can open it."
+            action={<ButtonLink to={LIST}>Back to appraisals</ButtonLink>}
+          />
+        </Card>
+      </Page>
+    );
+  }
   const { a, reviews, claims } = q.data;
   const tpl = a.template_snapshot || {};
   const sections: Section[] = tpl.sections || [];
@@ -63,103 +122,169 @@ export default function AppraisalPage() {
   const aw = Number(tpl.activity_weight) || 0;
   const detail = a.activity_detail || {};
 
+  const canShare = isManager && ["submitted", "in_progress", "disputed"].includes(a.status) && a.evaluator_score > 0;
+  const canFinalise = canPerform("manage_appraisals") && ["shared", "acknowledged"].includes(a.status);
+  const canRefresh = isManager && !LOCKED.includes(a.status);
+  const canRespond = !isEmployee && (isEvaluator || isManager);
+  const showSectionScores = (isManager || isEvaluator) && others.length > 0;
+  const hasScores = showSectionScores || Boolean(a.manager_summary || a.employee_comment);
+  const openClaims = (claims as any[]).filter((c) => c.status === "open").length;
+  const evaluatorNames = (a.expand?.evaluators || []).map((u: any) => u.name).join(", ");
+
+  const tabs = [
+    ...(canRate ? [{ key: "evaluate", label: "Your evaluation" }] : []),
+    ...(hasScores ? [{ key: "scores", label: "Scores" }] : []),
+    { key: "activity", label: "Activity score" },
+    ...((claims as any[]).length ? [{ key: "claims", label: "Claims", count: (claims as any[]).length }] : []),
+  ];
+  const fallback: TabKey = canRespond && openClaims ? "claims" : canRate ? "evaluate" : hasScores ? "scores" : "activity";
+  const active: TabKey = tab && tabs.some((t) => t.key === tab) ? tab : fallback;
+
+  const reviewers = [...others, ...(self ? [self] : [])];
+  const sectionColumns: Column<Section>[] = [
+    { key: "title", header: "Section", clamp: true, cell: (s) => <span className="font-semibold text-ims-text">{s.title}</span> },
+    { key: "weight", header: "Weight (%)", numeric: true, cell: (s) => <span className="text-ims-muted">{fmtNumber(s.weight, true)}</span> },
+    ...reviewers.map((r: any) => ({
+      key: r.id,
+      header: `${r.expand?.evaluator?.name || "Evaluator"}${r.role === "self" ? " (self)" : ""}`,
+      numeric: true,
+      cell: (s: Section) => {
+        const v = scoreOf([s], tpl.rating_scale || [], r.ratings || {}).bySection[s.id];
+        return <span className={cn(r.role === "self" && "text-ims-muted")}>{v ?? "—"}</span>;
+      },
+    })),
+    { key: "average", header: "Average", numeric: true, cell: (s) => <span className="font-bold text-ims-text">{a.section_scores?.[s.id] ?? "—"}</span> },
+  ];
+  const comments = [...others, ...(self && self.status === "submitted" ? [self] : [])].filter((r: any) => r.overall_comment);
+
+  const activityRows = [
+    { key: "completion", label: "Plan completion", value: detail.completion, weight: "50%", basis: `${detail.completed ?? 0} of ${detail.plans ?? 0} plans completed` },
+    { key: "on_time", label: "Completed on time", value: detail.on_time, weight: "25%", basis: "Completed before the deadline" },
+    { key: "reporting", label: "Reporting", value: detail.reporting, weight: "25%", basis: `${detail.reports ?? 0} reports of ${detail.expected_reports ?? 0} expected` },
+    { key: "reviewed", label: "Reports reviewed", value: detail.reports ? Math.round(((detail.reports_reviewed || 0) / detail.reports) * 100) : null, weight: "Not counted", basis: `${detail.reports_reviewed ?? 0} reviewed by supervisors` },
+  ];
+  const activityColumns: Column<(typeof activityRows)[number]>[] = [
+    { key: "label", header: "Measure", cell: (r) => <span className="font-semibold text-ims-text">{r.label}</span>, sub: (r) => r.basis },
+    { key: "weight", header: "Weight", align: "right", nowrap: true, width: "140px", cell: (r) => <span className="text-ims-muted">{r.weight}</span> },
+    { key: "value", header: "Result (%)", numeric: true, width: "140px", cell: (r) => (r.value === null || r.value === undefined ? <span className="text-ims-faint">n/a</span> : <Num value={r.value} decimals />), total: a.activity_score ?? "—" },
+  ];
+
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4 px-3 pb-12 pt-3 sm:px-6 sm:pt-5">
-      <button type="button" onClick={() => navigate("/dashboard/hr/performance")} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-slate-600 hover:text-slate-900 print:hidden"><ArrowLeft size={15} /> Appraisals</button>
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to appraisals", to: LIST }}
+        type={a.expand?.cycle?.name || "Appraisal"}
+        status={APPRAISAL_STATUS[a.status]?.label || a.status}
+        statusNote={APPRAISAL_STATUS[a.status]?.note}
+        title={a.expand?.employee?.name || "Appraisal"}
+        facts={[
+          a.expand?.department?.name,
+          { label: "Evaluated by", value: evaluatorNames || "HR" },
+          a.grade ? <Grade key="grade" prefix="Grade" grade={a.grade} label={a.grade_label} /> : null,
+          a.expand?.cycle?.due_date ? { label: "Due", value: fmtDate(a.expand.cycle.due_date) } : null,
+        ]}
+        actions={
+          <>
+            {canRefresh && (
+              <Button icon={RefreshCw} loading={act.isLoading && act.variables?.action === "refresh"} onClick={() => act.mutate({ action: "refresh" })}>
+                Refresh activity score
+              </Button>
+            )}
+            {canShare ? (
+              <Button variant="primary" icon={Share2} onClick={() => setSharing(true)}>Share results</Button>
+            ) : canFinalise ? (
+              <Button variant="primary" icon={Lock} onClick={() => setFinalising(true)}>Finalise</Button>
+            ) : null}
+          </>
+        }
+      />
 
-      <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-[12px] font-medium uppercase tracking-wider text-slate-500">{a.expand?.cycle?.name}</p>
-            <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-slate-900">{a.expand?.employee?.name}</h1>
-            <p className="text-[13px] text-slate-600">{a.expand?.department?.name} · evaluators: {(a.expand?.evaluators || []).map((u: any) => u.name).join(", ") || "HR"}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5"><StatusBadge status={a.status} map={APPRAISAL_STATUS} />{a.grade && <Badge tone={GRADE_TONE[a.grade]}>Grade {a.grade} · {a.grade_label}</Badge>}</div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-center">
-              <p className="text-[40px] font-bold leading-none tabular-nums text-slate-900">{a.final_score || "—"}</p>
-              <p className="text-[12px] text-slate-500">final score / 100</p>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {[
-            ["Evaluators", a.evaluator_score || "—", `${100 - aw}% of the final score · ${others.length} review${others.length === 1 ? "" : "s"}`],
-            ["Activity (system)", a.activity_score ?? "—", `${aw}% · ${detail.plans ?? 0} plans, ${detail.reports ?? 0} reports`],
-            ["Self-assessment", a.self_score || "—", "For discussion, not counted"],
-          ].map(([k, v, s]) => (
-            <div key={k as string} className="rounded-lg bg-slate-50 px-3 py-2.5">
-              <p className="text-[11.5px] text-slate-500">{k}</p>
-              <p className="text-[20px] font-semibold tabular-nums">{v}</p>
-              <p className="text-[11.5px] text-slate-500">{s}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2 print:hidden">
-          {isManager && ["submitted", "in_progress", "disputed"].includes(a.status) && a.evaluator_score > 0 && <Button onClick={() => setSharing(true)}><Share2 size={15} /> Share results with employee</Button>}
-          {canPerform("manage_appraisals") && ["shared", "acknowledged"].includes(a.status) && <Button variant="outline" onClick={() => act.mutate({ action: "finalize" })}><Lock size={15} /> Finalise</Button>}
-          {isManager && !LOCKED.includes(a.status) && <Button variant="ghost" onClick={() => act.mutate({ action: "refresh" })}><RefreshCw size={15} /> Refresh activity score</Button>}
-        </div>
-      </header>
+      <KpiBand
+        items={[
+          { label: "Final score", value: a.final_score || "—", sub: "Out of 100" },
+          { label: "Evaluators", value: a.evaluator_score || "—", sub: `${100 - aw}% of the final score · ${others.length} review${others.length === 1 ? "" : "s"}` },
+          { label: "Activity (system)", value: a.activity_score ?? "—", sub: `${aw}% · ${detail.plans ?? 0} plans, ${detail.reports ?? 0} reports` },
+          { label: "Self-assessment", value: a.self_score || "—", sub: "For discussion, not counted" },
+        ]}
+      />
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
-        <h2 className="text-[14px] font-semibold text-slate-900">Activity score — calculated by the system</h2>
-        <p className="text-[12.5px] text-slate-500">From action plans and work reports between {showDate(a.expand?.cycle?.period_start)} and {showDate(a.expand?.cycle?.period_end)}.{detail.note ? ` ${detail.note}` : ""}</p>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            ["Plan completion", detail.completion, "50%", `${detail.completed ?? 0} of ${detail.plans ?? 0} plans completed`],
-            ["Completed on time", detail.on_time, "25%", "Completed before the deadline"],
-            ["Reporting", detail.reporting, "25%", `${detail.reports ?? 0} reports / ${detail.expected_reports ?? 0} expected`],
-            ["Reports reviewed", detail.reports ? Math.round(((detail.reports_reviewed || 0) / detail.reports) * 100) : null, "info", `${detail.reports_reviewed ?? 0} reviewed by supervisors`],
-          ].map(([k, v, w, s]) => (
-            <div key={k as string} className="rounded-lg border border-slate-200 px-3 py-2">
-              <p className="flex justify-between text-[11.5px] text-slate-500"><span>{k}</span><span>{w}</span></p>
-              <p className="text-[17px] font-semibold tabular-nums">{v === null || v === undefined ? "n/a" : `${v}%`}</p>
-              <p className="text-[11px] text-slate-500">{s}</p>
-            </div>
-          ))}
+      {a.status === "disputed" && canRespond && openClaims > 0 && (
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-orange/30 bg-ims-orange-bg px-4 py-3 text-t-body text-ims-orange">
+          <CornerUpLeft size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>The employee raised {openClaims === 1 ? "a claim" : `${openClaims} claims`} about the results. Answer {openClaims === 1 ? "it" : "them"} under Claims, and correct the ratings if you accept.</span>
+        </p>
+      )}
+
+      <Tabs label="Appraisal sections" active={active} onChange={(k) => setTab(k as TabKey)} tabs={tabs} />
+
+      {/* Kept mounted so ratings typed so far survive switching tabs. */}
+      {canRate && (
+        <div hidden={active !== "evaluate"}>
+          <RatingForm key={mine?.id || "new"} appraisal={a} review={mine} sections={sections} onSaved={refresh} />
         </div>
-      </section>
+      )}
 
-      {canRate && <RatingForm key={mine?.id || "new"} appraisal={a} review={mine} sections={sections} onSaved={refresh} />}
-
-      {(isManager || isEvaluator) && others.length > 0 && (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
-          <h2 className="mb-3 text-[14px] font-semibold text-slate-900">Scores by section</h2>
-          <div className="overflow-x-auto">
-            <table className="dnr-grid w-full min-w-[640px] text-[13px]">
-              <thead><tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-3 py-2">Section</th><th className="px-3 py-2 text-right">Weight</th>{[...others, ...(self ? [self] : [])].map((r: any) => <th key={r.id} className="px-3 py-2 text-right">{r.expand?.evaluator?.name}{r.role === "self" ? " (self)" : ""}</th>)}<th className="px-3 py-2 text-right">Average</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">
-                {sections.map((s) => (
-                  <tr key={s.id}>
-                    <td className="px-3 py-2 font-medium">{s.title}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-500">{s.weight}%</td>
-                    {[...others, ...(self ? [self] : [])].map((r: any) => <td key={r.id} className={cn("px-3 py-2 text-right tabular-nums", r.role === "self" && "text-slate-500")}>{scoreOf([s], tpl.rating_scale || [], r.ratings || {}).bySection[s.id] ?? "—"}</td>)}
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{a.section_scores?.[s.id] ?? "—"}</td>
-                  </tr>
+      {active === "scores" && (
+        <>
+          {showSectionScores && (
+            <Card padded={false}>
+              <div className="px-[18px] pt-5 sm:px-5">
+                <CardHeader title="Scores by section" subtitle="Out of 100 for each reviewer; the average makes up the evaluator score." />
+              </div>
+              <DataTable columns={sectionColumns} rows={sections} rowKey={(s) => s.id} minWidth={560} caption="Scores by section" empty={<EmptyState compact text="This template has no sections." />} />
+            </Card>
+          )}
+          {showSectionScores && comments.length > 0 && (
+            <Card>
+              <CardHeader title="Comments" subtitle="Overall comments from the reviews." />
+              <ul className="divide-y divide-ims-divider">
+                {comments.map((r: any) => (
+                  <li key={r.id} className="py-3 first:pt-0 last:pb-0">
+                    <p className="text-t-small font-semibold text-ims-text">{r.expand?.evaluator?.name}{r.role === "self" ? " (self-assessment)" : ""}</p>
+                    <p className="mt-0.5 whitespace-pre-line text-t-body text-ims-body">“{r.overall_comment}”</p>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-3 space-y-2">
-            {[...others, ...(self && self.status === "submitted" ? [self] : [])].filter((r: any) => r.overall_comment).map((r: any) => (
-              <p key={r.id} className="rounded-lg bg-slate-50 px-3 py-2 text-[13px]"><span className="font-medium">{r.expand?.evaluator?.name}{r.role === "self" ? " (self)" : ""}:</span> “{r.overall_comment}”</p>
-            ))}
-          </div>
-        </section>
+              </ul>
+            </Card>
+          )}
+          {(a.manager_summary || a.employee_comment) && (
+            <Card>
+              <CardHeader title="Discussion" />
+              <Details
+                items={[
+                  ...(a.manager_summary ? [{ label: "Summary shared with the employee", value: <span className="whitespace-pre-line">{a.manager_summary}</span> }] : []),
+                  ...(a.employee_comment ? [{ label: "Employee's comment", value: <span className="whitespace-pre-line">{a.employee_comment}</span> }] : []),
+                ]}
+              />
+            </Card>
+          )}
+        </>
       )}
 
-      {(a.manager_summary || a.employee_comment) && (
-        <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:grid-cols-2 sm:p-5">
-          {a.manager_summary && <div><p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">Summary shared with the employee</p><p className="mt-1 text-[13.5px]">{a.manager_summary}</p></div>}
-          {a.employee_comment && <div><p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">Employee's comment</p><p className="mt-1 text-[13.5px]">{a.employee_comment}</p></div>}
-        </section>
+      {active === "activity" && (
+        <Card padded={false}>
+          <div className="px-[18px] pt-5 sm:px-5">
+            <CardHeader
+              title="Activity score"
+              subtitle={`Calculated by the system from action plans and work reports between ${fmtDate(a.expand?.cycle?.period_start)} and ${fmtDate(a.expand?.cycle?.period_end)}.${detail.note ? ` ${detail.note}` : ""}`}
+            />
+          </div>
+          <DataTable columns={activityColumns} rows={activityRows} rowKey={(r) => r.key} minWidth={520} totalLabel="Activity score" caption="Activity score" />
+        </Card>
       )}
 
-      {(claims as any[]).length > 0 && <Claims claims={claims as any[]} canRespond={!isEmployee && (isEvaluator || isManager)} onDone={refresh} />}
+      {active === "claims" && (claims as any[]).length > 0 && <Claims claims={claims as any[]} canRespond={canRespond} onDone={refresh} />}
 
       <ShareDialog open={sharing} onClose={() => setSharing(false)} busy={act.isLoading} onConfirm={(summary) => act.mutate({ action: "share", body: { summary } })} appraisal={a} />
-    </div>
+      <ConfirmDialog
+        open={finalising}
+        onClose={() => setFinalising(false)}
+        title={`Finalise the appraisal of ${a.expand?.employee?.name || "this employee"}?`}
+        description="The scores and grade are locked and can no longer be changed."
+        confirmLabel="Finalise"
+        onConfirm={() => act.mutateAsync({ action: "finalize" })}
+      />
+    </Page>
   );
 }
 
@@ -177,68 +302,108 @@ export function RatingForm({ appraisal, review, sections, onSaved, self = false 
   const rated = sections.reduce((n, s) => n + s.criteria.filter((c) => ratings[c.id]?.value > 0).length, 0);
   const save = useMutation((submit: boolean) => appraisalApi.action(appraisal.id, "review", { ratings, overall_comment: comment, submit }), {
     onSuccess: (_, submit) => {
-      toast.success(submit ? (self ? "Self-assessment submitted — your supervisor will see it" : "Evaluation submitted") : "Draft saved");
+      toast.success(submit ? (self ? "Self-assessment submitted to your supervisor" : "Evaluation submitted") : "Draft saved");
       onSaved();
     },
     onError: (e) => {
       toast.error(errorMessage(e));
     },
   });
+  const commentId = `rating-comment-${appraisal.id}`;
   return (
-    <section className="rounded-xl border border-primary/30 bg-white shadow-card">
-      <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:px-5">
-        <div>
-          <h2 className="text-[15px] font-semibold text-slate-900">{self ? "Your self-assessment" : "Your evaluation"} {review?.status === "submitted" && <Badge tone="success" className="ml-1">Submitted</Badge>}</h2>
-          <p className="text-[12.5px] text-slate-500">{rated} of {total} criteria rated · scale {scale.map((s: any) => s.value).join("–")}</p>
+    <section className="rounded-card border border-ims-border bg-ims-card" aria-label={self ? "Your self-assessment" : "Your evaluation"}>
+      <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-t-card border-b border-ims-divider bg-ims-card/95 px-[18px] py-3 backdrop-blur sm:px-5">
+        <div className="min-w-0">
+          <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-t-section text-ims-text">
+            {self ? "Your self-assessment" : "Your evaluation"}
+            {review?.status === "submitted" && (
+              <span className="inline-flex items-center gap-1 text-t-small font-semibold text-ims-success">
+                <CheckCircle2 size={14} aria-hidden /> Submitted
+              </span>
+            )}
+          </h2>
+          <p className="mt-0.5 text-t-small text-ims-muted">{rated} of {total} criteria rated{scale.length ? ` · scale ${scale[0].value}–${scale[scale.length - 1].value}` : ""}</p>
         </div>
-        <div className={cn("flex items-center gap-3", self && "hidden")}>
-          <div className="text-right">
-            <p className="text-[11px] text-slate-500">Your score → projected final</p>
-            <p className="text-[18px] font-bold tabular-nums">{live.score ?? "—"} <span className="text-[13px] font-normal text-slate-500">→ {projected ?? "—"}</span></p>
+        {!self && (
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-t-small text-ims-muted">Your score → projected final</p>
+              <p className="text-[18px] font-extrabold tabular-nums text-ims-text">
+                {live.score ?? "—"} <span className="text-t-body font-normal text-ims-muted">→ {projected ?? "—"}</span>
+              </p>
+            </div>
+            {grade && <Grade grade={grade.grade} label={grade.label} />}
           </div>
-          {grade && <Badge tone={GRADE_TONE[grade.grade]}>{grade.grade} · {grade.label}</Badge>}
-        </div>
+        )}
       </header>
-      <div className="space-y-5 p-4 sm:p-5">
-        <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
-          {scale.map((s: any) => <span key={s.value}><span className="font-semibold text-slate-900">{s.value}</span> {s.label}</span>)}
-        </div>
+      <div className="space-y-6 px-[18px] py-5 sm:px-5">
+        <p className="flex flex-wrap gap-x-4 gap-y-1 rounded-control bg-ims-subtle px-3 py-2 text-t-small text-ims-body">
+          {scale.map((s: any) => (
+            <span key={s.value}><span className="font-bold text-ims-text">{s.value}</span> {s.label}</span>
+          ))}
+        </p>
         {sections.map((sec) => (
           <div key={sec.id}>
-            <div className="mb-2 flex items-baseline justify-between gap-2 border-b border-slate-200 pb-1">
-              <h3 className="text-[14px] font-semibold text-slate-900">{sec.title}</h3>
-              <span className="text-[12px] text-slate-500">weight {sec.weight}% · score {live.bySection[sec.id] ?? "—"}</span>
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2 border-b border-ims-border pb-2">
+              <h3 className="text-[15px] font-extrabold text-ims-text">{sec.title}</h3>
+              <span className="text-t-small text-ims-muted">Weight {sec.weight}% · score {live.bySection[sec.id] ?? "—"}</span>
             </div>
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-ims-divider">
               {sec.criteria.map((c) => {
                 const r = ratings[c.id] || { value: 0, comment: "" };
+                const notesOpen = Boolean(openNotes[c.id] || r.comment);
                 return (
-                  <li key={c.id} className="py-2.5">
+                  <li key={c.id} className="py-3">
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <div className="min-w-0">
-                        <p className="text-[13.5px] font-medium text-slate-900">{c.title}{Number(c.weight) !== 1 && <span className="ml-1 text-[11px] text-slate-500">×{c.weight}</span>}</p>
-                        {c.description && <p className="text-[12px] text-slate-500">{c.description}</p>}
+                        <p className="text-t-body font-semibold text-ims-text">
+                          {c.title}
+                          {Number(c.weight) !== 1 && <span className="ml-1.5 text-t-small font-normal text-ims-muted" title="Weight inside the section">×{c.weight}</span>}
+                        </p>
+                        {c.description && <p className="mt-0.5 text-t-small text-ims-muted">{c.description}</p>}
                       </div>
-                      <div className="flex shrink-0 items-center gap-1" role="radiogroup" aria-label={c.title}>
-                        {scale.map((s: any) => (
-                          <button
-                            key={s.value}
-                            type="button"
-                            role="radio"
-                            aria-checked={r.value === s.value}
-                            title={`${s.value} — ${s.label}`}
-                            onClick={() => setRatings((x) => ({ ...x, [c.id]: { ...r, value: s.value } }))}
-                            className={cn("h-10 w-10 rounded-lg border text-[14px] font-semibold transition-colors", r.value === s.value ? "border-primary bg-primary text-white" : "border-slate-200 text-slate-600 hover:border-slate-400")}
-                          >
-                            {s.value}
-                          </button>
-                        ))}
-                        <button type="button" onClick={() => setOpenNotes((x) => ({ ...x, [c.id]: !x[c.id] }))} className={cn("ml-1 rounded-md p-2 text-slate-400 hover:bg-slate-100", r.comment && "text-primaryDark")} aria-label="Add an example or comment"><ChevronDown size={16} /></button>
+                      <div className="flex shrink-0 flex-col items-start gap-1 md:items-end">
+                        <div className="flex items-center gap-1.5" role="radiogroup" aria-label={c.title}>
+                          {scale.map((s: any) => (
+                            <button
+                              key={s.value}
+                              type="button"
+                              role="radio"
+                              aria-checked={r.value === s.value}
+                              aria-label={`${s.value} — ${s.label}`}
+                              title={`${s.value} — ${s.label}`}
+                              onClick={() => setRatings((x) => ({ ...x, [c.id]: { ...r, value: s.value } }))}
+                              className={cn(
+                                "h-10 w-10 rounded-control border text-t-body font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus focus-visible:ring-offset-1",
+                                r.value === s.value ? "border-ims-primary bg-ims-primary text-white" : "border-ims-field bg-ims-card text-ims-body hover:bg-ims-subtle"
+                              )}
+                            >
+                              {s.value}
+                            </button>
+                          ))}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            icon={MessageSquare}
+                            aria-label={`Add an example or comment for ${c.title}`}
+                            aria-expanded={notesOpen}
+                            title="Add an example or comment"
+                            onClick={() => setOpenNotes((x) => ({ ...x, [c.id]: !x[c.id] }))}
+                            className={cn(r.comment && "text-ims-link")}
+                          />
+                        </div>
+                        {r.value > 0 && <p className="text-t-small text-ims-muted">{scale.find((s: any) => s.value === r.value)?.label}</p>}
                       </div>
                     </div>
-                    {r.value > 0 && <p className="mt-0.5 text-right text-[11.5px] text-slate-500 md:text-left">{scale.find((s: any) => s.value === r.value)?.label}</p>}
-                    {(openNotes[c.id] || r.comment) && (
-                      <textarea className={cn(textareaCls, "mt-2 min-h-[60px]")} rows={2} value={r.comment} placeholder="Example or evidence (optional)" onChange={(e) => setRatings((x) => ({ ...x, [c.id]: { ...r, comment: e.target.value } }))} />
+                    {notesOpen && (
+                      <Textarea
+                        className="mt-2 min-h-[64px]"
+                        rows={2}
+                        value={r.comment}
+                        aria-label={`Example or evidence for ${c.title}`}
+                        placeholder="Example or evidence (optional)"
+                        onChange={(e) => setRatings((x) => ({ ...x, [c.id]: { ...r, comment: e.target.value } }))}
+                      />
                     )}
                   </li>
                 );
@@ -246,17 +411,26 @@ export function RatingForm({ appraisal, review, sections, onSaved, self = false 
             </ul>
           </div>
         ))}
-        <Field label="Overall comment" hint="Strengths, areas to improve and agreed development actions.">
-          <textarea className={textareaCls} rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
+        <Field label="Overall comment" htmlFor={commentId} hint="Strengths, areas to improve and the development actions you agreed.">
+          <Textarea id={commentId} rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
         </Field>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="outline" disabled={save.isLoading} onClick={() => save.mutate(false)}>Save draft</Button>
-          <Button disabled={save.isLoading || rated < total} onClick={() => save.mutate(true)} title={rated < total ? "Rate every criterion first" : ""}><Send size={15} /> Submit evaluation</Button>
+        <div className="flex flex-col-reverse gap-3 border-t border-ims-divider pt-4 sm:flex-row sm:items-center sm:justify-end">
+          {rated < total && <p className="text-t-small text-ims-muted sm:mr-auto">Rate every criterion to submit ({total - rated} left).</p>}
+          <Button loading={save.isLoading && save.variables === false} disabled={save.isLoading} onClick={() => save.mutate(false)}>Save draft</Button>
+          <Button variant="primary" icon={Send} loading={save.isLoading && save.variables === true} disabled={save.isLoading || rated < total} onClick={() => save.mutate(true)}>
+            {self ? "Submit self-assessment" : "Submit evaluation"}
+          </Button>
         </div>
       </div>
     </section>
   );
 }
+
+const DECISIONS: { value: string; label: string; hint: string }[] = [
+  { value: "upheld", label: "Accept", hint: "Accept: I will correct the ratings" },
+  { value: "rejected", label: "Do not accept", hint: "Do not accept the claim" },
+  { value: "answered", label: "Answer only", hint: "Answer the question without changing the ratings" },
+];
 
 function Claims({ claims, canRespond, onDone }: { claims: any[]; canRespond: boolean; onDone: () => void }) {
   const [answer, setAnswer] = React.useState<Record<string, { decision: string; response: string }>>({});
@@ -270,52 +444,69 @@ function Claims({ claims, canRespond, onDone }: { claims: any[]; canRespond: boo
     },
   });
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
-      <h2 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-slate-900"><MessageSquareWarning size={16} className="text-amber-600" /> Claims and questions from the employee</h2>
+    <Card>
+      <CardHeader title="Claims and questions" subtitle="Raised by the employee about the results." />
       <ul className="space-y-3">
         {claims.map((c) => {
           const a = answer[c.id] || { decision: "answered", response: "" };
+          const replyId = `claim-reply-${c.id}`;
           return (
-            <li key={c.id} className="rounded-lg border border-slate-200 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[13px] font-medium">{c.criterion || "General"} <span className="font-normal text-slate-500">· {c.expand?.author?.name}, {showDate(c.created)}</span></p>
+            <li key={c.id} className="rounded-control border border-ims-border p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <span className="flex min-w-0 items-start gap-2 text-t-body">
+                  <MessageSquareWarning size={16} className="mt-0.5 shrink-0 text-ims-orange" aria-hidden />
+                  <TwoLine clamp={false} main={c.criterion || "General"} sub={`${c.expand?.author?.name || "Employee"} · ${fmtDate(c.created)}`} />
+                </span>
                 <StatusBadge status={c.status} map={CLAIM_STATUS} />
               </div>
-              <p className="mt-1 text-[13.5px] text-slate-800">{c.message}</p>
-              {c.response && <p className="mt-2 rounded-md bg-slate-50 px-3 py-2 text-[13px]"><span className="font-medium">{c.expand?.responded_by?.name}:</span> {c.response}</p>}
+              <p className="mt-2 whitespace-pre-line text-t-body text-ims-body">{c.message}</p>
+              {c.response && (
+                <p className="mt-3 rounded-control bg-ims-subtle px-3 py-2.5 text-t-body text-ims-body">
+                  <span className="font-semibold text-ims-text">{c.expand?.responded_by?.name}:</span> {c.response}
+                </p>
+              )}
               {canRespond && c.status === "open" && (
-                <div className="mt-3 space-y-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {[["upheld", "Accept — I will correct the ratings"], ["rejected", "Do not accept"], ["answered", "Answer only"]].map(([k, l]) => (
-                      <button key={k} type="button" onClick={() => setAnswer((x) => ({ ...x, [c.id]: { ...a, decision: k } }))} className={cn("h-8 rounded-full border px-3 text-[12.5px]", a.decision === k ? "border-primary bg-primary/10 text-primaryDark" : "border-slate-200 text-slate-600")}>{l}</button>
-                    ))}
+                <div className="mt-4 space-y-3 border-t border-ims-divider pt-4">
+                  <Field label="Decision">
+                    <Segmented ariaLabel="Decision" value={a.decision} onChange={(k) => setAnswer((x) => ({ ...x, [c.id]: { ...a, decision: k } }))} options={DECISIONS} className="sm:max-w-md" />
+                  </Field>
+                  <Field label="Your answer to the employee" required htmlFor={replyId} hint={a.decision === "upheld" ? "Say what you will correct; then update your ratings under Your evaluation." : "At least 10 characters."}>
+                    <Textarea id={replyId} rows={2} className="min-h-[72px]" value={a.response} onChange={(e) => setAnswer((x) => ({ ...x, [c.id]: { ...a, response: e.target.value } }))} />
+                  </Field>
+                  <div className="flex justify-end">
+                    <Button variant="primary" icon={Send} disabled={a.response.trim().length < 10 || respond.isLoading} loading={respond.isLoading && respond.variables === c.id} onClick={() => respond.mutate(c.id)}>
+                      Send answer
+                    </Button>
                   </div>
-                  <textarea className={textareaCls} rows={2} value={a.response} onChange={(e) => setAnswer((x) => ({ ...x, [c.id]: { ...a, response: e.target.value } }))} placeholder="Your answer to the employee" />
-                  <div className="flex justify-end"><Button size="sm" disabled={a.response.trim().length < 10 || respond.isLoading} onClick={() => respond.mutate(c.id)}>Send answer</Button></div>
                 </div>
               )}
             </li>
           );
         })}
       </ul>
-    </section>
+    </Card>
   );
 }
 
 function ShareDialog({ open, onClose, onConfirm, busy, appraisal }: { open: boolean; onClose: () => void; onConfirm: (s: string) => void; busy: boolean; appraisal: any }) {
   const [summary, setSummary] = React.useState(appraisal.manager_summary || "");
+  const name = appraisal.expand?.employee?.name || "the employee";
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg bg-white">
-        <DialogHeader>
-          <DialogTitle>Share results with {appraisal.expand?.employee?.name}</DialogTitle>
-          <DialogDescription>The employee sees the final score ({appraisal.final_score}), the grade, the scores per criterion and the evaluators' comments, and can acknowledge them or raise a claim.</DialogDescription>
-        </DialogHeader>
-        <Field label="Summary for the employee" hint="Key strengths, improvement areas, agreed objectives">
-          <textarea className={textareaCls} rows={4} value={summary} onChange={(e) => setSummary(e.target.value)} />
-        </Field>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={busy} onClick={() => onConfirm(summary)}><CheckCircle2 size={15} /> Share results</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Share results with ${name}?`}
+      description={`${name} sees the final score (${appraisal.final_score}), the grade, the ratings and the evaluators' comments, and can acknowledge them or raise a claim.`}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" icon={CheckCircle2} loading={busy} onClick={() => onConfirm(summary)}>Share results</Button>
+        </>
+      }
+    >
+      <Field label="Summary for the employee" htmlFor="share-summary" hint="Key strengths, areas to improve and the objectives you agreed.">
+        <Textarea id="share-summary" rows={4} value={summary} onChange={(e) => setSummary(e.target.value)} />
+      </Field>
+    </Modal>
   );
 }

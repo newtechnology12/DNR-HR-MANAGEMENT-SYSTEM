@@ -1,26 +1,12 @@
 import { useEffect, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-// import { read, utils, writeFile } from "xlsx";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "../ui/button";
-import { Form } from "../ui/form";
-import Loader from "../icons/Loader";
-import AppFormField from "../forms/AppFormField";
+import { format } from "date-fns";
 import pocketbase from "@/lib/pocketbase";
 import { toast } from "sonner";
-import AppFormAsyncSelect from "../forms/AppFormAsyncSelect";
-import AppFormSelect from "../forms/AppFormSelect";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-
+import AsyncSelectField from "../AsyncSelectField";
+import { Button, DatePicker, ErrorSummary, Field, FormError, Input, Modal, ModalSection, MoneyInput, Select, toDate } from "@/components/ims";
 
 function generateTemporaryPassword() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -28,20 +14,20 @@ function generateTemporaryPassword() {
 }
 
 const formSchema = z.object({
-  first_name: z.string().trim().min(1, { message: "First name is required" }),
-  last_name: z.string().trim().min(1, { message: "Last name is required" }),
+  first_name: z.string().trim().min(1, { message: "Enter the first name." }),
+  last_name: z.string().trim().min(1, { message: "Enter the last name." }),
   names: z.string().optional(),
   other_names: z.string().optional(),
   nationality: z.string().optional(),
   id_passport_number: z.string().optional(),
   personal_telephone: z.string().optional(),
-  personal_email: z.string().trim().min(1, { message: "Email is required — it is used to log in" }).email({ message: "Enter a valid email address" }),
+  personal_email: z.string().trim().min(1, { message: "Enter the email address: it is used to log in." }).email({ message: "Enter a valid email address, for example name@ralga.org.rw." }),
   father_name: z.string().optional(),
   mother_name: z.string().optional(),
   place_of_birth: z.string().optional(),
   full_address: z.string().optional(),
   department: z.string().optional(),
-  status: z.string().min(1, { message: "Status is required" }),
+  status: z.string().min(1, { message: "Choose the employee status." }),
   certified_academic_documents: z.string().optional(),
   previous_employers: z.string().optional(),
   number_of_dependents: z.coerce.string().optional(),
@@ -64,23 +50,29 @@ const formSchema = z.object({
   recent_pay_slips: z.string().optional(),
   recent_bank_statements: z.string().optional(),
   criminal_record: z.string().optional(),
-  role: z.string().min(1, { message: "Role is required" }),
+  role: z.string().min(1, { message: "Choose the role: it sets what the employee can see and do." }),
   designation: z.string().optional(),
   branch: z.string().optional(),
   employment_type: z.string().optional(),
   gender: z.string().optional(),
-  birth: z.date().optional(),
+  birth: z.date({ invalid_type_error: "Choose a valid date of birth." }).optional(),
   country: z.string().optional(),
   national_id: z.string().optional(),
   salary: z.string().optional(),
   bank_name: z.string().optional(),
   bank_account_number: z.string().optional(),
-  joined_at: z.date().optional(),
+  joined_at: z.date({ invalid_type_error: "Choose a valid joining date." }).optional(),
 });
 
+// Users store one "name"; split it so editing an employee does not start with empty name fields.
+const nameParts = (data?: any) => {
+  const parts = String(data?.name || "").trim().split(/\s+/).filter(Boolean);
+  return { first: parts[0] || "", last: parts.slice(1).join(" ") };
+};
+
 const getDefaultValues = (data?: any) => ({
-  first_name: data?.first_name || "",
-  last_name: data?.last_name || "",
+  first_name: data?.first_name || nameParts(data).first,
+  last_name: data?.last_name || nameParts(data).last,
   name: data?.names || "", // Map to database column `name`
   other_names: data?.other_names || "",
   nationality: data?.nationality || "",
@@ -129,10 +121,29 @@ const getDefaultValues = (data?: any) => ({
   joined_at: data?.joined_at ? new Date(data?.joined_at) : undefined,
 });
 
+const EMPLOYMENT_TYPES = [
+  { label: "Intern", value: "intern" },
+  { label: "Probation", value: "probation" },
+  { label: "Permanent", value: "permanent" },
+  { label: "Casual", value: "casual" },
+  { label: "Contract", value: "contract" },
+  { label: "Part-time", value: "part-time" },
+];
+const STATUSES = [
+  { label: "Active", value: "Active" },
+  { label: "Inactive", value: "Inactive" },
+  { label: "Suspended", value: "suspended" },
+  { label: "Terminated", value: "terminated" },
+  { label: "Resigned", value: "resigned" },
+];
+const GENDERS = ["Female", "Male"];
+
+/** Date values are kept as Date objects (the payload is unchanged); the picker works in "yyyy-MM-dd". */
+const ymd = (d?: Date | null) => (d instanceof Date && !Number.isNaN(d.getTime()) ? format(d, "yyyy-MM-dd") : "");
+const asyncSelectClass = "!min-h-[42px] !rounded-control !shadow-none";
+
 export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) {
   const values = useMemo(() => getDefaultValues(employee), [employee]);
-  // const [file, setFile] = useState<File | null>(null);
-  // const [isImporting, setIsImporting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -143,105 +154,9 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
     form.reset(values);
   }, [employee, values, form]);
 
-  // const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const file = e.target.files?.[0];
-  //   if (file) {
-  //     setFile(file);
-  //   }
-  // };
-
-  // const handleImport = async () => {
-  //   if (!file) return;
-
-  //   setIsImporting(true);
-  //   const reader = new FileReader();
-  //   reader.onload = async (event) => {
-  //     try {
-  //       const data = new Uint8Array(event.target?.result as ArrayBuffer);
-  //       const workbook = read(data, { type: "array" });
-  //       const sheetName = workbook.SheetNames[0];
-  //       const worksheet = workbook.Sheets[sheetName];
-  //       const jsonData = utils.sheet_to_json(worksheet);
-
-  //       for (const row of jsonData) {
-  //         const values = getDefaultValues(row);
-  //         await onSubmit(values);
-  //       }
-
-  //       toast.success("Employees imported successfully");
-  //       setFile(null);
-  //     } catch (error) {
-  //       console.error("Error importing file:", error);
-  //       toast.error("Failed to import employees. Please check the file format.");
-  //     } finally {
-  //       setIsImporting(false);
-  //     }
-  //   };
-  //   reader.readAsArrayBuffer(file);
-  // };
-
-  // const handleDownloadTemplate = () => {
-  //   const sampleData = [
-  //     {
-  //       first_name: "John",
-  //       last_name: "Doe",
-  //       other_names: "Michael",
-  //       nationality: "American",
-  //       id_passport_number: "123456789",
-  //       personal_telephone: "1234567890",
-  //       personal_email: "john.doe@example.com",
-  //       father_name: "John Doe Sr.",
-  //       mother_name: "Jane Doe",
-  //       place_of_birth: "New York",
-  //       full_address: "123 Main St, New York, USA",
-  //       department: "Engineering",
-  //       status: "Active",
-  //       certified_academic_documents: "Yes",
-  //       previous_employers: "XYZ Corp",
-  //       number_of_dependents: 2,
-  //       spouse_name: "Jane Doe",
-  //       spouse_telephone: "0987654321",
-  //       spouse_email: "jane.doe@example.com",
-  //       spouse_occupation: "Teacher",
-  //       spouse_employer: "ABC School",
-  //       spouse_position: "Senior Teacher",
-  //       spouse_medical_insurance: "Yes",
-  //       spouse_id_passport: "987654321",
-  //       children_names: "Alice, Bob",
-  //       recent_tested_diseases: "None",
-  //       physical_handicap: "None",
-  //       ongoing_education: "MBA",
-  //       other_employment: "None",
-  //       business_shareholding: "None",
-  //       bank_accounts: "Bank of America",
-  //       loans_ongoing: "None",
-  //       recent_pay_slips: "Yes",
-  //       recent_bank_statements: "Yes",
-  //       criminal_record: "None",
-  //       role: "Developer",
-  //       designation: "Software Engineer",
-  //       branch: "New York",
-  //       employment_type: "Permanent",
-  //       gender: "Male",
-  //       birth: "1990-01-01",
-  //       country: "USA",
-  //       national_id: "123456789",
-  //       salary: "60000",
-  //       bank_name: "Bank of America",
-  //       bank_account_number: "1234567890",
-  //       joined_at: "2020-01-01",
-  //     },
-  //   ];
-
-  //   const worksheet = utils.json_to_sheet(sampleData);
-  //   const workbook = utils.book_new();
-  //   utils.book_append_sheet(workbook, worksheet, "Employees");
-  //   writeFile(workbook, "Employee_Template.xlsx");
-  // };
-
   async function onSubmit(values: z.infer<typeof formSchema>) {
     console.log("Form submitted with values:", values); // Debugging log
-  
+
     // Map form values to database columns
     const data = {
       email: values.personal_email, // Map personal_email to email
@@ -288,39 +203,39 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
       recent_bank_statements: values.recent_bank_statements,
       criminal_record: values.criminal_record,
     };
-  
+
     console.log("Mapped data for submission:", data); // Debugging log
-  
+
     try {
       // Check if the user already exists
       const existingUser = await pocketbase
         .collection("users")
         .getFirstListItem(`email = "${values.personal_email}"`)
         .catch(() => null);
-  
+
       if (existingUser && !employee) {
         // If user exists and we're not updating an existing employee
         const shouldUpdate = confirm(
-          "User already exists. Do you want to update the existing record?"
+          "An employee with this email already exists. Update the existing record instead?"
         );
-  
+
         if (shouldUpdate) {
           // Update the existing user
           await pocketbase.collection("users").update(existingUser.id, {
             ...data,
           });
-  
+
           onComplete();
-          toast.success("Employee updated successfully");
+          toast.success(`${data.name} updated`);
           form.reset();
           return;
         } else {
           // Do not proceed with creating a new user
-          toast.info("User creation canceled.");
+          toast.info("No employee was created");
           return;
         }
       }
-  
+
       // If user does not exist or we're updating an existing employee
       // The database requires 8+ character passwords, so the old fixed "123456" default always failed.
       // Each new employee gets a unique temporary password, shown once to the person creating the account.
@@ -335,34 +250,34 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
         : pocketbase.collection("users").update(employee.id, {
             ...data,
           });
-  
+
       await q;
-  
+
       onComplete();
       if (employee) {
-        toast.success("Employee updated successfully");
+        toast.success(`${data.name} updated`);
       } else {
-        toast.success("Employee created successfully", {
-          description: `Temporary password: ${temporaryPassword} — share it privately; it will not be shown again.`,
+        toast.success(`${data.name} added`, {
+          description: `Temporary password: ${temporaryPassword}. Share it privately; it is not shown again.`,
           duration: 60000,
         });
       }
       form.reset();
-  
+
       // Handle department changes if updating an employee
       if (employee && employee.department !== data.department) {
         const newDepartment = await pocketbase
           .collection("departments")
           .getOne(data.department);
-  
+
         const oldDepartment = await pocketbase
           .collection("departments")
           .getOne(employee?.department);
-  
+
         await pocketbase.collection("departments").update(data.department, {
           employees: [...newDepartment.employees, employee.id],
         });
-  
+
         await pocketbase.collection("departments").update(employee.department, {
           employees: oldDepartment.employees.filter((e) => e !== employee.id),
         });
@@ -375,7 +290,7 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
           message: e.data.email.message,
         });
       } else {
-        toast.error("Something went wrong while processing your request.");
+        toast.error("The employee could not be saved. Check the details and try again.");
       }
     }
   }
@@ -426,378 +341,172 @@ export function EmployeeFormModal({ open, setOpen, employee, onComplete }: any) 
       );
   }
 
+  // ------------------------------------------------------------------ field helpers
+  const errors = form.formState.errors as Record<string, { message?: string } | undefined>;
+  const err = (k: string) => errors[k]?.message || null;
+  const id = (k: string) => `emp-${k}`;
+
+  const text = (name: string, label: string, o: { required?: boolean; placeholder?: string; type?: string; hint?: string; wide?: boolean; inputMode?: "numeric" | "tel" | "email" | "text" } = {}) => (
+    <Field label={label} required={o.required} htmlFor={id(name)} error={err(name)} hint={o.hint} className={o.wide ? "sm:col-span-2" : undefined}>
+      <Input id={id(name)} type={o.type || "text"} inputMode={o.inputMode} placeholder={o.placeholder} invalid={Boolean(err(name))} {...form.register(name as any)} />
+    </Field>
+  );
+
+  const asyncSelect = (name: "role" | "designation" | "department" | "branch", label: string, placeholder: string, loader: (a: { search: string }) => Promise<any[]>, required?: boolean) => (
+    <Field label={label} required={required} htmlFor={id(name)} error={err(name)}>
+      <Controller
+        control={form.control}
+        name={name}
+        render={({ field, fieldState }) => (
+          <AsyncSelectField
+            name={name}
+            inputId={id(name)}
+            placeholder={placeholder}
+            className={asyncSelectClass}
+            error={fieldState.error?.message}
+            loader={loader}
+            defaultOptions={true}
+            value={field.value}
+            onChange={(e: any) => field.onChange(e?.value)}
+          />
+        )}
+      />
+    </Field>
+  );
+
+  /** Controlled select; a stored value that is not in the list stays visible (and is kept) instead of looking empty. */
+  const choice = (name: "gender" | "employment_type" | "status", label: string, placeholder: string, options: { label: string; value: string }[], required?: boolean) => (
+    <Field label={label} required={required} htmlFor={id(name)} error={err(name)}>
+      <Controller
+        control={form.control}
+        name={name}
+        render={({ field, fieldState }) => (
+          <Select id={id(name)} name={field.name} ref={field.ref} value={field.value || ""} onBlur={field.onBlur} onChange={(e) => field.onChange(e.target.value)} invalid={Boolean(fieldState.error)}>
+            <option value="">{placeholder}</option>
+            {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {field.value && !options.some((o) => o.value === field.value) && <option value={field.value}>{field.value}</option>}
+          </Select>
+        )}
+      />
+    </Field>
+  );
+
+  const date = (name: "birth" | "joined_at", label: string, hint?: string) => (
+    <Field label={label} htmlFor={id(name)} error={err(name)} hint={hint}>
+      <Controller
+        control={form.control}
+        name={name}
+        render={({ field, fieldState }) => (
+          <DatePicker
+            id={id(name)}
+            value={ymd(field.value)}
+            max={name === "birth" ? format(new Date(), "yyyy-MM-dd") : undefined}
+            invalid={Boolean(fieldState.error)}
+            onChange={(v) => field.onChange(toDate(v) || undefined)}
+          />
+        )}
+      />
+    </Field>
+  );
+
+  const summary: FormError[] = form.formState.isSubmitted
+    ? Object.entries(errors)
+        .filter(([, e]) => e?.message)
+        .map(([k, e]) => ({ field: id(k), message: String(e!.message) }))
+    : [];
+  const busy = form.formState.isSubmitting;
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[750px]">
-        <DialogHeader>
-          <DialogTitle>
-            <span className="text-base px-2 font-semibold py-2">
-              {employee ? "Edit Employee" : "Create a new employee"}
-            </span>
-          </DialogTitle>
-          <DialogDescription>
-            <span className="px-2 py-0 text-sm text-slate-500 leading-7">
-              Fill in the fields to {employee ? "edit" : "create"} an employee.
-            </span>
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            {Object.keys(form.formState.errors).length > 0 && (
-              <div role="alert" className="mx-2 mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800">
-                <p className="font-medium">Please complete the highlighted fields:</p>
-                <p>{Object.values(form.formState.errors).map((e: any) => e?.message).filter(Boolean).join(" · ")}</p>
-              </div>
-            )}
-            <Tabs defaultValue="personal" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="personal">Personal Info</TabsTrigger>
-                <TabsTrigger value="family">Family Info</TabsTrigger>
-                <TabsTrigger value="employment">Employment</TabsTrigger>
-                <TabsTrigger value="banking">Banking & Legal</TabsTrigger>
-              </TabsList>
+    <Modal
+      open={Boolean(open)}
+      onClose={() => setOpen(false)}
+      size="lg"
+      title={employee ? `Edit ${employee.name || "employee"}` : "New employee"}
+      description={employee ? "Changes apply to the employee record as soon as you save." : "The email is used to log in. A temporary password is shown once the account is created."}
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => form.reset()} disabled={busy} className="sm:mr-auto">Reset form</Button>
+          <Button onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+          <Button variant="primary" type="submit" form="employee-form" loading={busy} disabled={form.formState.disabled}>
+            {employee ? "Save changes" : "Create employee"}
+          </Button>
+        </>
+      }
+    >
+      <form id="employee-form" noValidate onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 [counter-reset:ims-section]">
+        <ErrorSummary errors={summary} title="Check these fields before you save" />
 
-              {/* Personal Information Tab */}
-              <TabsContent value="personal">
-                <div className="grid px-2 gap-2">
-                  <div className="grid gap-2 grid-cols-2">
-                    <AppFormField
-                      form={form}
-                      label={"First Name"}
-                      placeholder={"Enter first name"}
-                      required
-                      name={"first_name"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Last Name"}
-                      placeholder={"Enter last name"}
-                      required
-                      name={"last_name"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 gap-2">
-                    <AppFormField
-                    form={form}
-                    label={"Full name (as on ID)"}
-                    placeholder={"Enter Full Name"}
-                    name={"name"}                 
-                  />
-                  </div>
+        <ModalSection title="Personal details">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {text("first_name", "First name", { required: true, placeholder: "For example: Aline" })}
+            {text("last_name", "Last name", { required: true, placeholder: "For example: Uwimana" })}
+            {text("name", "Full name (as on ID)", { wide: true })}
+            {text("other_names", "Other names")}
+            {choice("gender", "Gender", "Not specified", GENDERS.map((g) => ({ label: g, value: g })))}
+            {date("birth", "Date of birth")}
+            {text("place_of_birth", "Place of birth")}
+            {text("nationality", "Nationality", { placeholder: "For example: Rwandan" })}
+            {text("country", "Country of residence")}
+            {text("national_id", "National ID", { inputMode: "numeric", hint: "16 digits for a Rwandan ID." })}
+            {text("id_passport_number", "Passport number")}
+            {text("personal_telephone", "Personal telephone", { type: "tel", inputMode: "tel", placeholder: "For example: 078 123 4567" })}
+            {text("personal_email", "Email (used to log in)", { required: true, type: "email", inputMode: "email", placeholder: "name@example.com" })}
+            {text("father_name", "Father's name")}
+            {text("mother_name", "Mother's name")}
+            {text("full_address", "Full address", { wide: true })}
+          </div>
+        </ModalSection>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Other Names"}
-                      placeholder={"Enter other names"}
-                      name={"other_names"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Nationality"}
-                      placeholder={"Enter nationality"}
-                      name={"nationality"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"ID/Passport Number"}
-                      placeholder={"Enter ID/Passport"}
-                      name={"id_passport_number"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Personal Telephone"}
-                      placeholder={"Enter phone number"}
-                      name={"personal_telephone"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      required
-                      label={"Email (used to log in)"}
-                      placeholder={"Enter email"}
-                      name={"personal_email"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Father's Name"}
-                      placeholder={"Enter father's name"}
-                      name={"father_name"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Mother's Name"}
-                      placeholder={"Enter mother's name"}
-                      name={"mother_name"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Place of Birth"}
-                      placeholder={"Enter place of birth"}
-                      name={"place_of_birth"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Full Address"}
-                      placeholder={"Enter full address"}
-                      name={"full_address"}
-                    />
-                  </div>
-                </div>
-              </TabsContent>
+        <ModalSection title="Family">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {text("spouse_name", "Spouse name")}
+            {text("spouse_telephone", "Spouse telephone", { type: "tel", inputMode: "tel" })}
+            {text("spouse_email", "Spouse email", { type: "email", inputMode: "email" })}
+            {text("spouse_occupation", "Spouse occupation")}
+            {text("spouse_employer", "Spouse employer")}
+            {text("spouse_position", "Spouse position")}
+            {text("spouse_medical_insurance", "Spouse medical insurance")}
+            {text("spouse_id_passport", "Spouse ID or passport")}
+            {text("children_names", "Children's names", { hint: "Separate names with commas." })}
+            {text("number_of_dependents", "Number of dependents", { inputMode: "numeric" })}
+          </div>
+        </ModalSection>
 
-              {/* Family Information Tab */}
-              <TabsContent value="family">
-                <div className="grid px-2 gap-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Spouse Name"}
-                      placeholder={"Enter spouse name"}
-                      name={"spouse_name"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Spouse Telephone"}
-                      placeholder={"Enter spouse phone"}
-                      name={"spouse_telephone"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Spouse Email"}
-                      placeholder={"Enter spouse email"}
-                      name={"spouse_email"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Spouse Occupation"}
-                      placeholder={"Enter spouse occupation"}
-                      name={"spouse_occupation"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Spouse Employer"}
-                      placeholder={"Enter spouse employer"}
-                      name={"spouse_employer"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Spouse Position"}
-                      placeholder={"Enter spouse position"}
-                      name={"spouse_position"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Spouse Medical Insurance"}
-                      placeholder={"Enter spouse medical insurance"}
-                      name={"spouse_medical_insurance"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Spouse ID/Passport"}
-                      placeholder={"Enter spouse ID/Passport"}
-                      name={"spouse_id_passport"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Children Names"}
-                      placeholder={"Enter children names"}
-                      name={"children_names"}
-                    />
-                  </div>
-                </div>
-              </TabsContent>
+        <ModalSection title="Employment">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {asyncSelect("role", "Role", "Choose a role", rolesLoader, true)}
+            {asyncSelect("designation", "Designation", "Choose a designation", designationLoader)}
+            {asyncSelect("department", "Department", "Choose a department", departmentsLoader)}
+            {asyncSelect("branch", "Branch", "Choose a branch", branchesLoader)}
+            {choice("employment_type", "Employment type", "Choose employment type", EMPLOYMENT_TYPES)}
+            {choice("status", "Employee status", "Choose employee status", STATUSES, true)}
+            {date("joined_at", "Joined on", "Today's date is used when you leave it empty.")}
+            <Field label="Salary" htmlFor={id("salary")} hint="Gross monthly salary.">
+              <Controller
+                control={form.control}
+                name="salary"
+                render={({ field }) => {
+                  const n = Number(String(field.value ?? "").replace(/[^\d.]/g, ""));
+                  return <MoneyInput id={id("salary")} value={field.value === "" || field.value === undefined || Number.isNaN(n) ? "" : n} onChange={(v) => field.onChange(v === "" ? "" : String(v))} />;
+                }}
+              />
+            </Field>
+            {text("certified_academic_documents", "Certified academic documents")}
+            {text("previous_employers", "Previous employers")}
+          </div>
+        </ModalSection>
 
-              {/* Employment Information Tab */}
-              <TabsContent value="employment">
-                <div className="grid px-2 gap-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormAsyncSelect
-                      form={form}
-                      label={"Role"}
-                      placeholder={"Choose role"}
-                      required
-                      name={"role"}
-                      loader={rolesLoader}
-                    />
-                    <AppFormAsyncSelect
-                      form={form}
-                      label={"Designation"}
-                      placeholder={"Choose designation"}
-                      name={"designation"}
-                      loader={designationLoader}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormAsyncSelect
-                      form={form}
-                      label={"Department"}
-                      placeholder={"Choose department"}
-                      name={"department"}
-                      loader={departmentsLoader}
-                    />
-                    <AppFormAsyncSelect
-                      form={form}
-                      label={"Branch"}
-                      placeholder={"Choose branch"}
-                      name={"branch"}
-                      loader={branchesLoader}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormSelect
-                      form={form}
-                      label={"Employment Type"}
-                      placeholder={"Choose employment type"}
-                      name={"employment_type"}
-                      options={[
-                        { label: "Intern", value: "intern" },
-                        { label: "Probation", value: "probation" },
-                        { label: "Permanent", value: "permanent" },
-                        { label: "Casual", value: "casual" },
-                        { label: "Contract", value: "contract" },
-                        { label: "Part-time", value: "part-time" },
-                      ]}
-                    />
-                    <AppFormSelect
-                      form={form}
-                      label={"Employee Status"}
-                      placeholder={"Choose employee status"}
-                      required
-                      name={"status"}
-                      options={[
-                        { label: "Active", value: "Active" },
-                        { label: "Inactive", value: "Inactive" },
-                        { label: "Suspended", value: "suspended" },
-                        { label: "Terminated", value: "terminated" },
-                        { label: "Resigned", value: "resigned" },
-                      ]}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Salary"}
-                      placeholder={"Enter salary"}
-                      name={"salary"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Certified Academic Documents"}
-                      placeholder={"Enter academic documents"}
-                      name={"certified_academic_documents"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Previous Employers"}
-                      placeholder={"Enter previous employers"}
-                      name={"previous_employers"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Number of Dependents"}
-                      placeholder={"Enter number of dependents"}
-                      name={"number_of_dependents"}
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Banking & Legal Information Tab */}
-              <TabsContent value="banking">
-                <div className="grid px-2 gap-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Bank Name"}
-                      placeholder={"Enter bank name"}
-                      name={"bank_name"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Bank Account Number"}
-                      placeholder={"Enter bank account number"}
-                      name={"bank_account_number"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Loans Ongoing"}
-                      placeholder={"Enter loans ongoing"}
-                      name={"loans_ongoing"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Recent Pay Slips"}
-                      placeholder={"Enter recent pay slips"}
-                      name={"recent_pay_slips"}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <AppFormField
-                      form={form}
-                      label={"Recent Bank Statements"}
-                      placeholder={"Enter recent bank statements"}
-                      name={"recent_bank_statements"}
-                    />
-                    <AppFormField
-                      form={form}
-                      label={"Criminal Record"}
-                      placeholder={"Enter criminal record"}
-                      name={"criminal_record"}
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-
-            <DialogFooter>
-              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-                <Button
-                  onClick={() => form.reset()}
-                  className="w-full text-slate-600"
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  Reset Form
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={
-                    form.formState.disabled || form.formState.isSubmitting
-                  }
-                  className="w-full"
-                  size="sm"
-                >
-                  {form.formState.isSubmitting && (
-                    <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
-                  )}
-                  {employee ? "Update employee" : "Create new employee"}
-                </Button>
-              </div>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+        <ModalSection title="Banking and legal">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {text("bank_name", "Bank name")}
+            {text("bank_account_number", "Bank account number", { inputMode: "numeric" })}
+            {text("loans_ongoing", "Loans ongoing")}
+            {text("recent_pay_slips", "Recent pay slips")}
+            {text("recent_bank_statements", "Recent bank statements")}
+            {text("criminal_record", "Criminal record")}
+          </div>
+        </ModalSection>
+      </form>
+    </Modal>
   );
 }

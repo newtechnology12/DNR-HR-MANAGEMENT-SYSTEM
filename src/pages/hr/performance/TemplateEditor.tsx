@@ -1,23 +1,20 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge, PageHeader } from "@/components/enterprise/ui";
 import { errorMessage } from "@/lib/procurement";
 import { GradeBand, ScaleLevel, Section } from "@/lib/hr";
-import { Field, inputCls, textareaCls } from "@/components/portal/kit";
+import { Button, Card, Checkbox, Column, DataTable, EmptyState, Field, FormBody, FormSection, Input, Page, PageHeader, StatusPill, Textarea } from "@/components/ims";
 import { cn } from "@/utils";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
-const small = "h-9 w-full rounded-md border border-slate-200 px-2 text-[13px] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
+const LIST = "/dashboard/hr/performance";
+const small = "h-9 text-t-body";
 
 export default function TemplateEditor() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { canPerform } = useRoles();
   const canEdit = canPerform("manage_appraisals");
@@ -39,7 +36,7 @@ export default function TemplateEditor() {
     },
     {
       onSuccess: (rec: any) => {
-        toast.success("Template saved — used by new appraisal cycles");
+        toast.success(`${rec.name || "Template"} saved. New appraisal cycles use it`);
         queryClient.invalidateQueries(["appraisal-templates-all"]);
         queryClient.invalidateQueries(["appraisal-templates"]);
         setSelected(rec.id);
@@ -50,7 +47,26 @@ export default function TemplateEditor() {
     }
   );
 
-  if (list.isLoading || !t) return <div className="space-y-3 p-4"><Skeleton className="h-10 w-72" /><Skeleton className="h-96 w-full" /></div>;
+  const header = (extra?: Partial<React.ComponentProps<typeof PageHeader>>) => (
+    <PageHeader
+      breadcrumbs={[{ label: "HR", to: "/dashboard/hr/employees" }, { label: "Performance appraisals", to: LIST }, { label: "Templates" }]}
+      title="Appraisal templates"
+      subtitle="What staff are evaluated on. Running cycles keep the version they were launched with."
+      {...extra}
+    />
+  );
+
+  if (list.isLoading || !t) {
+    return (
+      <Page>
+        {header()}
+        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <Skeleton className="h-48 w-full rounded-card" />
+          <Skeleton className="h-96 w-full rounded-card" />
+        </div>
+      </Page>
+    );
+  }
   const sections: Section[] = t.sections || [];
   const scale: ScaleLevel[] = t.rating_scale || [];
   const bands: GradeBand[] = t.grade_bands || [];
@@ -65,125 +81,211 @@ export default function TemplateEditor() {
     return out;
   };
   const problems = [
-    weightSum !== 100 && `Section weights add up to ${weightSum}% (should be 100%).`,
+    weightSum !== 100 && `Section weights add up to ${weightSum}%: change them so they add up to 100%.`,
     !scale.length && "Add at least one rating level.",
     sections.some((s) => !s.criteria.length) && "Every section needs at least one criterion.",
     !bands.length && "Add grade bands.",
   ].filter(Boolean) as string[];
 
+  const duplicate = () => {
+    setSelected("");
+    setT({ ...t, id: undefined, name: `${t.name} (copy)` });
+  };
+  const create = () => {
+    setSelected("");
+    setT({ name: "New template", description: "", rating_scale: scale, sections: [{ id: uid(), title: "Objectives", weight: 100, criteria: [{ id: uid(), title: "Achievement of objectives", description: "", weight: 1 }] }], grade_bands: bands, activity_weight: 20, allow_self_assessment: true, active: true });
+  };
+
+  const removeButton = (label: string, onClick: () => void) => (
+    <Button variant="ghost" size="icon-sm" icon={Trash2} aria-label={label} title={label} onClick={onClick} className="hover:bg-ims-danger-bg hover:text-ims-danger" />
+  );
+
+  const scaleColumns: Column<ScaleLevel>[] = [
+    {
+      key: "value",
+      header: "Value",
+      width: "96px",
+      cell: (s, i) => <Input type="number" min={1} className={cn(small, "text-right tabular-nums")} aria-label={`Level ${i + 1} value`} value={s.value} onChange={(e) => upd({ rating_scale: scale.map((x, j) => (j === i ? { ...x, value: Number(e.target.value) } : x)) })} />,
+    },
+    {
+      key: "label",
+      header: "Label",
+      cell: (s, i) => <Input className={small} aria-label={`Level ${i + 1} label`} placeholder="For example: Meets expectations" value={s.label} onChange={(e) => upd({ rating_scale: scale.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />,
+    },
+    { key: "remove", header: <span className="sr-only">Remove</span>, width: "56px", align: "center", cell: (_, i) => removeButton(`Remove level ${i + 1}`, () => upd({ rating_scale: scale.filter((__, j) => j !== i) })) },
+  ];
+  const bandColumns: Column<GradeBand>[] = [
+    {
+      key: "min",
+      header: "From score",
+      width: "112px",
+      cell: (b, i) => <Input type="number" min={0} max={100} className={cn(small, "text-right tabular-nums")} aria-label={`Grade ${i + 1} from score`} value={b.min} onChange={(e) => upd({ grade_bands: bands.map((x, j) => (j === i ? { ...x, min: Number(e.target.value) } : x)) })} />,
+    },
+    {
+      key: "grade",
+      header: "Grade",
+      width: "84px",
+      cell: (b, i) => <Input className={cn(small, "text-center font-semibold")} aria-label={`Grade ${i + 1} letter`} value={b.grade} onChange={(e) => upd({ grade_bands: bands.map((x, j) => (j === i ? { ...x, grade: e.target.value.toUpperCase().slice(0, 3) } : x)) })} />,
+    },
+    {
+      key: "label",
+      header: "Meaning",
+      cell: (b, i) => <Input className={small} aria-label={`Grade ${i + 1} meaning`} placeholder="For example: Exceeds expectations" value={b.label} onChange={(e) => upd({ grade_bands: bands.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />,
+    },
+    { key: "remove", header: <span className="sr-only">Remove</span>, width: "56px", align: "center", cell: (_, i) => removeButton(`Remove grade ${i + 1}`, () => upd({ grade_bands: bands.filter((__, j) => j !== i) })) },
+  ];
+
   return (
-    <div className="space-y-4 px-4 py-4 sm:px-6">
-      <PageHeader
-        title="Appraisal templates"
-        description="Define what staff are evaluated on. Changes apply to cycles created afterwards; running cycles keep the version they were launched with."
-        breadcrumbs={[{ title: "Performance", link: "/dashboard/hr/performance" }, { title: "Templates", link: "/dashboard/hr/performance/templates" }]}
-        actions={
-          canEdit && (
-            <>
-              <Button size="sm" variant="outline" onClick={() => { setSelected(""); setT({ ...t, id: undefined, name: `${t.name} (copy)` }); }}><Copy size={14} /> Duplicate</Button>
-              <Button size="sm" variant="outline" onClick={() => { setSelected(""); setT({ name: "New template", description: "", rating_scale: scale, sections: [{ id: uid(), title: "Objectives", weight: 100, criteria: [{ id: uid(), title: "Achievement of objectives", description: "", weight: 1 }] }], grade_bands: bands, activity_weight: 20, allow_self_assessment: true, active: true }); }}><Plus size={14} /> New</Button>
-              <Button size="sm" disabled={save.isLoading || problems.length > 0} onClick={() => save.mutate()}>Save template</Button>
-            </>
-          )
-        }
-      />
-      <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="space-y-1">
-          {(list.data || []).map((x: any) => (
-            <button key={x.id} type="button" onClick={() => setSelected(x.id)} className={cn("w-full rounded-lg border px-3 py-2 text-left text-[13px]", selected === x.id ? "border-primary bg-primary/5" : "border-slate-200 bg-white hover:border-slate-300")}>
-              <span className="block font-medium">{x.name}</span>
-              <span className="text-[11.5px] text-slate-500">{(x.sections || []).length} sections · {x.active ? "active" : "inactive"}</span>
-            </button>
-          ))}
-          <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={() => navigate("/dashboard/hr/performance")}>Back to appraisals</Button>
-        </aside>
+    <Page>
+      {header(
+        canEdit
+          ? {
+              primary: { label: "Save template", onClick: () => save.mutate(), loading: save.isLoading, disabled: problems.length > 0 },
+              secondary: [
+                { label: "Duplicate", icon: Copy, onClick: duplicate },
+                { label: "New template", icon: Plus, onClick: create },
+              ],
+            }
+          : undefined
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <Card padded={false} className="self-start" aria-label="Templates">
+          <h2 className="border-b border-ims-divider px-4 py-3 text-t-section text-ims-text">Templates</h2>
+          <ul className="divide-y divide-ims-divider">
+            {!selected && (
+              <li className="border-l-[3px] border-ims-link bg-ims-info-bg px-4 py-3" aria-current="true">
+                <span className="block truncate text-t-body font-semibold text-ims-text">{t.name || "New template"}</span>
+                <span className="text-t-small text-ims-muted">Not saved yet</span>
+              </li>
+            )}
+            {(list.data || []).map((x: any) => {
+              const on = selected === x.id;
+              return (
+                <li key={x.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(x.id)}
+                    aria-current={on || undefined}
+                    className={cn(
+                      "block w-full border-l-[3px] px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ims-focus",
+                      on ? "border-ims-link bg-ims-info-bg" : "border-transparent hover:bg-ims-hover"
+                    )}
+                  >
+                    <span className="block truncate text-t-body font-semibold text-ims-text">{x.name}</span>
+                    <span className="mt-1 flex items-center justify-between gap-2">
+                      <span className="text-t-small text-ims-muted">{(x.sections || []).length} section{(x.sections || []).length === 1 ? "" : "s"}</span>
+                      <StatusPill status={x.active ? "Active" : "Inactive"} />
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
 
         <fieldset disabled={!canEdit} className="min-w-0 space-y-4">
-          {problems.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">{problems.join(" ")}</div>}
-          <section className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:grid-cols-2">
-            <Field label="Template name" required><input className={inputCls} value={t.name} onChange={(e) => upd({ name: e.target.value })} /></Field>
-            <Field label={`System activity score weight: ${t.activity_weight || 0}%`} hint="Share of the final score coming from action plans and reports (0 to disable)">
-              <input type="range" min={0} max={50} step={5} value={t.activity_weight || 0} onChange={(e) => upd({ activity_weight: Number(e.target.value) })} className="w-full accent-[#16a34a]" />
-            </Field>
-            <Field label="Description" className="sm:col-span-2"><textarea className={textareaCls} rows={2} value={t.description || ""} onChange={(e) => upd({ description: e.target.value })} /></Field>
-            <div className="flex flex-wrap gap-4 text-[13px] sm:col-span-2">
-              <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4" checked={Boolean(t.allow_self_assessment)} onChange={(e) => upd({ allow_self_assessment: e.target.checked })} /> Staff complete a self-assessment</label>
-              <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4" checked={Boolean(t.active)} onChange={(e) => upd({ active: e.target.checked })} /> Active</label>
+          {problems.length > 0 && (
+            <div role="status" className="rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-ims-warning">
+              <p className="flex items-center gap-2 text-t-body font-bold"><AlertTriangle size={16} aria-hidden /> Fix these before you save</p>
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-9 text-t-small">
+                {problems.map((p) => <li key={p}>{p}</li>)}
+              </ul>
             </div>
-          </section>
+          )}
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[14px] font-semibold">Criteria</h2>
-              <Badge tone={weightSum === 100 ? "success" : "warning"}>Weights: {weightSum}%</Badge>
-            </div>
-            <div className="space-y-4">
-              {sections.map((s, i) => (
-                <div key={s.id} className="rounded-lg border border-slate-200">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
-                    <input className={cn(small, "min-w-[200px] flex-1 font-semibold")} value={s.title} onChange={(e) => updSection(i, { title: e.target.value })} aria-label="Section title" />
-                    <label className="flex items-center gap-1 text-[12.5px]"><input type="number" min={0} max={100} className={cn(small, "w-20 text-right")} value={s.weight} onChange={(e) => updSection(i, { weight: Number(e.target.value) })} aria-label="Section weight" />%</label>
-                    <button type="button" onClick={() => upd({ sections: move(sections, i, -1) })} className="rounded p-1.5 text-slate-500 hover:bg-white" aria-label="Move up"><ArrowUp size={14} /></button>
-                    <button type="button" onClick={() => upd({ sections: move(sections, i, 1) })} className="rounded p-1.5 text-slate-500 hover:bg-white" aria-label="Move down"><ArrowDown size={14} /></button>
-                    <button type="button" onClick={() => upd({ sections: sections.filter((_, j) => j !== i) })} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove section"><Trash2 size={14} /></button>
-                  </div>
-                  <ul className="divide-y divide-slate-100">
-                    {s.criteria.map((c, k) => (
-                      <li key={c.id} className="grid grid-cols-1 gap-2 px-3 py-2 sm:grid-cols-[1fr_1.4fr_80px_auto] sm:items-center">
-                        <input className={small} value={c.title} placeholder="Criterion" onChange={(e) => updSection(i, { criteria: s.criteria.map((x, j) => (j === k ? { ...x, title: e.target.value } : x)) })} />
-                        <input className={small} value={c.description || ""} placeholder="What evaluators should look at (optional)" onChange={(e) => updSection(i, { criteria: s.criteria.map((x, j) => (j === k ? { ...x, description: e.target.value } : x)) })} />
-                        <input type="number" min={0.5} step={0.5} className={cn(small, "text-right")} value={c.weight} title="Relative weight inside the section" onChange={(e) => updSection(i, { criteria: s.criteria.map((x, j) => (j === k ? { ...x, weight: Number(e.target.value) } : x)) })} />
-                        <div className="flex">
-                          <button type="button" onClick={() => updSection(i, { criteria: move(s.criteria, k, -1) })} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Move up"><ArrowUp size={14} /></button>
-                          <button type="button" onClick={() => updSection(i, { criteria: s.criteria.filter((_, j) => j !== k) })} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove criterion"><Trash2 size={14} /></button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="px-3 py-2"><Button type="button" size="sm" variant="ghost" onClick={() => updSection(i, { criteria: [...s.criteria, { id: uid(), title: "", description: "", weight: 1 }] })}><Plus size={14} /> Add criterion</Button></div>
+          <FormBody>
+            <FormSection title="Template" description="Its name, and how much of the final score comes from the system.">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Template name" required htmlFor="tpl-name">
+                  <Input id="tpl-name" value={t.name} onChange={(e) => upd({ name: e.target.value })} />
+                </Field>
+                <Field label={`System activity score weight: ${t.activity_weight || 0}%`} htmlFor="tpl-activity" hint="Share of the final score that comes from action plans and reports (0 turns it off).">
+                  <input id="tpl-activity" type="range" min={0} max={50} step={5} value={t.activity_weight || 0} onChange={(e) => upd({ activity_weight: Number(e.target.value) })} className="h-control w-full cursor-pointer accent-ims-primary" />
+                </Field>
+                <Field label="Description" htmlFor="tpl-description" className="sm:col-span-2">
+                  <Textarea id="tpl-description" rows={2} className="min-h-[72px]" value={t.description || ""} onChange={(e) => upd({ description: e.target.value })} />
+                </Field>
+                <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:gap-8">
+                  <Checkbox id="tpl-self" label="Staff complete a self-assessment" checked={Boolean(t.allow_self_assessment)} onChange={(v) => upd({ allow_self_assessment: v })} />
+                  <Checkbox id="tpl-active" label="Active" hint="Only active templates can be chosen for a new cycle." checked={Boolean(t.active)} onChange={(v) => upd({ active: v })} />
                 </div>
-              ))}
-              <Button type="button" variant="outline" size="sm" onClick={() => upd({ sections: [...sections, { id: uid(), title: "New section", weight: 0, criteria: [{ id: uid(), title: "", description: "", weight: 1 }] }] })}><Plus size={14} /> Add section</Button>
-            </div>
-          </section>
+              </div>
+            </FormSection>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card">
-              <h2 className="mb-2 text-[14px] font-semibold">Rating scale</h2>
-              <table className="w-full text-[13px]">
-                <thead><tr className="text-left text-[11px] uppercase tracking-wide text-slate-500"><th className="w-16 pb-1">Value</th><th className="pb-1">Label</th><th /></tr></thead>
-                <tbody>
-                  {scale.map((s, i) => (
-                    <tr key={i}>
-                      <td className="py-1 pr-2"><input type="number" min={1} className={cn(small, "text-right")} value={s.value} onChange={(e) => upd({ rating_scale: scale.map((x, j) => (j === i ? { ...x, value: Number(e.target.value) } : x)) })} /></td>
-                      <td className="py-1 pr-2"><input className={small} value={s.label} onChange={(e) => upd({ rating_scale: scale.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} /></td>
-                      <td className="py-1"><button type="button" onClick={() => upd({ rating_scale: scale.filter((_, j) => j !== i) })} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove level"><Trash2 size={14} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <Button type="button" size="sm" variant="ghost" className="mt-1" onClick={() => upd({ rating_scale: [...scale, { value: (scale[scale.length - 1]?.value || 0) + 1, label: "" }] })}><Plus size={14} /> Add level</Button>
-            </section>
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card">
-              <h2 className="mb-2 text-[14px] font-semibold">Grades</h2>
-              <table className="w-full text-[13px]">
-                <thead><tr className="text-left text-[11px] uppercase tracking-wide text-slate-500"><th className="w-24 pb-1">From score</th><th className="w-16 pb-1">Grade</th><th className="pb-1">Meaning</th><th /></tr></thead>
-                <tbody>
-                  {bands.map((b, i) => (
-                    <tr key={i}>
-                      <td className="py-1 pr-2"><input type="number" min={0} max={100} className={cn(small, "text-right")} value={b.min} onChange={(e) => upd({ grade_bands: bands.map((x, j) => (j === i ? { ...x, min: Number(e.target.value) } : x)) })} /></td>
-                      <td className="py-1 pr-2"><input className={cn(small, "text-center font-semibold")} value={b.grade} onChange={(e) => upd({ grade_bands: bands.map((x, j) => (j === i ? { ...x, grade: e.target.value.toUpperCase().slice(0, 3) } : x)) })} /></td>
-                      <td className="py-1 pr-2"><input className={small} value={b.label} onChange={(e) => upd({ grade_bands: bands.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} /></td>
-                      <td className="py-1"><button type="button" onClick={() => upd({ grade_bands: bands.filter((_, j) => j !== i) })} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove grade"><Trash2 size={14} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <Button type="button" size="sm" variant="ghost" className="mt-1" onClick={() => upd({ grade_bands: [...bands, { min: 0, grade: "", label: "" }] })}><Plus size={14} /> Add grade</Button>
-            </section>
-          </div>
+            <FormSection
+              title="Criteria"
+              description={
+                <span className={cn("font-semibold", weightSum === 100 ? "text-ims-success" : "text-ims-warning")}>
+                  Section weights add up to {weightSum}%{weightSum === 100 ? "." : " (should be 100%)."}
+                </span>
+              }
+            >
+              <div className="space-y-4">
+                {sections.map((s, i) => (
+                  <div key={s.id} className="overflow-hidden rounded-control border border-ims-border">
+                    <div className="flex flex-wrap items-center gap-2 border-b border-ims-divider bg-ims-thead px-3 py-2.5">
+                      <span className="w-5 text-t-small font-bold text-ims-muted" aria-hidden>{i + 1}</span>
+                      <Input className={cn(small, "min-w-[180px] flex-1 font-semibold")} value={s.title} onChange={(e) => updSection(i, { title: e.target.value })} aria-label={`Section ${i + 1} title`} />
+                      <label className="flex items-center gap-1.5 text-t-small text-ims-muted">
+                        Weight
+                        <Input type="number" min={0} max={100} className={cn(small, "w-20 text-right tabular-nums")} value={s.weight} onChange={(e) => updSection(i, { weight: Number(e.target.value) })} aria-label={`Section ${i + 1} weight (%)`} />
+                        %
+                      </label>
+                      <span className="ml-auto flex items-center">
+                        <Button variant="ghost" size="icon-sm" icon={ArrowUp} aria-label={`Move section ${i + 1} up`} disabled={i === 0} onClick={() => upd({ sections: move(sections, i, -1) })} />
+                        <Button variant="ghost" size="icon-sm" icon={ArrowDown} aria-label={`Move section ${i + 1} down`} disabled={i === sections.length - 1} onClick={() => upd({ sections: move(sections, i, 1) })} />
+                        {removeButton(`Remove section ${i + 1}`, () => upd({ sections: sections.filter((_, j) => j !== i) }))}
+                      </span>
+                    </div>
+                    {s.criteria.length > 0 && (
+                      <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_88px_76px] gap-2 px-3 pt-2.5 text-t-small font-semibold text-ims-muted sm:grid">
+                        <span>Criterion</span>
+                        <span>What evaluators look at</span>
+                        <span className="text-right" title="Relative weight inside the section">Weight</span>
+                        <span className="sr-only">Actions</span>
+                      </div>
+                    )}
+                    <ul className="divide-y divide-ims-divider sm:divide-y-0">
+                      {s.criteria.map((c, k) => (
+                        <li key={c.id} className="grid grid-cols-1 gap-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_88px_76px] sm:items-center sm:py-1.5">
+                          <Input className={small} value={c.title} placeholder="Criterion" aria-label={`Section ${i + 1}, criterion ${k + 1}`} onChange={(e) => updSection(i, { criteria: s.criteria.map((x, j) => (j === k ? { ...x, title: e.target.value } : x)) })} />
+                          <Input className={small} value={c.description || ""} placeholder="What evaluators should look at (optional)" aria-label={`Section ${i + 1}, criterion ${k + 1} guidance`} onChange={(e) => updSection(i, { criteria: s.criteria.map((x, j) => (j === k ? { ...x, description: e.target.value } : x)) })} />
+                          <Input type="number" min={0.5} step={0.5} className={cn(small, "text-right tabular-nums")} value={c.weight} title="Relative weight inside the section" aria-label={`Section ${i + 1}, criterion ${k + 1} weight`} onChange={(e) => updSection(i, { criteria: s.criteria.map((x, j) => (j === k ? { ...x, weight: Number(e.target.value) } : x)) })} />
+                          <span className="flex items-center justify-end">
+                            <Button variant="ghost" size="icon-sm" icon={ArrowUp} aria-label={`Move criterion ${k + 1} up`} disabled={k === 0} onClick={() => updSection(i, { criteria: move(s.criteria, k, -1) })} />
+                            {removeButton(`Remove criterion ${k + 1}`, () => updSection(i, { criteria: s.criteria.filter((_, j) => j !== k) }))}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {!s.criteria.length && <p className="px-3 pt-3 text-t-small text-ims-danger">Add at least one criterion to this section.</p>}
+                    <div className="px-3 py-2">
+                      <Button size="sm" variant="ghost" icon={Plus} onClick={() => updSection(i, { criteria: [...s.criteria, { id: uid(), title: "", description: "", weight: 1 }] })}>Add criterion</Button>
+                    </div>
+                  </div>
+                ))}
+                <Button icon={Plus} onClick={() => upd({ sections: [...sections, { id: uid(), title: "New section", weight: 0, criteria: [{ id: uid(), title: "", description: "", weight: 1 }] }] })}>Add section</Button>
+              </div>
+            </FormSection>
+
+            <div className="grid gap-4 2xl:grid-cols-2">
+              <FormSection title="Rating scale" description="The values evaluators choose from, lowest first.">
+                <div className="overflow-hidden rounded-control border border-ims-border">
+                  <DataTable columns={scaleColumns} rows={scale} rowKey={(_, i) => String(i)} minWidth={300} caption="Rating scale" empty={<EmptyState compact text="No rating levels yet." />} />
+                </div>
+                <Button size="sm" variant="ghost" icon={Plus} onClick={() => upd({ rating_scale: [...scale, { value: (scale[scale.length - 1]?.value || 0) + 1, label: "" }] })}>Add level</Button>
+              </FormSection>
+              <FormSection title="Grades" description="The final score (out of 100) from which each grade starts.">
+                <div className="overflow-hidden rounded-control border border-ims-border">
+                  <DataTable columns={bandColumns} rows={bands} rowKey={(_, i) => String(i)} minWidth={360} caption="Grades" empty={<EmptyState compact text="No grades yet." />} />
+                </div>
+                <Button size="sm" variant="ghost" icon={Plus} onClick={() => upd({ grade_bands: [...bands, { min: 0, grade: "", label: "" }] })}>Add grade</Button>
+              </FormSection>
+            </div>
+          </FormBody>
         </fieldset>
       </div>
-    </div>
+    </Page>
   );
 }

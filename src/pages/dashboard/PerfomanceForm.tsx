@@ -1,32 +1,42 @@
-import BreadCrumb from "@/components/breadcrumb";
-import AppFormAsyncSelect from "@/components/forms/AppFormAsyncSelect";
-import AppFormSelect from "@/components/forms/AppFormSelect";
-import Loader from "@/components/icons/Loader";
-import ConfirmModal from "@/components/modals/ConfirmModal";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Form } from "@/components/ui/form";
-import { Textarea } from "@/components/ui/textarea";
+import AsyncSelectField from "@/components/AsyncSelectField";
+import { Skeleton } from "@/components/ui/skeleton";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft } from "react-feather";
-import { useForm } from "react-hook-form";
+import { Dispatch, SetStateAction, useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useMutation, useQuery } from "react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
-import { Alert, AlertTitle } from "@/components/ui/alert";
-import { AlertCircleIcon } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useAuth } from "@/context/auth.context";
+import {
+  Checkbox,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  ErrorSummary,
+  Field,
+  FormActions,
+  FormBody,
+  FormError,
+  FormSection,
+  Input,
+  Page,
+  PageHeader,
+  Select,
+  SummaryPanel,
+  Textarea,
+} from "@/components/ims";
+
+const LIST = "/dashboard/hr/performance";
 
 const formSchema = z.object({
-  employee: z.string().min(1, { message: "Employee is a required field" }),
-  period_month: z.string().min(1, { message: "Month is a required field" }),
-  period_year: z.string().min(1, { message: "Year is a required field" }),
+  employee: z.string().min(1, { message: "Choose the employee to evaluate." }),
+  period_month: z.string().min(1, { message: "Choose the month." }),
+  period_year: z.string().min(1, { message: "Choose the year." }),
 });
 
 const getDefaultValues = (data?: any) => {
@@ -36,6 +46,33 @@ const getDefaultValues = (data?: any) => {
     period_year: data?.period_year || "",
   };
 };
+
+const YEARS = ["2021", "2022", "2023", "2024", "2025", "2026", "2027", "2028", "2029", "2030"];
+const MONTHS = [
+  { label: "January", value: "1" },
+  { label: "February", value: "2" },
+  { label: "March", value: "3" },
+  { label: "April", value: "4" },
+  { label: "May", value: "5" },
+  { label: "June", value: "6" },
+  { label: "July", value: "7" },
+  { label: "August", value: "8" },
+  { label: "September", value: "9" },
+  { label: "October", value: "10" },
+  { label: "November", value: "11" },
+  { label: "December", value: "12" },
+];
+
+/** Display names for the stored rating words (the stored values, typos included, stay as they are). */
+const RATING_LABEL: Record<string, string> = {
+  poor: "Poor",
+  "needs improvement": "Needs improvement",
+  good: "Good",
+  "very good": "Very good",
+  exellent: "Excellent",
+};
+
+type Rating = { title: string; status: string; score: number; comment: string };
 
 export default function PerfomanceForm() {
   const { performanceId } = useParams();
@@ -94,7 +131,7 @@ export default function PerfomanceForm() {
     },
     onSuccess: () => {
       navigate("/dashboard/hr/performance");
-      toast.success("You have successfully deleted a perfomance");
+      toast.success("Performance evaluation deleted");
       confirmModal.close();
     },
     onError: (error: any) => {
@@ -205,6 +242,8 @@ export default function PerfomanceForm() {
 
   const [error, seterror] = useState("");
 
+  const [agreed, setAgreed] = useState(false);
+
   const { user } = useAuth();
 
   const onSubmit = async (data: any) => {
@@ -215,7 +254,7 @@ export default function PerfomanceForm() {
           filter: `employee="${data.employee}" && period_month="${data.period_month}" && period_year="${data.period_year}"`,
         });
 
-    if (check_exist?.totalItems) return seterror("Performance already exists");
+    if (check_exist?.totalItems) return seterror("This employee already has an evaluation for that month. Open it from the list to change it.");
 
     const v = {
       ...data,
@@ -237,619 +276,278 @@ export default function PerfomanceForm() {
             .update(performanceId, v)
     )
       .then((e) => {
-        toast.success(
-          "You have successfully completed a perfomance evaluation."
-        );
+        toast.success("Performance evaluation saved");
         navigate("/dashboard/hr/performance/" + e.id);
       })
       .catch((error) => {
         seterror(error.message);
       });
   };
-  return (
-    <>
-      <div className="px-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
-              {performance ? "Update" : " Create a"} Perfomance Evaluation
-            </h2>
-            <BreadCrumb
-              items={[
-                {
-                  title: performance
-                    ? "Create a perfermance"
-                    : "update perfomance",
-                  link: "/dashboard",
-                },
-              ]}
-            />
-          </div>
-        </div>
-        <Card>
-          <div className="flex- items-center justify-between">
-            <div className="px-3 flex items-center justify-between py-3">
-              <Button
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigate("/dashboard/hr/performance");
-                }}
-                size="sm"
-                className="gap-3 rounded-full text-primary hover:underline"
-                variant="secondary"
-              >
-                <ArrowLeft size={16} />
-                <span>Go back to performances.</span>
-              </Button>
-              <div className="flex items-center gap-2">
-                {performance && (
-                  <Button
-                    type="submit"
-                    onClick={() => confirmModal.setisOpen(true)}
-                    disabled={deleteMutation.isLoading}
-                    size="sm"
-                    variant="destructive"
-                  >
-                    Delete Performance
-                  </Button>
-                )}
-                {/* <Button
-                  type="submit"
-                  onClick={form.handleSubmit(onSubmit)}
-                  disabled={
-                    form.formState.disabled || form.formState.isSubmitting
+
+  const objectivesTotal = period_assessment.reduce((acc, curr) => acc + curr.score, 0);
+  const standardsTotal = perfomance_standards.reduce((acc, curr) => acc + curr.score, 0);
+
+  /** One rating table: criteria in rows, the five levels as radio buttons, then the score and a comment. */
+  const ratingColumns = (group: string, setRows: Dispatch<SetStateAction<Rating[]>>, total: number): Column<Rating>[] => [
+    {
+      key: "title",
+      header: "Criteria, comments and examples",
+      className: "min-w-[260px]",
+      cell: (e, idx) => (
+        <span className="block py-1">
+          <span className="block text-ims-text">{e.title.trim()}</span>
+          <Input
+            type="text"
+            className="mt-2 h-9"
+            placeholder="Comments and examples (optional)"
+            aria-label={`${e.title.trim()}: comments and examples`}
+            value={e.comment}
+            onChange={(ev) => {
+              setRows((prev) => {
+                return prev.map((item, i) => {
+                  if (i === idx) {
+                    return {
+                      ...item,
+                      comment: ev.target.value,
+                    };
                   }
-                  size="sm"
-                >
-                  {form.formState.isSubmitting && (
-                    <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
-                  )}
-                  Save Performance
-                </Button> */}
-              </div>
-            </div>
-            <div>
-              {status !== "loading" && (
-                <div>
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)}>
-                      <div className="border-b border-dashed">
-                        <div className="grid pb-3 px-4 max-w-4xl gap-2">
-                          <div className="grid gap-2 grid-cols-3">
-                            <AppFormAsyncSelect
-                              form={form}
-                              label={"Choose employee"}
-                              placeholder={"Choose employee"}
-                              name={"employee"}
-                              loader={employeesLoader}
-                            />
-                            <AppFormSelect
-                              form={form}
-                              label={"Choose period year"}
-                              placeholder={"Choose period year"}
-                              name={"period_year"}
-                              options={[
-                                "2021",
-                                "2022",
-                                "2023",
-                                "2024",
-                                "2025",
-                                "2026",
-                                "2027",
-                                "2028",
-                                "2029",
-                                "2030",
-                              ].map((e) => ({ label: e, value: e }))}
-                            />
-                            <AppFormSelect
-                              form={form}
-                              label={"Choose period month"}
-                              placeholder={"Choose period month"}
-                              name={"period_month"}
-                              options={[
-                                { label: "January", value: "1" },
-                                { label: "February", value: "2" },
-                                { label: "March", value: "3" },
-                                { label: "April", value: "4" },
-                                { label: "May", value: "5" },
-                                { label: "June", value: "6" },
-                                { label: "July", value: "7" },
-                                { label: "August", value: "8" },
-                                { label: "September", value: "9" },
-                                { label: "October", value: "10" },
-                                { label: "November", value: "11" },
-                                { label: "December", value: "12" },
-                              ]}
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-[14.5px] italic text-slate-500 leading-7 max-w-2xl px-5">
-                            Please provide a critical assessment of the
-                            performance of the employee within the review period
-                            using the following rating scale. Provide examples
-                            where applicable. Please use a separate sheet if
-                            required.
-                          </p>
-                          <table className="table mx-5 my-3 border table-bordered w-65">
-                            <thead>
-                              <tr className="text-left text-sm font-semibold">
-                                <th className="py-2 px-3 text-[13.5px] border-r border-b">
-                                  P
-                                </th>
-                                <th className="py-2 px-3 text-[13.5px] border-r border-b">
-                                  NI
-                                </th>
-                                <th className="py-2 px-3 text-[13.5px] border-r border-b">
-                                  G
-                                </th>
-                                <th className="py-2 px-3 text-[13.5px] border-r border-b">
-                                  VG
-                                </th>
-                                <th className="py-2 px-3 text-[13.5px] border-r border-b">
-                                  E
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td className="py-2 px-3 text-sm text-slate-500 border-r border-b">
-                                  Poor
-                                </td>
-                                <td className="py-2 px-3 text-sm text-slate-500 border-r border-b">
-                                  Needs Improvement
-                                </td>
-                                <td className="py-2 px-3 text-sm text-slate-500 border-r border-b">
-                                  Good
-                                </td>
-                                <td className="py-2 px-3 text-sm text-slate-500 border-r border-b">
-                                  Very Good
-                                </td>
-                                <td className="py-2 px-3 text-sm text-slate-500 border-r border-b">
-                                  Excellent
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
+                  return item;
+                });
+              });
+            }}
+          />
+        </span>
+      ),
+    },
+    ...score_types.map((score) => ({
+      key: score.title,
+      header: <span title={RATING_LABEL[score.status]}>{score.title} ({score.value})</span>,
+      align: "center" as const,
+      width: "60px",
+      cell: (e: Rating, idx: number) => (
+        <input
+          type="radio"
+          name={`${group}-${idx}`}
+          className="h-4 w-4 cursor-pointer accent-ims-primary align-middle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus"
+          checked={e.status === score.status}
+          aria-label={`${e.title.trim()}: ${RATING_LABEL[score.status]} (${score.value})`}
+          onChange={(ev) => {
+            if (ev.target.checked) {
+              setRows((prev) => {
+                return prev.map((item, i) => {
+                  if (i === idx) {
+                    return {
+                      ...item,
+                      score: score.value,
+                      status: score.status,
+                    };
+                  }
+                  return item;
+                });
+              });
+            }
+          }}
+        />
+      ),
+    })),
+    {
+      key: "score",
+      header: "Score",
+      numeric: true,
+      width: "96px",
+      total: <span className="tabular-nums">{total}</span>,
+      cell: (e, idx) => (
+        <Input
+          type="number"
+          max={12}
+          className="h-9 text-right tabular-nums"
+          aria-label={`${e.title.trim()}: score out of 12`}
+          value={e.score}
+          onChange={(ev) => {
+            if (Number(ev.target.value) > 12) return;
+            setRows((prev) => {
+              return prev.map((item, i) => {
+                if (i === idx) {
+                  return {
+                    ...item,
+                    score: Number(ev.target.value),
+                    status: getStatusFromScore(Number(ev.target.value)),
+                  };
+                }
+                return item;
+              });
+            });
+          }}
+        />
+      ),
+    },
+  ];
 
-                      <div className="px-5 pt-5">
-                        <div>
-                          <h4 className="text-[14.5px] font-semibold text-slate-700 capitalize">
-                            1. assessment of goals/objectives set during the
-                            review period
-                          </h4>
-                          <table className="table w-full table-auto   my-4 border table-bordered w-65">
-                            <thead>
-                              <tr className="text-left text-sm font-semibold">
-                                <th className="py-2 px-3 text-[13px] border-r border-b">
-                                  Criteria
-                                </th>
-                                {/* <th className="py-2 px-3 text-[13px] border-r border-b">
-                                  P (0)
-                                </th> */}
-                                {score_types.map((e, i) => {
-                                  return (
-                                    <th
-                                      key={i}
-                                      className="py-2 px-3 text-[13px] border-r border-b"
-                                    >
-                                      {e.title} ({e.value})
-                                    </th>
-                                  );
-                                })}
-                                <th className="py-2 text-right- px-3 text-[13px] border-r border-b">
-                                  Score
-                                </th>
-                                <th className="py-2 text-right px-3 text-[13px] border-r border-b">
-                                  Comments and Examples
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {period_assessment.map((e, idx) => {
-                                return (
-                                  <tr key={idx}>
-                                    <td className="py-[8px] px-3 text-slate-600 text-[14px] border-r border-b">
-                                      {e.title}
-                                    </td>
+  const errors = form.formState.errors;
+  const summaryErrors: FormError[] = [
+    ...(errors.employee?.message ? [{ field: "perf-employee", message: String(errors.employee.message) }] : []),
+    ...(errors.period_year?.message ? [{ field: "perf-year", message: String(errors.period_year.message) }] : []),
+    ...(errors.period_month?.message ? [{ field: "perf-month", message: String(errors.period_month.message) }] : []),
+    ...(error ? [{ message: error }] : []),
+  ];
+  const watched = form.watch();
 
-                                    {score_types.map((score, index) => {
-                                      return (
-                                        <td
-                                          key={index}
-                                          className="py-[8px] px-3 border-r border-b"
-                                        >
-                                          <div className="w-full flex justify-center items-center">
-                                            <Checkbox
-                                              checked={
-                                                e.status === score.status
-                                              }
-                                              onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                  setperiod_assessment(
-                                                    (prev) => {
-                                                      return prev.map(
-                                                        (item, i) => {
-                                                          if (i === idx) {
-                                                            return {
-                                                              ...item,
-                                                              score:
-                                                                score.value,
-                                                              status:
-                                                                score.status,
-                                                            };
-                                                          }
-                                                          return item;
-                                                        }
-                                                      );
-                                                    }
-                                                  );
-                                                }
-                                              }}
-                                            />
-                                          </div>
-                                        </td>
-                                      );
-                                    })}
-                                    <td className="py-[8px] px-3 border-r border-b">
-                                      <input
-                                        className="border px-3 text-sm py-1 w-full"
-                                        type="number"
-                                        value={e.score}
-                                        onChange={(e) => {
-                                          if (Number(e.target.value) > 12)
-                                            return;
-                                          setperiod_assessment((prev) => {
-                                            return prev.map((item, i) => {
-                                              if (i === idx) {
-                                                return {
-                                                  ...item,
-                                                  score: Number(e.target.value),
-                                                  status: getStatusFromScore(
-                                                    Number(e.target.value)
-                                                  ),
-                                                };
-                                              }
-                                              return item;
-                                            });
-                                          });
-                                        }}
-                                      />
-                                    </td>
-                                    <td className="py-[8px] px-3 border-r border-b">
-                                      <input
-                                        className="border px-3 text-sm py-1 w-full"
-                                        type="text"
-                                        value={e.comment}
-                                        onChange={(e) => {
-                                          setperiod_assessment((prev) => {
-                                            return prev.map((item, i) => {
-                                              if (i === idx) {
-                                                return {
-                                                  ...item,
-                                                  comment: e.target.value,
-                                                };
-                                              }
-                                              return item;
-                                            });
-                                          });
-                                        }}
-                                      />
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                              <tr>
-                                <td className="py-2 px-3 font-semibold text-slate-800 text-[14px] border-r border-b">
-                                  Total
-                                </td>
-                                <td
-                                  colSpan={5}
-                                  className="py-2 px-3 text-sm text-slate-600 border-r border-b"
-                                >
-                                  Total Score (Maximum = 60)
-                                </td>
+  const legend = (
+    <p className="flex flex-wrap gap-x-4 gap-y-1 rounded-control bg-ims-subtle px-3 py-2 text-t-small text-ims-body">
+      {score_types.map((s) => (
+        <span key={s.title}>
+          <span className="font-bold text-ims-text">{s.title}</span> {RATING_LABEL[s.status]} ({s.value})
+        </span>
+      ))}
+    </p>
+  );
 
-                                <td className="py-2 text-sm px-3 text-slate-600 border-r border-b">
-                                  {period_assessment.reduce(
-                                    (acc, curr) => acc + curr.score,
-                                    0
-                                  )}
-                                </td>
-                                <td className="py-2 px-3 text-slate-600 border-r border-b"></td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
+  return (
+    <Page>
+      <PageHeader
+        breadcrumbs={[
+          { label: "HR", to: "/dashboard/hr/employees" },
+          { label: "Performance appraisals", to: LIST },
+          { label: performance ? "Edit evaluation" : "New evaluation" },
+        ]}
+        title={performance ? "Edit performance evaluation" : "New performance evaluation"}
+        subtitle="A critical assessment of one employee's month, criterion by criterion; the total is out of 100."
+        secondary={
+          performance
+            ? [{ label: "Delete evaluation", icon: Trash2, variant: "danger", disabled: deleteMutation.isLoading, onClick: () => confirmModal.setisOpen(true) }]
+            : []
+        }
+      />
 
-                      <div className="px-5 py-4">
-                        <div>
-                          <h4 className="text-[14.5px] font-semibold text-slate-700 capitalize">
-                            2. Assessment of other performance standards and
-                            indicators
-                          </h4>
-                          <table className="table w-full table-auto   my-4 border table-bordered w-65">
-                            <thead>
-                              <tr className="text-left text-sm font-semibold">
-                                <th className="py-2 px-3 text-[13px] border-r border-b">
-                                  Criteria
-                                </th>
-                                {score_types.map((e, i) => {
-                                  return (
-                                    <th
-                                      key={i}
-                                      className="py-2 px-3 text-[13px] border-r border-b"
-                                    >
-                                      {e.title} ({e.value})
-                                    </th>
-                                  );
-                                })}
-                                <th className="py-2 px-3 text-[13px] border-r border-b">
-                                  Score
-                                </th>
-                                <th className="py-2 text-right px-3 text-[13px] border-r border-b">
-                                  Comments and Examples
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {perfomance_standards.map((e, idx) => {
-                                return (
-                                  <tr key={idx}>
-                                    <td className="py-[8px] px-3 text-slate-600 text-[14px] border-r border-b">
-                                      {e.title}
-                                    </td>
-                                    {score_types.map((score, index) => {
-                                      return (
-                                        <td
-                                          key={index}
-                                          className="py-[8px] px-3 border-r border-b"
-                                        >
-                                          <div className="w-full flex justify-center items-center">
-                                            <Checkbox
-                                              checked={
-                                                e.status === score.status
-                                              }
-                                              onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                  setperfomance_standards(
-                                                    (prev) => {
-                                                      return prev.map(
-                                                        (item, i) => {
-                                                          if (i === idx) {
-                                                            return {
-                                                              ...item,
-                                                              score:
-                                                                score.value,
-                                                              status:
-                                                                score.status,
-                                                            };
-                                                          }
-                                                          return item;
-                                                        }
-                                                      );
-                                                    }
-                                                  );
-                                                }
-                                              }}
-                                            />
-                                          </div>
-                                        </td>
-                                      );
-                                    })}
-                                    <td className="py-[8px] px-3 border-r border-b">
-                                      <input
-                                        className="border px-3 w-full"
-                                        type="number"
-                                        value={e.score}
-                                        onChange={(e) => {
-                                          if (Number(e.target.value) > 12)
-                                            return;
-                                          setperfomance_standards((prev) => {
-                                            return prev.map((item, i) => {
-                                              if (i === idx) {
-                                                return {
-                                                  ...item,
-                                                  score: Number(e.target.value),
-                                                  status: getStatusFromScore(
-                                                    Number(e.target.value)
-                                                  ),
-                                                };
-                                              }
-                                              return item;
-                                            });
-                                          });
-                                        }}
-                                      />
-                                    </td>
-                                    <td className="py-[8px] px-3 border-r border-b">
-                                      <input
-                                        className="border px-3 w-full"
-                                        type="text"
-                                        value={e.comment}
-                                        onChange={(e) => {
-                                          setperfomance_standards((prev) => {
-                                            return prev.map((item, i) => {
-                                              if (i === idx) {
-                                                return {
-                                                  ...item,
-                                                  comment: e.target.value,
-                                                };
-                                              }
-                                              return item;
-                                            });
-                                          });
-                                        }}
-                                      />
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                              <tr>
-                                <td className="py-2 px-3 font-semibold text-slate-800 text-[14px] border-r border-b">
-                                  Total
-                                </td>
-                                <td
-                                  colSpan={5}
-                                  className="py-2 px-3 text-sm text-slate-600 border-r border-b"
-                                >
-                                  Total Score (Maximum = 40)
-                                </td>
-
-                                <td className="py-2 text-sm px-3 text-slate-600 border-r border-b">
-                                  {perfomance_standards.reduce(
-                                    (acc, curr) => acc + curr.score,
-                                    0
-                                  )}
-                                </td>
-                                <td className="py-2 px-3 text-slate-600 border-r border-b"></td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                      <div className="px-5 pb-4">
-                        <div>
-                          <h4 className="text-[14.5px] font-semibold text-slate-700 capitalize">
-                            3. Comments by the employee
-                          </h4>
-                          <div className="mt-2">
-                            {/* <Label className="text-[13px] mb-1 text-slate-600">
-                              Provide overall Comments
-                            </Label> */}
-                            <Textarea
-                              placeholder="Enter overall comments"
-                              value={comment}
-                              onChange={(e) => setcomment(e.target.value)}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="px-5 pb-4">
-                        <div>
-                          <h4 className="text-[14.5px] font-semibold text-slate-700 capitalize">
-                            4. Total Score
-                          </h4>
-                          <div className="mt-2 pl-4 space-y-2 max-w-[330px]">
-                            <div className="flex items-center justify-between">
-                              <h4>
-                                <span className="text-[14px] text-slate-800 font-semibold">
-                                  Performance standards (Maximum = 40)
-                                </span>
-                              </h4>
-
-                              <span className="text-[13px] text-slate-800 font-semibold">
-                                {perfomance_standards.reduce(
-                                  (acc, curr) => acc + curr.score,
-                                  0
-                                )}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                              <h4>
-                                <span className="text-[14px] text-slate-800 font-semibold">
-                                  Objectives Set (Maximum = 60)
-                                </span>
-                              </h4>
-
-                              <span className="text-[14px] text-slate-800 font-semibold">
-                                {period_assessment.reduce(
-                                  (acc, curr) => acc + curr.score,
-                                  0
-                                )}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <h4>
-                                <span className="text-[14px] text-slate-800 font-semibold">
-                                  Total Score (Maximum = 100)
-                                </span>
-                              </h4>
-
-                              <span className="text-[14px] text-slate-800 font-semibold">
-                                {period_assessment.reduce(
-                                  (acc, curr) => acc + curr.score,
-                                  0
-                                ) +
-                                  perfomance_standards.reduce(
-                                    (acc, curr) => acc + curr.score,
-                                    0
-                                  )}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="px-7 mt-4 pb-4">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox id="terms" />
-                          <label
-                            htmlFor="terms"
-                            className="text-sm text-slate-500 font-medium- leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                          >
-                            I agree to the terms and conditions.
-                          </label>
-                        </div>
-                      </div>
-                      {error && (
-                        <div className="max-w-md px-6 mb-3">
-                          <Alert
-                            variant="destructive"
-                            className="py-2 my-2 rounded-[4px] flex items-center"
-                          >
-                            <AlertCircleIcon className="h-4 -mt-[5px] mr-3 w-4" />
-                            <AlertTitle className="text-[13px] font-medium fon !m-0">
-                              {error}
-                            </AlertTitle>
-                          </Alert>
-                        </div>
+      {status === "loading" ? (
+        <>
+          <Skeleton className="h-40 w-full rounded-card" />
+          <Skeleton className="h-80 w-full rounded-card" />
+        </>
+      ) : (
+        <>
+          <ErrorSummary errors={summaryErrors} title={error && summaryErrors.length === 1 ? "The evaluation could not be saved" : "Check these fields before you save"} />
+          <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+            <FormBody
+              aside={
+                <SummaryPanel
+                  title="Total score"
+                  rows={[
+                    ["Objectives (max 60)", objectivesTotal],
+                    ["Performance standards (max 40)", standardsTotal],
+                    ["Total (max 100)", <span key="t" className="text-[18px] font-extrabold">{objectivesTotal + standardsTotal}</span>],
+                  ]}
+                  checklist={[
+                    { label: "Employee chosen", done: Boolean(watched.employee) },
+                    { label: "Year and month chosen", done: Boolean(watched.period_year && watched.period_month) },
+                  ]}
+                />
+              }
+            >
+              <FormSection title="Employee and period" description="Who is evaluated, and for which month.">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                  <Field label="Employee" required htmlFor="perf-employee" error={errors.employee?.message ? String(errors.employee.message) : null}>
+                    <Controller
+                      control={form.control}
+                      name="employee"
+                      render={({ field, fieldState }) => (
+                        <AsyncSelectField
+                          name="employee"
+                          inputId="perf-employee"
+                          placeholder="Search employee by name"
+                          className="!min-h-[42px] !rounded-control !shadow-none"
+                          error={fieldState.error?.message}
+                          loader={employeesLoader}
+                          defaultOptions={true}
+                          value={field.value}
+                          onChange={(e: any) => field.onChange(e?.value)}
+                        />
                       )}
-                      <div className="px-6 pb-6">
-                        <Button
-                          type="submit"
-                          onClick={form.handleSubmit(onSubmit)}
-                          disabled={
-                            form.formState.disabled ||
-                            form.formState.isSubmitting
-                          }
-                          size="sm"
-                        >
-                          {form.formState.isSubmitting && (
-                            <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
-                          )}
-                          Save Performance
-                        </Button>
-                      </div>
-                      {/* <div className="py-3 px-7 text-sm text-slate-500">
-                        Copyright © 2024 Goodlife ®
-                      </div> */}
-                    </form>
-                  </Form>
+                    />
+                  </Field>
+                  <Field label="Year" required htmlFor="perf-year" error={errors.period_year?.message ? String(errors.period_year.message) : null}>
+                    <Controller
+                      control={form.control}
+                      name="period_year"
+                      render={({ field, fieldState }) => (
+                        <Select id="perf-year" value={field.value || ""} onChange={(e) => field.onChange(e.target.value)} onBlur={field.onBlur} invalid={Boolean(fieldState.error)}>
+                          <option value="">Choose a year</option>
+                          {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+                        </Select>
+                      )}
+                    />
+                  </Field>
+                  <Field label="Month" required htmlFor="perf-month" error={errors.period_month?.message ? String(errors.period_month.message) : null}>
+                    <Controller
+                      control={form.control}
+                      name="period_month"
+                      render={({ field, fieldState }) => (
+                        <Select id="perf-month" value={field.value || ""} onChange={(e) => field.onChange(e.target.value)} onBlur={field.onBlur} invalid={Boolean(fieldState.error)}>
+                          <option value="">Choose a month</option>
+                          {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                        </Select>
+                      )}
+                    />
+                  </Field>
                 </div>
-              )}
-              {status === "loading" && (
-                <div className="w-full h-[400px] flex items-center justify-center">
-                  <Loader className="mr-2 h-5 w-5 text-primary animate-spin" />
+              </FormSection>
+
+              <FormSection title="Goals and objectives" description="Assessment of the goals and objectives set for the review period. Give examples where you can.">
+                {legend}
+                <div className="overflow-hidden rounded-control border border-ims-border">
+                  <DataTable
+                    columns={ratingColumns("objectives", setperiod_assessment as Dispatch<SetStateAction<Rating[]>>, objectivesTotal)}
+                    rows={period_assessment as Rating[]}
+                    rowKey={(_, i) => String(i)}
+                    minWidth={640}
+                    totalLabel="Total (maximum 60)"
+                    caption="Goals and objectives"
+                  />
                 </div>
-              )}
-            </div>
-          </div>
-        </Card>{" "}
-      </div>
-      <ConfirmModal
-        title={"Are you sure you want to delete?"}
-        description={"This action cannot be undone. This will permanently delete the selected record."}
-        meta={confirmModal.meta}
-        onConfirm={() => deleteMutation.mutate()}
-        isLoading={deleteMutation.isLoading}
+              </FormSection>
+
+              <FormSection title="Other performance standards" description="Assessment of other performance standards and indicators.">
+                <div className="overflow-hidden rounded-control border border-ims-border">
+                  <DataTable
+                    columns={ratingColumns("standards", setperfomance_standards as Dispatch<SetStateAction<Rating[]>>, standardsTotal)}
+                    rows={perfomance_standards as Rating[]}
+                    rowKey={(_, i) => String(i)}
+                    minWidth={640}
+                    totalLabel="Total (maximum 40)"
+                    caption="Other performance standards"
+                  />
+                </div>
+              </FormSection>
+
+              <FormSection title="Comments by the employee">
+                <Field label="Overall comments" htmlFor="perf-comment">
+                  <Textarea id="perf-comment" placeholder="Enter overall comments" value={comment} onChange={(e) => setcomment(e.target.value)} />
+                </Field>
+                <Checkbox id="terms" label="I agree to the terms and conditions." checked={agreed} onChange={setAgreed} />
+              </FormSection>
+            </FormBody>
+
+            <FormActions
+              submitType="submit"
+              submitLabel="Save evaluation"
+              cancelTo={LIST}
+              busy={form.formState.isSubmitting}
+              disabled={form.formState.disabled}
+              note={`Total score ${objectivesTotal + standardsTotal} of 100`}
+            />
+          </form>
+        </>
+      )}
+
+      <ConfirmDialog
         open={confirmModal.isOpen}
         onClose={() => confirmModal.close()}
+        danger
+        title="Delete this performance evaluation?"
+        description="The evaluation is removed permanently. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={() => deleteMutation.mutateAsync()}
       />
-    </>
+    </Page>
   );
 }

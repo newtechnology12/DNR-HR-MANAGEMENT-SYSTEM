@@ -3,19 +3,45 @@ import { useMutation, useQuery, useQueryClient } from "react-query";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
-import { Award, ClipboardCheck, Download, LayoutTemplate, Plus, Rocket } from "lucide-react";
+import { Award, ClipboardCheck, Download, ExternalLink, LayoutTemplate, Plus, Rocket } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge, MetricGroup, PageHeader, StatusBadge } from "@/components/enterprise/ui";
+import { StatusBadge } from "@/components/enterprise/ui";
 import { errorMessage } from "@/lib/procurement";
-import { APPRAISAL_STATUS, GRADE_TONE, appraisalApi } from "@/lib/hr";
-import { Chip, Field, inputCls, showDate, toPbDate, useMe } from "@/components/portal/kit";
+import { APPRAISAL_STATUS, appraisalApi } from "@/lib/hr";
+import { toPbDate, useMe } from "@/components/portal/kit";
+import {
+  Button,
+  Card,
+  Checkbox,
+  Column,
+  DataTable,
+  DatePicker,
+  EmptyState,
+  Field,
+  FilterBar,
+  FilterChip,
+  FilterSelect,
+  Input,
+  KpiBand,
+  Modal,
+  Num,
+  Page,
+  PageHeader,
+  Pager,
+  Person,
+  Select,
+    Tabs,
+  fmtDate,
+  fmtNumber,
+  sentence,
+  statusText,
+  statusWord,
+} from "@/components/ims";
 import { cn } from "@/utils";
+import { GRADE_DOT, Grade } from "./AppraisalPage";
 
-const GRADE_COLORS: Record<string, string> = { A: "bg-emerald-600", B: "bg-emerald-400", C: "bg-sky-500", D: "bg-amber-500", E: "bg-red-500" };
+const LOCKED = ["shared", "acknowledged", "finalized"];
 
 export default function PerformanceOverview() {
   const navigate = useNavigate();
@@ -29,6 +55,9 @@ export default function PerformanceOverview() {
   const [department, setDepartment] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [creating, setCreating] = React.useState(false);
+  const [sort, setSort] = React.useState("");
+  const [page, setPage] = React.useState(1);
+  const [perPage, setPerPage] = React.useState(30);
 
   const cycles = useQuery(["appraisal-cycles"], () => pocketbase.collection("appraisal_cycles").getFullList({ sort: "-period_start", expand: "template" }));
   React.useEffect(() => {
@@ -39,7 +68,7 @@ export default function PerformanceOverview() {
   const myReviews = useQuery(["my-reviews", cycleId, me.data?.id], () => pocketbase.collection("appraisal_reviews").getFullList({ filter: `evaluator = "${me.data!.id}" && appraisal.cycle = "${cycleId}"`, fields: "appraisal,status" }), { enabled: Boolean(cycleId && me.data) });
   const launch = useMutation(() => appraisalApi.launch(cycleId), {
     onSuccess: (r) => {
-      toast.success(`${r.created} appraisal${r.created === 1 ? "" : "s"} created; evaluators have been notified`);
+      toast.success(`${r.created} appraisal${r.created === 1 ? "" : "s"} created and the evaluators notified`);
       queryClient.invalidateQueries(["appraisal-cycles"]);
       queryClient.invalidateQueries(["appraisals"]);
     },
@@ -50,7 +79,8 @@ export default function PerformanceOverview() {
 
   const all = (q.data || []) as any[];
   const submittedByMe = new Set((myReviews.data || []).filter((r: any) => r.status === "submitted").map((r: any) => r.appraisal));
-  const toDo = all.filter((a) => (a.evaluators || []).includes(me.data?.id) && !submittedByMe.has(a.id) && !["shared", "acknowledged", "finalized"].includes(a.status));
+  const isMine = (a: any) => (a.evaluators || []).includes(me.data?.id) && !submittedByMe.has(a.id) && !LOCKED.includes(a.status);
+  const toDo = all.filter(isMine);
   const rows = (view === "mine" ? toDo : all).filter(
     (a) => (!status || a.status === status) && (!department || a.department === department) && `${a.expand?.employee?.name} ${a.expand?.department?.name}`.toLowerCase().includes(search.trim().toLowerCase())
   );
@@ -59,126 +89,213 @@ export default function PerformanceOverview() {
   const grades = ["A", "B", "C", "D", "E"].map((g) => ({ g, n: scored.filter((a) => a.grade === g).length }));
   const departments = Array.from(new Map(all.map((a) => [a.department, a.expand?.department?.name])).entries());
   const bands = cycle?.expand?.template?.grade_bands || [];
+  const evaluated = all.filter((a) => a.evaluator_score > 0).length;
+  const claims = all.filter((a) => a.status === "disputed").length;
+
+  // Sorting and paging happen in the browser: the whole cycle is already loaded.
+  const sorted = React.useMemo(() => {
+    if (!sort) return rows;
+    const desc = sort.startsWith("-");
+    const key = desc ? sort.slice(1) : sort;
+    const val = (a: any) => (key === "employee" ? String(a.expand?.employee?.name || "").toLowerCase() : Number(a[key]) || 0);
+    return [...rows].sort((x, y) => {
+      const a = val(x);
+      const b = val(y);
+      return (a < b ? -1 : a > b ? 1 : 0) * (desc ? -1 : 1);
+    });
+  }, [rows, sort]);
+  React.useEffect(() => setPage(1), [cycleId, view, status, department, search, perPage]);
+  const shown = sorted.slice((page - 1) * perPage, page * perPage);
 
   function exportExcel() {
-    const data = [["Employee", "Department", "Evaluators", "Activity score", "Evaluator score", "Self-assessment", "Final score", "Grade", "Status"], ...all.map((a) => [a.expand?.employee?.name, a.expand?.department?.name, (a.expand?.evaluators || []).map((u: any) => u.name).join(", "), a.activity_score, a.evaluator_score || "", a.self_score || "", a.final_score || "", a.grade ? `${a.grade} — ${a.grade_label}` : "", APPRAISAL_STATUS[a.status]?.label])];
+    const data = [["Employee", "Department", "Evaluators", "Activity score", "Evaluator score", "Self-assessment", "Final score", "Grade", "Status"], ...all.map((a) => [a.expand?.employee?.name, a.expand?.department?.name, (a.expand?.evaluators || []).map((u: any) => u.name).join(", "), a.activity_score, a.evaluator_score || "", a.self_score || "", a.final_score || "", a.grade ? `${a.grade} — ${a.grade_label}` : "", statusText(APPRAISAL_STATUS[a.status], a.status)])];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Appraisals");
     XLSX.writeFile(wb, `${cycle?.name || "appraisals"}.xlsx`);
   }
 
+  const open = (a: any) => navigate(`/dashboard/hr/performance/appraisals/${a.id}`);
+
+  const columns: Column<any>[] = [
+    {
+      key: "employee",
+      header: "Staff",
+      sortField: "employee",
+      className: "max-w-[220px]",
+      cell: (a) => <Person name={a.expand?.employee?.name} detail={a.expand?.department?.name} />,
+    },
+    {
+      key: "evaluators",
+      header: "Evaluated by",
+      className: "max-w-[220px]",
+      cell: (a) => {
+        const names = (a.expand?.evaluators || []).map((u: any) => u.name).join(", ");
+        return (
+          <span className="block min-w-0">
+            {names ? <span className="line-clamp-2 break-words text-ims-body" title={names}>{names}</span> : <span className="text-ims-warning">No evaluator · HR evaluates</span>}
+            {isMine(a) && <span className="mt-0.5 block text-t-small font-semibold text-ims-link">Your evaluation is due</span>}
+          </span>
+        );
+      },
+    },
+    { key: "activity_score", header: <span title="From action plans and work reports">Activity</span>, sortField: "activity_score", numeric: true, cell: (a) => <span className="text-ims-body"><Num value={a.activity_score} decimals /></span> },
+    { key: "evaluator_score", header: "Evaluator score", sortField: "evaluator_score", numeric: true, cell: (a) => (a.evaluator_score ? <Num value={a.evaluator_score} decimals /> : <span className="text-ims-faint">—</span>) },
+    { key: "self_score", header: "Self", sortField: "self_score", numeric: true, cell: (a) => (a.self_score ? <span className="text-ims-muted"><Num value={a.self_score} decimals /></span> : <span className="text-ims-faint">—</span>) },
+    {
+      key: "final_score",
+      header: "Final score",
+      sortField: "final_score",
+      numeric: true,
+      cell: (a) => (a.final_score > 0 ? <span className="font-bold text-ims-text"><Num value={a.final_score} decimals /></span> : <span className="text-ims-faint">—</span>),
+      sub: (a) => (a.grade ? <Grade small grade={a.grade} label={a.grade_label} /> : null),
+    },
+    { key: "status", header: "Status", cell: (a) => <StatusBadge status={a.status} map={APPRAISAL_STATUS} /> },
+  ];
+
+  const chips: FilterChip[] = [
+    ...(status ? [{ key: "status", label: `Status: ${statusText(APPRAISAL_STATUS[status], status)}`, onRemove: () => setStatus("") }] : []),
+    ...(department ? [{ key: "department", label: `Department: ${departments.find(([id]) => id === department)?.[1] || "—"}`, onRemove: () => setDepartment("") }] : []),
+  ];
+  const clearFilters = () => {
+    setStatus("");
+    setDepartment("");
+    setSearch("");
+  };
+
+  const noCycles = !cycles.isLoading && !cycles.data?.length;
+
   return (
-    <div className="space-y-4 px-4 py-4 sm:px-6">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "HR", to: "/dashboard/hr/employees" }, { label: "Performance appraisals" }]}
         title="Performance appraisals"
-        description="Each department evaluates its staff; the system adds an activity score from action plans and reports and calculates the grade. Staff see their results and can comment or raise a claim."
-        breadcrumbs={[{ title: "HR", link: "/dashboard/hr/employees" }, { title: "Performance", link: "/dashboard/hr/performance" }]}
-        actions={
-          <>
-            {canManage && <Button size="sm" variant="outline" onClick={() => navigate("/dashboard/hr/performance/templates")}><LayoutTemplate size={14} /> Templates</Button>}
-            <Button size="sm" variant="outline" onClick={exportExcel} disabled={!all.length}><Download size={14} /> Export</Button>
-            {canManage && <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} /> New cycle</Button>}
-          </>
-        }
+        subtitle="Evaluations by department, with the activity score from action plans and reports added by the system."
+        primary={canManage ? { label: "New cycle", icon: Plus, onClick: () => setCreating(true) } : undefined}
+        secondary={[
+          ...(canManage ? [{ label: "Templates", icon: LayoutTemplate, to: "/dashboard/hr/performance/templates" }] : []),
+          { label: "Export", icon: Download, onClick: exportExcel, disabled: !all.length },
+        ]}
       />
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <select className={cn(inputCls, "sm:w-80")} value={cycleId} onChange={(e) => setCycleId(e.target.value)} aria-label="Appraisal cycle">
-          {(cycles.data || []).map((c: any) => <option key={c.id} value={c.id}>{c.name} ({c.status})</option>)}
-        </select>
-        {cycle && <span className="text-[12.5px] text-slate-500">{showDate(cycle.period_start)} – {showDate(cycle.period_end)} · due {showDate(cycle.due_date)} · template “{cycle.expand?.template?.name}”</span>}
-        {cycle?.status === "draft" && canManage && <Button size="sm" className="sm:ml-auto" disabled={launch.isLoading} onClick={() => launch.mutate()}><Rocket size={14} /> Launch cycle</Button>}
-      </div>
-
-      {!cycles.isLoading && !cycles.data?.length ? (
-        <div className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-[13px] text-slate-500">No appraisal cycle yet.{canManage && " Create one with “New cycle”."}</div>
+      {noCycles ? (
+        <Card>
+          <EmptyState
+            icon={Award}
+            text={canManage ? "No appraisal cycle yet. Create one with New cycle." : "No appraisal cycle yet."}
+            action={canManage ? <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>New cycle</Button> : undefined}
+          />
+        </Card>
       ) : (
         <>
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-            <MetricGroup
-              title={cycle?.name || "Cycle"}
-              icon={Award}
-              columns={4}
-              loading={q.isLoading}
-              metrics={[
-                { label: "Staff", value: all.length },
-                { label: "Evaluated", value: `${all.filter((a) => a.evaluator_score > 0).length}`, sub: `${Math.round((all.filter((a) => a.evaluator_score > 0).length / Math.max(1, all.length)) * 100)}% done` },
-                { label: "Average score", value: avg || "—", sub: scored.length ? `${scored.length} scored` : "" },
-                { label: "Open claims", value: all.filter((a) => a.status === "disputed").length, tone: all.some((a) => a.status === "disputed") ? "warning" : "default" },
-              ]}
-            />
-            <div className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-card">
-              <p className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Grade distribution</p>
-              <div className="mt-2 flex h-4 overflow-hidden rounded-full bg-slate-100" role="img" aria-label={grades.map((g) => `${g.g}: ${g.n}`).join(", ")}>
-                {grades.filter((g) => g.n).map((g) => <div key={g.g} className={cn(GRADE_COLORS[g.g], "border-r-2 border-white last:border-r-0")} style={{ width: `${(g.n / Math.max(1, scored.length)) * 100}%` }} title={`${g.g}: ${g.n}`} />)}
-              </div>
-              <div className="mt-2 grid grid-cols-5 gap-1 text-center text-[11.5px]">
-                {grades.map((g) => (
-                  <div key={g.g}>
-                    <span className={cn("mx-auto mb-0.5 block h-2 w-2 rounded-full", GRADE_COLORS[g.g])} />
-                    <span className="font-semibold text-slate-900">{g.g}</span> <span className="tabular-nums text-slate-600">{g.n}</span>
-                    <span className="block truncate text-[10.5px] text-slate-500">{bands.find((b: any) => b.grade === g.g)?.label}</span>
-                  </div>
+          <Card className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center lg:gap-8">
+            <div className="min-w-0 space-y-2.5">
+              <FilterSelect
+                label="Appraisal cycle"
+                all={false}
+                value={cycleId}
+                onChange={setCycleId}
+                className="block w-full sm:inline-block sm:w-auto [&_select]:w-full sm:[&_select]:w-[360px]"
+                options={(cycles.data || []).map((c: any) => ({ value: c.id, label: `${c.name} · ${statusWord(c.status) || sentence(c.status)}` }))}
+              />
+              {cycle && (
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-t-small text-ims-muted">
+                  <span>{fmtDate(cycle.period_start)} – {fmtDate(cycle.period_end)}</span>
+                  <span aria-hidden>·</span>
+                  <span>Due {fmtDate(cycle.due_date)}</span>
+                  {cycle.expand?.template?.name && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span>Template “{cycle.expand.template.name}”</span>
+                    </>
+                  )}
+                </p>
+              )}
+              {cycle?.status === "draft" && canManage && (
+                <div className="flex flex-col gap-2 rounded-control bg-ims-info-bg px-3 py-2.5 text-t-small text-ims-info sm:flex-row sm:items-center sm:justify-between">
+                  <span>This cycle is a draft. Launching it creates the appraisals and notifies the evaluators.</span>
+                  <Button variant="primary" size="sm" icon={Rocket} loading={launch.isLoading} onClick={() => launch.mutate()} className="shrink-0">Launch cycle</Button>
+                </div>
+              )}
+            </div>
+            <div className="min-w-0" role="group" aria-label="Grade distribution">
+              <p className="mb-2 flex items-baseline justify-between gap-3">
+                <span className="text-t-label text-ims-text">Grade distribution</span>
+                <span className="text-t-small text-ims-muted">{scored.length ? `${scored.length} staff with a final score` : "No final scores yet"}</span>
+              </p>
+              <div className="flex h-3 overflow-hidden rounded-pill bg-ims-subtle" role="img" aria-label={grades.map((g) => `${g.g}: ${g.n}`).join(", ")}>
+                {grades.filter((g) => g.n).map((g) => (
+                  <div key={g.g} className={cn(GRADE_DOT[g.g], "border-r-2 border-ims-card last:border-r-0")} style={{ width: `${(g.n / Math.max(1, scored.length)) * 100}%` }} title={`${g.g}: ${g.n}`} />
                 ))}
               </div>
+              <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
+                {grades.map((g) => (
+                  <li key={g.g} className="flex items-center gap-1.5 text-t-small">
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", GRADE_DOT[g.g])} aria-hidden />
+                    <span className="font-semibold text-ims-text">{g.g}</span>
+                    <span className="text-ims-muted">{bands.find((b: any) => b.grade === g.g)?.label}</span>
+                    <span className="font-semibold tabular-nums text-ims-text">{g.n}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
+          </Card>
 
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1">
-              <Chip active={view === "all"} onClick={() => setView("all")} count={all.length}>All staff</Chip>
-              <Chip active={view === "mine"} onClick={() => setView("mine")} count={toDo.length}>To evaluate by me</Chip>
-            </div>
-            <select className={cn(inputCls, "lg:ml-auto lg:w-56")} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
-              <option value="">All statuses</option>
-              {Object.entries(APPRAISAL_STATUS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
-            </select>
-            <select className={cn(inputCls, "lg:w-64")} value={department} onChange={(e) => setDepartment(e.target.value)} aria-label="Department">
-              <option value="">All departments</option>
-              {departments.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-            </select>
-            <input type="search" className={cn(inputCls, "lg:w-56")} placeholder="Search staff" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
+          <KpiBand
+            loading={q.isLoading}
+            items={[
+              { label: "Staff", value: fmtNumber(all.length) },
+              { label: "Evaluated", value: fmtNumber(evaluated), sub: `${Math.round((evaluated / Math.max(1, all.length)) * 100)}% done` },
+              { label: "Average score", value: avg || "—", sub: scored.length ? `${scored.length} scored` : "None scored yet" },
+              { label: "Open claims", value: fmtNumber(claims), tone: claims ? "warning" : "default", onClick: claims ? () => { setView("all"); setStatus("disputed"); } : undefined },
+            ]}
+          />
 
-          {q.isLoading ? <Skeleton className="h-80 w-full" /> : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-card">
-              <table className="dnr-grid w-full min-w-[1080px] text-[13px]">
-                <thead><tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  <th className="px-3 py-2">Staff</th><th className="px-3 py-2">Evaluators</th><th className="px-3 py-2 text-right" title="From action plans and reports">Activity</th><th className="px-3 py-2 text-right">Evaluators</th><th className="px-3 py-2 text-right">Self</th><th className="w-44 px-3 py-2">Final score</th><th className="px-3 py-2">Grade</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" />
-                </tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map((a) => {
-                    const mine = (a.evaluators || []).includes(me.data?.id) && !submittedByMe.has(a.id) && !["shared", "acknowledged", "finalized"].includes(a.status);
-                    return (
-                      <tr key={a.id} className="cursor-pointer hover:bg-slate-50" onClick={() => navigate(`/dashboard/hr/performance/appraisals/${a.id}`)}>
-                        <td className="px-3 py-2"><p className="font-medium text-slate-900">{a.expand?.employee?.name}</p><p className="text-[12px] text-slate-500">{a.expand?.department?.name}</p></td>
-                        <td className="max-w-[200px] truncate px-3 py-2 text-[12.5px] text-slate-600">{(a.expand?.evaluators || []).map((u: any) => u.name).join(", ") || <span className="text-amber-700">None — HR evaluates</span>}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">{a.activity_score ?? "—"}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{a.evaluator_score || "—"}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-500">{a.self_score || "—"}</td>
-                        <td className="px-3 py-2">
-                          {a.final_score > 0 ? (
-                            <div className="flex items-center gap-2">
-                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div className={cn("h-full rounded-full", GRADE_COLORS[a.grade] || "bg-slate-400")} style={{ width: `${a.final_score}%` }} /></div>
-                              <span className="w-10 text-right font-semibold tabular-nums">{a.final_score}</span>
-                            </div>
-                          ) : <span className="text-slate-400">—</span>}
-                        </td>
-                        <td className="px-3 py-2">{a.grade ? <Badge tone={GRADE_TONE[a.grade]}>{a.grade} · {a.grade_label}</Badge> : "—"}</td>
-                        <td className="px-3 py-2"><StatusBadge status={a.status} map={APPRAISAL_STATUS} /></td>
-                        <td className="px-3 py-2 text-right">{mine && <span className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[12px] font-medium text-white"><ClipboardCheck size={13} /> Evaluate</span>}</td>
-                      </tr>
-                    );
-                  })}
-                  {!rows.length && <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-500">{view === "mine" ? "Nothing waiting for your evaluation." : "No appraisal matches."}</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <Card padded={false}>
+            <Tabs
+              inset
+              label="Appraisal views"
+              active={view}
+              onChange={(k) => setView(k as "mine" | "all")}
+              tabs={[
+                { key: "all", label: "All staff", count: all.length },
+                { key: "mine", label: "To evaluate by me", count: toDo.length },
+              ]}
+            />
+            <FilterBar
+              search={{ value: search, onChange: setSearch, placeholder: "Search staff or department" }}
+              chips={chips}
+              onClear={clearFilters}
+            >
+              <FilterSelect label="Status" value={status} onChange={setStatus} options={Object.entries(APPRAISAL_STATUS).map(([k, s]) => ({ value: k, label: statusText(s, k) }))} />
+              <FilterSelect label="Department" value={department} onChange={setDepartment} options={departments.map(([id, name]) => ({ value: id, label: name || "—" }))} />
+            </FilterBar>
+            <DataTable
+              columns={columns}
+              rows={shown}
+              rowKey={(a) => a.id}
+              loading={q.isLoading || cycles.isLoading}
+              error={q.error}
+              onRetry={() => q.refetch()}
+              sort={sort}
+              onSort={setSort}
+              onRowClick={open}
+              rowActions={(a) => [isMine(a) ? { label: "Evaluate", icon: ClipboardCheck, onSelect: open } : { label: "Open", icon: ExternalLink, onSelect: open }]}
+              minWidth={960}
+              caption="Appraisals in this cycle"
+              empty={
+                <EmptyState
+                  icon={ClipboardCheck}
+                  text={view === "mine" ? "Nothing is waiting for your evaluation." : chips.length || search ? "No appraisal matches these filters." : "No appraisals in this cycle yet."}
+                  action={chips.length || search ? <Button onClick={clearFilters}>Clear filters</Button> : undefined}
+                />
+              }
+              footer={sorted.length > 15 ? <Pager page={page} perPage={perPage} total={sorted.length} onPage={setPage} onPerPage={setPerPage} /> : undefined}
+            />
+          </Card>
         </>
       )}
       {creating && <NewCycleDialog onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); setCycleId(id); }} />}
-    </div>
+    </Page>
   );
 }
 
@@ -186,6 +303,7 @@ function NewCycleDialog({ onClose, onCreated }: { onClose: () => void; onCreated
   const queryClient = useQueryClient();
   const y = new Date().getFullYear();
   const [v, setV] = React.useState({ name: `Annual performance review ${y}`, template: "", period_start: `${y}-01-01`, period_end: `${y}-12-31`, due_date: `${y}-12-20`, departments: [] as string[] });
+  const [tried, setTried] = React.useState(false);
   const templates = useQuery(["appraisal-templates"], () => pocketbase.collection("appraisal_templates").getFullList({ filter: "active = true", sort: "name" }));
   const depts = useQuery(["departments-simple"], () => pocketbase.collection("departments").getFullList({ sort: "name", fields: "id,name" }));
   React.useEffect(() => {
@@ -193,7 +311,7 @@ function NewCycleDialog({ onClose, onCreated }: { onClose: () => void; onCreated
   }, [templates.data, v.template]);
   const save = useMutation(() => pocketbase.collection("appraisal_cycles").create({ ...v, period_start: toPbDate(v.period_start), period_end: toPbDate(v.period_end), due_date: toPbDate(v.due_date), status: "draft" }), {
     onSuccess: (c: any) => {
-      toast.success("Cycle created — review it, then launch it to create the appraisals");
+      toast.success(`${c.name || "Cycle"} created as a draft. Review it, then launch it to create the appraisals`);
       queryClient.invalidateQueries(["appraisal-cycles"]);
       onCreated(c.id);
     },
@@ -201,27 +319,60 @@ function NewCycleDialog({ onClose, onCreated }: { onClose: () => void; onCreated
       toast.error(errorMessage(e));
     },
   });
+  const nameError = tried && !v.name.trim() ? "Enter a name, for example “Annual performance review 2026”." : null;
+  const templateError = tried && !v.template ? (templates.data?.length ? "Choose the template evaluators will use." : "No active template yet. Create one under Templates first.") : null;
+  const create = () => {
+    setTried(true);
+    if (!v.name.trim() || !v.template) return;
+    save.mutate();
+  };
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto bg-white">
-        <DialogHeader><DialogTitle>New appraisal cycle</DialogTitle><DialogDescription>Launching the cycle creates one appraisal per employee and notifies the evaluators.</DialogDescription></DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Name" required className="col-span-2"><input className={inputCls} value={v.name} onChange={(e) => setV((x) => ({ ...x, name: e.target.value }))} /></Field>
-          <Field label="Template" required className="col-span-2"><select className={inputCls} value={v.template} onChange={(e) => setV((x) => ({ ...x, template: e.target.value }))}>{(templates.data || []).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
-          <Field label="Period from" required><input type="date" className={inputCls} value={v.period_start} onChange={(e) => setV((x) => ({ ...x, period_start: e.target.value }))} /></Field>
-          <Field label="Period to" required><input type="date" className={inputCls} value={v.period_end} onChange={(e) => setV((x) => ({ ...x, period_end: e.target.value }))} /></Field>
-          <Field label="Evaluations due" className="col-span-2"><input type="date" className={inputCls} value={v.due_date} onChange={(e) => setV((x) => ({ ...x, due_date: e.target.value }))} /></Field>
-          <div className="col-span-2">
-            <p className="mb-1.5 text-[13px] font-medium text-slate-700">Departments <span className="font-normal text-slate-500">(none selected = all)</span></p>
-            <div className="grid max-h-44 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-slate-200 p-2 sm:grid-cols-2">
-              {(depts.data || []).map((d: any) => (
-                <label key={d.id} className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={v.departments.includes(d.id)} onChange={(e) => setV((x) => ({ ...x, departments: e.target.checked ? [...x.departments, d.id] : x.departments.filter((i) => i !== d.id) }))} /> {d.name}</label>
-              ))}
-            </div>
+    <Modal
+      open
+      onClose={onClose}
+      title="New appraisal cycle"
+      description="Launching the cycle creates one appraisal per employee and notifies the evaluators."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={save.isLoading} onClick={create}>Create cycle</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Name" required htmlFor="cycle-name" error={nameError} className="sm:col-span-2">
+          <Input id="cycle-name" value={v.name} onChange={(e) => setV((x) => ({ ...x, name: e.target.value }))} invalid={Boolean(nameError)} />
+        </Field>
+        <Field label="Template" required htmlFor="cycle-template" error={templateError} className="sm:col-span-2">
+          <Select id="cycle-template" value={v.template} onChange={(e) => setV((x) => ({ ...x, template: e.target.value }))} invalid={Boolean(templateError)}>
+            {!templates.data?.length && <option value="">No active template</option>}
+            {(templates.data || []).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Period from" required htmlFor="cycle-start">
+          <DatePicker id="cycle-start" value={v.period_start} max={v.period_end || undefined} onChange={(d) => setV((x) => ({ ...x, period_start: d }))} />
+        </Field>
+        <Field label="Period to" required htmlFor="cycle-end">
+          <DatePicker id="cycle-end" value={v.period_end} min={v.period_start || undefined} onChange={(d) => setV((x) => ({ ...x, period_end: d }))} />
+        </Field>
+        <Field label="Evaluations due" htmlFor="cycle-due" className="sm:col-span-2">
+          <DatePicker id="cycle-due" value={v.due_date} onChange={(d) => setV((x) => ({ ...x, due_date: d }))} />
+        </Field>
+        <fieldset className="sm:col-span-2">
+          <legend className="mb-1.5 text-t-label text-ims-text">Departments</legend>
+          <p className="mb-2 text-t-hint text-ims-muted">Leave all unticked to include every department.</p>
+          <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-control border border-ims-border p-3 sm:grid-cols-2">
+            {(depts.data || []).map((d: any) => (
+              <Checkbox
+                key={d.id}
+                label={d.name}
+                checked={v.departments.includes(d.id)}
+                onChange={(checked) => setV((x) => ({ ...x, departments: checked ? [...x.departments, d.id] : x.departments.filter((i) => i !== d.id) }))}
+              />
+            ))}
           </div>
-        </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={!v.name.trim() || !v.template || save.isLoading} onClick={() => save.mutate()}>Create cycle</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </fieldset>
+      </div>
+    </Modal>
   );
 }
