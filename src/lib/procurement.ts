@@ -295,7 +295,7 @@ export const purchasingApi = {
 // ------------------------------------------------------------------ finance (Phase 4)
 export const INVOICE_STATUS: Record<string, StatusMeta> = {
   received: { label: "In progress", tone: "info", note: "Received, to match" },
-  exception: { label: "Returned", tone: "violet", note: "Match exception" },
+  exception: { label: "Pending approval", tone: "warning", note: "Match exception" },
   matched: { label: "In progress", tone: "info", note: "Matched" },
   pending_approval: { label: "Pending approval", tone: "warning" },
   approved: { label: "Approved", tone: "success", note: "To pay" },

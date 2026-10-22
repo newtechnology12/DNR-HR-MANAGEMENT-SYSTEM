@@ -157,7 +157,7 @@ export default function PurchaseOrderDetail() {
     canManage && po.status === "approved" && { key: "send", label: "Send to supplier", icon: Send, run: () => setStep("send"), main: true },
     canManage && po.status === "sent" && { key: "acknowledge", label: "Record acknowledgement", icon: CheckCheck, run: () => setStep("acknowledge"), main: true },
     canReceive && { key: "receive", label: "Receive delivery", icon: PackageCheck, run: goReceive, main: true },
-    canBill && { key: "bill", label: "Create bill", icon: Receipt, run: () => setBilling(true), main: true },
+    canBill && { key: "bill", label: "Record invoice", icon: Receipt, run: () => setBilling(true), main: true },
     printable && { key: "print", label: "Print", icon: Printer, href: `/print/po/${po.id}` },
   ].filter(Boolean) as Act[]);
   const primaryAct = acts.find((a) => a.main);
@@ -202,7 +202,7 @@ export default function PurchaseOrderDetail() {
     },
     {
       key: "billed",
-      header: "Billed",
+      header: "Invoiced",
       numeric: true,
       cell: (l) => {
         const rec = l.received_qty || 0;
@@ -240,9 +240,9 @@ export default function PurchaseOrderDetail() {
   ];
 
   const billColumns: Column<any>[] = [
-    { key: "number", header: "Bill", nowrap: true, cell: (i) => <DocNo value={i.number} /> },
+    { key: "number", header: "Invoice", nowrap: true, cell: (i) => <DocNo value={i.number} /> },
     { key: "ref", header: "Supplier reference", cell: (i) => i.supplier_invoice_number || "—" },
-    { key: "date", header: "Bill date", nowrap: true, cell: (i) => fmtDate(i.invoice_date) },
+    { key: "date", header: "Invoice date", nowrap: true, cell: (i) => fmtDate(i.invoice_date) },
     {
       key: "due",
       header: "Due",
@@ -261,7 +261,7 @@ export default function PurchaseOrderDetail() {
   const paymentColumns: Column<any>[] = [
     { key: "number", header: "Payment", nowrap: true, cell: (p) => <DocNo value={p.number} /> },
     { key: "date", header: "Date", nowrap: true, cell: (p) => fmtDate(p.payment_date) },
-    { key: "bill", header: "Bill", nowrap: true, cell: (p) => <DocNo value={p.expand?.invoice?.number} /> },
+    { key: "bill", header: "Invoice", nowrap: true, cell: (p) => <DocNo value={p.expand?.invoice?.number} /> },
     { key: "method", header: "Method", cell: (p) => PAYMENT_METHODS[p.method] || p.method || "—" },
     { key: "reference", header: "Reference", cell: (p) => p.reference || "—" },
     { key: "amount", header: `Amount (${cur})`, numeric: true, cell: (p) => <Num value={p.amount} />, total: <Num value={paid} /> },
@@ -307,8 +307,8 @@ export default function PurchaseOrderDetail() {
         <p role="status" className="flex flex-wrap items-start gap-2 rounded-card border border-ims-danger/30 bg-ims-danger-bg px-4 py-3 text-t-body text-ims-danger">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
           <span>
-            {openExceptions} supplier bill{openExceptions > 1 ? "s have" : " has"} a three-way match exception.{" "}
-            <button type="button" className="font-bold underline underline-offset-2 hover:no-underline" onClick={() => setTab("receipts")}>Review the bills</button>
+            {openExceptions} supplier invoice{openExceptions > 1 ? "s have" : " has"} a three-way match exception.{" "}
+            <button type="button" className="font-bold underline underline-offset-2 hover:no-underline" onClick={() => setTab("receipts")}>Review the invoices</button>
           </span>
         </p>
       )}
@@ -324,9 +324,9 @@ export default function PurchaseOrderDetail() {
             { label: "Received", value: amount(po.received_value), sub: `${pct(po.received_value)}% of the order`, onClick: () => setTab("receipts") },
             { label: "Still to receive", value: amount(Math.max((po.grand_total || 0) - (po.received_value || 0), 0)), sub: `${receipts.length} deliver${receipts.length === 1 ? "y" : "ies"} so far` },
             {
-              label: "Billed",
+              label: "Invoiced",
               value: amount(po.invoiced_value || 0),
-              sub: openExceptions ? `${openExceptions} match exception${openExceptions > 1 ? "s" : ""}` : `${activeBills.length} bill${activeBills.length === 1 ? "" : "s"}`,
+              sub: openExceptions ? `${openExceptions} match exception${openExceptions > 1 ? "s" : ""}` : `${activeBills.length} invoice${activeBills.length === 1 ? "" : "s"}`,
               tone: openExceptions ? "danger" : "default",
               onClick: () => setTab("receipts"),
             },
@@ -342,7 +342,7 @@ export default function PurchaseOrderDetail() {
         tabs={[
           { key: "details", label: "Details" },
           { key: "items", label: "Items", count: items.length },
-          { key: "receipts", label: "Deliveries & bills" },
+          { key: "receipts", label: "Deliveries & invoices" },
           { key: "approval", label: "Approvals" },
           { key: "activity", label: "Activity" },
         ]}
@@ -468,9 +468,9 @@ export default function PurchaseOrderDetail() {
           <Card padded={false}>
             <div className="px-5 pt-5">
               <CardHeader
-                title="Supplier bills"
-                subtitle="Each bill is matched against the order and what was received."
-                action={canBill && invoices.length > 0 ? <Button icon={Receipt} onClick={() => setBilling(true)}>Create bill</Button> : undefined}
+                title="Supplier invoices"
+                subtitle="Each invoice is matched against the order and what was received."
+                action={canBill && invoices.length > 0 ? <Button icon={Receipt} onClick={() => setBilling(true)}>Record invoice</Button> : undefined}
               />
             </div>
             <DataTable
@@ -478,14 +478,14 @@ export default function PurchaseOrderDetail() {
               rows={invoices}
               rowKey={(i) => i.id}
               minWidth={820}
-              caption="Supplier bills"
+              caption="Supplier invoices"
               onRowClick={(i) => navigate(`/dashboard/finance/invoices/${i.id}`)}
               empty={
                 <EmptyState
                   compact
                   icon={Receipt}
-                  text={po.received_value > 0 ? "No supplier bill recorded yet." : "Bills can be recorded once goods or services have been received."}
-                  action={canBill ? <Button variant="primary" icon={Receipt} onClick={() => setBilling(true)}>Create bill</Button> : undefined}
+                  text={po.received_value > 0 ? "No supplier invoice recorded yet." : "Invoices can be recorded once goods or services have been received."}
+                  action={canBill ? <Button variant="primary" icon={Receipt} onClick={() => setBilling(true)}>Record invoice</Button> : undefined}
                 />
               }
             />
@@ -494,7 +494,7 @@ export default function PurchaseOrderDetail() {
           {payments.length > 0 && (
             <Card padded={false}>
               <div className="px-5 pt-5">
-                <CardHeader title="Payments" subtitle="Payments made against the bills of this order." />
+                <CardHeader title="Payments" subtitle="Payments made against the invoices of this order." />
               </div>
               <DataTable columns={paymentColumns} rows={payments} rowKey={(p) => p.id} minWidth={680} caption="Payments" />
             </Card>
@@ -721,7 +721,7 @@ function EditPo({ po, onClose, onSaved }: { po: any; onClose: () => void; onSave
   );
 }
 
-/** Where the order comes from and what followed: requisition, RFQ, contract, receipts, bills, payments, returns. */
+/** Where the order comes from and what followed: requisition, RFQ, contract, receipts, invoices, payments, returns. */
 function DocumentFlow({ po, receipts, invoices, payments, returns, onTab }: { po: any; receipts: any[]; invoices: any[]; payments: any[]; returns: any[]; onTab: (t: string) => void }) {
   const navigate = useNavigate();
   const steps: { label: string; value: string; done: boolean; go?: () => void; mono?: boolean }[] = [
@@ -729,7 +729,7 @@ function DocumentFlow({ po, receipts, invoices, payments, returns, onTab }: { po
     { label: po.source === "direct" ? "Direct purchase" : "Request for quotation", value: po.expand?.rfq?.number || (po.source === "direct" ? "No RFQ" : "—"), mono: Boolean(po.rfq), done: true, go: po.rfq ? () => navigate(`/dashboard/procurement/rfqs/${po.rfq}?tab=comparison`) : undefined },
     ...(po.expand?.contract ? [{ label: "Contract", value: po.expand.contract.number, mono: true, done: true, go: () => navigate(`/dashboard/procurement/contracts/${po.contract}`) }] : []),
     { label: "Deliveries", value: receipts.length ? `${receipts.length} receipt${receipts.length > 1 ? "s" : ""}` : "None yet", done: receipts.length > 0, go: () => onTab("receipts") },
-    { label: "Supplier bills", value: invoices.length ? `${invoices.length} bill${invoices.length > 1 ? "s" : ""}` : "None yet", done: invoices.length > 0, go: () => onTab("receipts") },
+    { label: "Supplier invoices", value: invoices.length ? `${invoices.length} invoice${invoices.length > 1 ? "s" : ""}` : "None yet", done: invoices.length > 0, go: () => onTab("receipts") },
     { label: "Payments", value: payments.length ? amountIn(payments.reduce((a: number, p: any) => a + p.amount, 0), po.currency) : "None yet", done: payments.length > 0, go: () => onTab("receipts") },
     ...(returns.length ? [{ label: "Returns", value: `${returns.length} return${returns.length > 1 ? "s" : ""}`, done: true, go: () => navigate(`/dashboard/procurement/returns/${returns[0].id}`) }] : []),
   ];

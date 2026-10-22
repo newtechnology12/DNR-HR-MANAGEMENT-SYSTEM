@@ -34,7 +34,7 @@ const STATUS_MAPS = {
   ...DOC_STATUS, ...RFQ_STATUS, ...PO_STATUS, ...INVOICE_STATUS, ...RETURN_STATUS, ...CONTRACT_STATUS,
   matched: { label: "Completed", tone: "success", note: "Matched" },
   partial: { label: "In progress", tone: "info", note: "Partial match" },
-  exception: { label: "Returned", tone: "violet", note: "Match exception" },
+  exception: { label: "Pending approval", tone: "warning", note: "Match exception" },
 } as any;
 const NUMERIC = ["money", "number", "pct"];
 const fmt = (type: string, v: any) => {

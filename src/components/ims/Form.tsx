@@ -164,6 +164,7 @@ export function DatePicker({
   min,
   max,
   className,
+  clearable,
 }: {
   value?: string | null;
   onChange: (v: string) => void;
@@ -174,6 +175,8 @@ export function DatePicker({
   min?: string;
   max?: string;
   className?: string;
+  /** Optional dates: a "Clear the date" link under the calendar sets the value back to "". */
+  clearable?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const d = toDate(value || null);
@@ -204,6 +207,20 @@ export function DatePicker({
           }}
           initialFocus
         />
+        {clearable && d && (
+          <div className="border-t border-ims-divider px-3 py-2">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+              className="text-[13px] font-bold text-ims-link hover:underline"
+            >
+              Clear the date
+            </button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
