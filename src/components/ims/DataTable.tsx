@@ -124,7 +124,7 @@ export function DataTable<T>({
   return (
     <div className={cn("min-w-0", className)}>
       <div className="relative overflow-x-auto">
-        <table className="w-full border-collapse text-left text-t-body text-ims-text" style={{ minWidth }}>
+        <table className="w-full border-collapse text-left text-t-body text-ims-text" style={{ minWidth: !loading && (Boolean(error) || rows.length === 0) ? undefined : minWidth }}>
           {caption && <caption className="sr-only">{caption}</caption>}
           <thead>
             <tr className="bg-ims-thead">

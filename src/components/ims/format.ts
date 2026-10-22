@@ -61,3 +61,15 @@ export const sentence = (s?: string | null) => {
   const t = String(s || "").replace(/[_-]+/g, " ").trim().toLowerCase();
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : "";
 };
+
+/** "14:30" */
+export const fmtTime = (v?: string | Date | null, empty = "—") => {
+  const d = toDate(v);
+  return d ? format(d, "HH:mm") : empty;
+};
+
+/** "Thu 25 Nov" (short dates inside a known period, e.g. a week or a timesheet). */
+export const fmtDay = (v?: string | Date | null, empty = "—") => {
+  const d = toDate(v);
+  return d ? format(d, "EEE d MMM") : empty;
+};

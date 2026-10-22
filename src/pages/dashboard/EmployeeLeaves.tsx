@@ -1,221 +1,65 @@
-import DataTable from "@/components/DataTable";
-import { ColumnDef, PaginationState } from "@tanstack/react-table";
-import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
-import { Checkbox } from "@/components/ui/checkbox";
+/**
+ * One employee's leave requests, embedded in a card: the staff workspace (/dashboard/my/leave), the HR
+ * employee profile and the classic portal. Search and filters above, then the requests with their status
+ * and who has them now. Pending requests can be edited or deleted from the "⋯" menu.
+ */
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
 import { useQuery } from "react-query";
-import { Button } from "@/components/ui/button";
+import { useDebounce } from "react-use";
+import { CalendarDays, Pencil, Plus, Trash2 } from "lucide-react";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
-import DataTableRowActions from "@/components/datatable/DataTableRowActions";
-import { LeaveFormModal, leaveTypeLabel } from "@/components/modals/LeaveFormModal";
+import { LEAVE_TYPES, LeaveFormModal, leaveTypeLabel } from "@/components/modals/LeaveFormModal";
 import useConfirmModal from "@/hooks/useConfirmModal";
 import { toast } from "sonner";
-import ConfirmModal from "@/components/modals/ConfirmModal";
 import { addDays } from "date-fns";
-function capitalizeFirstLetter(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
+import {
+  Button,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  FilterBar,
+  FilterChip,
+  FilterSelect,
+  Num,
+  Pager,
+  StatusPill,
+  fmtDate,
+} from "@/components/ims";
 
-export default function EmployeeLeaves({ employeeId }) {
-  const columns: ColumnDef<any>[] = [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          // @ts-ignore
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-          className="translate-y-[2px]"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-          className="translate-y-[2px]"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "employee",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Employee" />
-      ),
-      cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => editRow.edit(row.original)}
-          className="capitalize hover:text-primary hover:underline"
-        >
-          {row.getValue("employee")}
-        </button>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "start",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Start" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("start")}</div>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "end",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="End" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("end")}</div>
-      ),
-      enableSorting: true,
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableHiding: true,
-    },
-    {
-      accessorKey: "days",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Days" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("days")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Status" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("status")}</div>
-      ),
-      enableSorting: true,
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableHiding: true,
-    },
-   
-   
-    {
-      accessorKey: "approved_by",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Approved By" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("approved_by")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "rejected_by",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Rejected By" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("rejected_by")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "created_by",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created by" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created_by")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "type",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Type" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{leaveTypeLabel(row.original)}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "created",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created at" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      id: "actions",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Actions" />
-      ),
-      cell: ({ row }) => (
-        <DataTableRowActions
-          actions={[
-            {
-              disabled: row.original.status !== "pending",
-              title: "Edit leave",
-              onClick: (e) => {
-                editRow.edit(e.original);
-              },
-            },
-            {
-              disabled: row.original.status !== "pending",
-              title: "Delete leave",
-              onClick: (e) => {
-                confirmModal.open({ meta: e });
-              },
-            },
-          ]}
-          row={row}
-        />
-      ),
-    },
-  ];
+const STATUS_OPTIONS = [
+  { value: "pending", label: "Pending approval" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+];
+const TYPE_OPTIONS = LEAVE_TYPES.map((t) => ({ value: t.value, label: t.value }));
+
+/** Detail under the status pill: who has the request now (the head of the employee's department, else HR), or why it was refused. */
+const statusNote = (l: any) => {
+  if (l?.status === "pending") {
+    const head = l.expand?.employee?.expand?.department?.expand?.head;
+    return head && head.id !== l.employee ? `With ${head.name} (line manager)` : "With HR";
+  }
+  if (l?.status === "rejected") return l.rejected_reason || undefined;
+  return undefined;
+};
+
+const dateRange = (l: any) => {
+  const from = fmtDate(l?.start, "");
+  const to = fmtDate(l?.end, "");
+  if (!from && !to) return "—";
+  return from === to || !to ? from : `${from} – ${to}`;
+};
+
+/**
+ * hideCreate: the page header already has "Request leave" (e.g. /dashboard/my/leave).
+ * inset: the list sits inside a padded card, so it takes no side padding and draws the table in its own box;
+ * without it the list fills an unpadded card edge to edge.
+ */
+export default function EmployeeLeaves({ employeeId, hideCreate = false, inset = false }: { employeeId: string; hideCreate?: boolean; inset?: boolean }) {
   const confirmModal = useConfirmModal();
 
   const handleDelete = (e) => {
@@ -226,15 +70,19 @@ export default function EmployeeLeaves({ employeeId }) {
       .then(() => {
         recordsQuery.refetch();
         confirmModal.close();
-        toast.success("Leaves deleted successfully");
+        toast.success("Leave request deleted");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
         toast.error(e.message);
+        // Keep the confirmation open so the person can try again or cancel.
+        throw e;
       });
   };
 
+  const [search, setSearch] = useState("");
   const [searchText, setsearchText] = useState("");
+  useDebounce(() => setsearchText(search), 700, [search]);
 
   const [columnFilters, setColumnFilters] = useState([]);
   const [sorting, setSorting] = useState([
@@ -244,7 +92,7 @@ export default function EmployeeLeaves({ employeeId }) {
     },
   ]);
 
-  const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
+  const [{ pageIndex, pageSize }, setPagination] = useState({
     pageIndex: 0,
     pageSize: 10,
   });
@@ -302,7 +150,8 @@ export default function EmployeeLeaves({ employeeId }) {
               .filter((e) => e)
               .join("&&"),
             sort: sorters,
-            expand: `employee,created_by`,
+            // employee.department.head: the line manager, shown as "With …" while the request is pending.
+            expand: `employee,employee.department,employee.department.head,created_by`,
           }),
         })
         .then((e) => {
@@ -312,35 +161,14 @@ export default function EmployeeLeaves({ employeeId }) {
                 id: e.id,
                 employee: e?.expand?.employee?.name,
                 created_by: e.expand?.created_by?.name,
-                start: new Date(e.start).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
-                end: new Date(e.end).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
                 days: e.Leaveduration,
                 type: e.type,
                 status: e.status,
-                approved_by: e.approved_by || "---",
-                rejected_by: e.rejected_by || "---",
-                created: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
-                updated: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
                 original: e,
               };
             }),
             totalPages: e.totalPages,
+            totalItems: e.totalItems,
           };
         });
     },
@@ -351,78 +179,118 @@ export default function EmployeeLeaves({ employeeId }) {
 
   const editRow = useEditRow();
 
+  // ------------------------------------------------------------------ filters (same shape as before: [{ id, value: [v] }])
+  const filterValue = (id: string) => ((columnFilters as any[]).find((f) => f.id === id)?.value || [])[0] || "";
+  const setFilter = (id: string, v: string) => {
+    setColumnFilters((fs: any[]) => [...fs.filter((f) => f.id !== id), ...(v ? [{ id, value: [v] }] : [])] as any);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
+  const chips: FilterChip[] = [
+    ...(filterValue("status") ? [{ key: "status", label: `Status: ${STATUS_OPTIONS.find((o) => o.value === filterValue("status"))?.label}`, onRemove: () => setFilter("status", "") }] : []),
+    ...(filterValue("type") ? [{ key: "type", label: `Type: ${filterValue("type")}`, onRemove: () => setFilter("type", "") }] : []),
+  ];
+  const filtered = Boolean(searchText || chips.length);
+
+  const sort = sorting[0] ? `${sorting[0].desc ? "-" : ""}${sorting[0].id}` : undefined;
+  const onSort = (s: string) => {
+    setSorting([{ id: s.replace(/^-/, ""), desc: s.startsWith("-") }]);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
+
+  const rows: any[] = recordsQuery?.data?.items || [];
+  const columns: Column<any>[] = [
+    {
+      key: "type",
+      header: "Type",
+      sortField: "type",
+      cell: (r) => <span className="font-semibold text-ims-text">{leaveTypeLabel(r.original)}</span>,
+      sub: (r) => r.original?.reason,
+      className: "max-w-[320px]",
+    },
+    { key: "dates", header: "Dates", sortField: "start", nowrap: true, cell: (r) => dateRange(r.original) },
+    { key: "days", header: "Days", sortField: "days", numeric: true, cell: (r) => <Num value={r.days ?? r.original?.days} /> },
+    { key: "status", header: "Status", sortField: "status", cell: (r) => <StatusPill status={r.status} sub={statusNote(r.original)} /> },
+    {
+      key: "created",
+      header: "Requested",
+      sortField: "created",
+      nowrap: true,
+      cell: (r) => fmtDate(r.original?.created),
+      sub: (r) => (r.created_by && r.original?.created_by !== r.original?.employee ? `by ${r.created_by}` : undefined),
+    },
+  ];
+
+  const create = !hideCreate && (
+    <Button variant="primary" icon={Plus} onClick={() => newRecordModal.open()}>
+      Request leave
+    </Button>
+  );
+
   return (
-    <>
-      <ConfirmModal
-        title={"Are you sure you want to delete?"}
-        description={"This action cannot be undone. This will permanently delete the selected record."}
-        meta={confirmModal.meta}
-        onConfirm={handleDelete}
-        isLoading={confirmModal.isLoading}
+    <div className="min-w-0">
+      <ConfirmDialog
         open={confirmModal.isOpen}
         onClose={() => confirmModal.close()}
+        title="Delete this leave request?"
+        description={
+          confirmModal.meta
+            ? `${leaveTypeLabel(confirmModal.meta.original)}, ${dateRange(confirmModal.meta.original)}. The request is removed and cannot be restored.`
+            : "The request is removed and cannot be restored."
+        }
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => handleDelete(confirmModal.meta)}
       />
-      <DataTable
-        className="!border-none !p-0"
-        isFetching={recordsQuery.isFetching}
-        defaultColumnVisibility={{
-          created_by: false,
-          approved_by: false,
-          rejected_by: false,
-          updated: false,
-        }}
-        isLoading={recordsQuery.status === "loading"}
-        data={recordsQuery?.data?.items || []}
-        columns={columns}
-        onSearch={(e) => {
-          setsearchText(e);
-        }}
-        sorting={sorting}
-        setSorting={setSorting}
-        pageCount={recordsQuery?.data?.totalPages}
-        setPagination={setPagination}
-        pageIndex={pageIndex}
-        pageSize={pageSize}
-        setColumnFilters={setColumnFilters}
-        columnFilters={columnFilters}
-        Action={() => {
-          return (
-            <Button
-              onClick={() => {
-                newRecordModal.open();
-              }}
-              size="sm"
-              className="mr-2"
-            >
-              Apply For Leave
-            </Button>
-          );
-        }}
-        facets={[
-          {
-            title: "Status",
-            name: "status",
-            options: [
-              { label: "Approved", value: "approved" },
-              { label: "Rejected", value: "rejected" },
-              { label: "Pending", value: "pending" },
-            ],
-          },
-          {
-            title: "Type",
-            name: "type",
-            options: [
-              "annual",
-              "maternity",
-              "paternity",
-              "sick",
-              "study",
-              "unpaid",
-              "0ther",
-            ].map((e) => ({ label: capitalizeFirstLetter(e), value: e })),
-          },
-        ]}
-      />
+      <FilterBar
+        className={inset ? "!px-0 !pt-0" : undefined}
+        search={{ value: search, onChange: (v) => { setSearch(v); setPagination((p) => ({ ...p, pageIndex: 0 })); }, placeholder: "Search leave type" }}
+        chips={chips}
+        onClear={() => { setColumnFilters([]); setPagination((p) => ({ ...p, pageIndex: 0 })); }}
+        right={create}
+      >
+        <FilterSelect label="Status" value={filterValue("status")} onChange={(v) => setFilter("status", v)} options={STATUS_OPTIONS} />
+        <FilterSelect label="Type" value={filterValue("type")} onChange={(v) => setFilter("type", v)} options={TYPE_OPTIONS} />
+      </FilterBar>
+      <div className={inset ? "overflow-hidden rounded-control border border-ims-border" : "border-t border-ims-divider"}>
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.id}
+          onRowClick={(r) => editRow.edit(r.original)}
+          rowActions={(r) => [
+            { label: "Edit leave request", icon: Pencil, disabled: r.original?.status !== "pending", onSelect: (row) => editRow.edit(row.original) },
+            { label: "Delete leave request", icon: Trash2, danger: true, disabled: r.original?.status !== "pending", onSelect: (row) => confirmModal.open({ meta: row }) },
+          ]}
+          sort={sort}
+          onSort={onSort}
+          loading={recordsQuery.status === "loading"}
+          fetching={recordsQuery.isFetching}
+          error={recordsQuery.isError ? recordsQuery.error : undefined}
+          onRetry={() => recordsQuery.refetch()}
+          // No rows: let the table fit the card so the empty message is not cut off on phones.
+          minWidth={rows.length ? 680 : 0}
+          caption="Leave requests"
+          empty={
+            <EmptyState
+              icon={CalendarDays}
+              text={filtered ? "No leave request matches these filters. Change the search or clear the filters." : "No leave request yet."}
+              action={!filtered ? create : undefined}
+            />
+          }
+          footer={
+            recordsQuery.data?.totalItems ? (
+              <Pager
+                page={pageIndex + 1}
+                perPage={pageSize}
+                total={recordsQuery.data.totalItems}
+                sizes={[10, 30, 50]}
+                onPage={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))}
+                onPerPage={(n) => setPagination({ pageIndex: 0, pageSize: n })}
+              />
+            ) : null
+          }
+        />
+      </div>
       <LeaveFormModal
         onComplete={() => {
           recordsQuery.refetch();
@@ -434,6 +302,6 @@ export default function EmployeeLeaves({ employeeId }) {
         setOpen={editRow.isOpen ? editRow.setOpen : newRecordModal.setisOpen}
         open={newRecordModal.isOpen || editRow.isOpen}
       />
-    </>
+    </div>
   );
 }

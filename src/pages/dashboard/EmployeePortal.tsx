@@ -714,9 +714,9 @@ const EmployeePortal = () => {
         </div>
 
         <div className="p-4">
-          {activeTab === "Attendance Log" && <EmployeeAttendances employeeId={employee.id} />}
-          {activeTab === "Documents" && <EmployeeDocuments employeeId={employee.id} />}
-          {activeTab === "Leaves" && <EmployeeLeaves employeeId={employee.id} />}
+          {activeTab === "Attendance Log" && <EmployeeAttendances employeeId={employee.id} inset />}
+          {activeTab === "Documents" && <EmployeeDocuments employeeId={employee.id} inset />}
+          {activeTab === "Leaves" && <EmployeeLeaves employeeId={employee.id} inset />}
           {activeTab === "Reports" && <ReportsTab employeeId={employee.id} />}
           {activeTab === "Expense Request" && <EmployeePrePayments employeeId={employee.id} />}
           {activeTab === "Performance" && (

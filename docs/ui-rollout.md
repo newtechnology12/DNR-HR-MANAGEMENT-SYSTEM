@@ -40,29 +40,29 @@ Status: ☐ to do · ◐ kit applied through shared components · ☑ page check
 ### Procurement (module 2)
 | Page | Route | Template | Status |
 |---|---|---|---|
-| Purchase requisitions (+ approvals view) | procurement/requisitions, procurement/approvals | List | ☐ |
-| Requisition | procurement/requisitions/:id | Detail | ☐ |
-| New / edit requisition | procurement/requisitions/new, …/:id/edit | Form | ☐ |
-| Suppliers · Supplier | procurement/suppliers, …/:id | List · Detail | ☐ |
-| Supplier bank change | procurement/bank-changes/:id | Detail | ☐ |
-| Requests for quotation · RFQ | procurement/rfqs, …/:id | List · Detail | ☐ |
-| Purchase orders · Purchase order · Receive delivery | procurement/purchase-orders, …/:id, …/:id/receive | List · Detail · Form | ☐ |
-| Goods received | procurement/receipts | List | ☐ |
-| Inventory | procurement/inventory | List | ☐ |
-| Returns · Return | procurement/returns, …/:id | List · Detail | ☐ |
-| Contracts · Contract | procurement/contracts, …/:id | List · Detail | ☐ |
-| Procurement plans · Plan | procurement/plans, …/:id | List · Detail | ☐ |
-| Procurement overview | procurement | Dashboard | ☐ |
-| Procurement reports | procurement/reports | Dashboard (reports) | ☐ |
-| Approval workflows · Procurement settings | procurement/workflows, procurement/settings | Form (settings) | ☐ |
-| Print: RFQ, purchase order, goods received note | print/* | Print layout (tokens only) | ☐ |
+| Purchase requisitions (+ approvals view) | procurement/requisitions, procurement/approvals | List | ☑ |
+| Requisition | procurement/requisitions/:id | Detail | ☑ |
+| New / edit requisition | procurement/requisitions/new, …/:id/edit | Form | ☑ |
+| Suppliers · Supplier | procurement/suppliers, …/:id | List · Detail | ☑ |
+| Supplier bank change | procurement/bank-changes/:id | Detail | ☑ |
+| Requests for quotation · RFQ | procurement/rfqs, …/:id | List · Detail | ☑ |
+| Purchase orders · Purchase order · Receive delivery | procurement/purchase-orders, …/:id, …/:id/receive | List · Detail · Form | ☑ |
+| Goods received | procurement/receipts | List | ☑ |
+| Inventory | procurement/inventory | List | ☑ |
+| Returns · Return | procurement/returns, …/:id | List · Detail | ☑ |
+| Contracts · Contract | procurement/contracts, …/:id | List · Detail | ☑ |
+| Procurement plans · Plan | procurement/plans, …/:id | List · Detail | ☑ |
+| Procurement overview | procurement | Dashboard | ☑ |
+| Procurement reports | procurement/reports | Dashboard (reports) | ☑ |
+| Approval workflows · Procurement settings | procurement/workflows, procurement/settings | Form (settings) | ☑ |
+| Print: RFQ, purchase order, goods received note | print/* | Print layout (tokens only) | ☑ |
 
 ### My workspace (module 3)
 | Page | Route | Template | Status |
 |---|---|---|---|
-| My workspace | my | Dashboard | ☐ |
-| My attendance · My leave · My payslips · My requests | my/attendance, my/leave, my/payslips, my/requests | List | ☐ |
-| My performance · My documents · My expenses · My equipment | my/performance, my/documents, my/expenses, my/equipment | List | ☐ |
+| My workspace | my | Dashboard | ☑ |
+| My attendance · My leave · My payslips · My requests | my/attendance, my/leave, my/payslips, my/requests | List | ◐ (embedded legacy lists in progress) |
+| My performance · My documents · My expenses · My equipment | my/performance, my/documents, my/expenses, my/equipment | List | ◐ (embedded legacy lists in progress; expense requests list on hold) |
 | Help & HR policies | help | Detail (reading) | ☐ |
 
 ### Plans & reports (module 4)
@@ -110,6 +110,9 @@ Status: ☐ to do · ◐ kit applied through shared components · ☑ page check
 | Fiscal years · Chart of accounts · Funding sources · Projects · Cost centres · Strategic objectives · Tax rates · Posting accounts · Approval limits | setup/* | List | ☐ |
 | General settings · Attendance · E-mail (SMTP) · Branches · Account settings | settings/*, account-settings | Form (settings) | ☐ |
 | Team overview | dashboard | Dashboard | ☐ |
+
+### On hold
+- Expenses & petty cash finance pages (PettyCashRequests, PrePayments, EmployeePrePayments, Accounts, Cashmanagement): the flow is being moved to the server by the build session first; restyled after that.
 
 ### Not converted on purpose
 - Sign-in and Forgot password: their own design (supplied by RALGA, `AuthShell`); they already use the tokens' colours.

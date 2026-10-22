@@ -115,8 +115,8 @@ export function MyAttendance() {
         )}
       </WCard>
       <WCard>
-        <WHead title="Attendance log" subtitle="Every clock-in and clock-out, with export" />
-        <div className="mt-3"><EmployeeAttendances employeeId={uid} /></div>
+        <WHead title="Attendance log" subtitle="Every clock-in and clock-out" />
+        <div className="mt-3"><EmployeeAttendances employeeId={uid} inset /></div>
       </WCard>
       <CorrectionDialog open={asking} onClose={() => { setAsking(false); q.refetch(); corrections.refetch(); }} days={cal.absent} uid={uid} />
     </main>
@@ -178,7 +178,7 @@ export function MyLeave() {
       </div>
       <WCard>
         <WHead title="My leave requests" subtitle="All your requests with their status" />
-        <div className="mt-3"><EmployeeLeaves employeeId={uid} /></div>
+        <div className="mt-3"><EmployeeLeaves employeeId={uid} inset hideCreate /></div>
       </WCard>
       <LeaveFormModal open={open} setOpen={(o: boolean) => { setOpen(o); if (!o && params.get("new")) setParams({}); }} record={null} employeeId={uid} onComplete={() => { setOpen(false); queryClient.invalidateQueries(); }} />
     </main>
@@ -284,7 +284,7 @@ export function MyDocuments() {
   return (
     <main className={myPage}>
       <MyHeader title="My documents" subtitle="Your contract, certificates and other personal documents. Only you and HR can see them." />
-      <WCard><EmployeeDocuments employeeId={uid} /></WCard>
+      <WCard><EmployeeDocuments employeeId={uid} inset /></WCard>
     </main>
   );
 }
