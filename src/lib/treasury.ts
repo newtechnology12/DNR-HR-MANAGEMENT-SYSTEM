@@ -6,28 +6,28 @@ import pocketbase from "@/lib/pocketbase";
 import type { Tone } from "@/lib/procurement";
 import type { ServerReport } from "@/lib/payables";
 
-export const TREASURY_DOC_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const TREASURY_DOC_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
   draft: { label: "Draft", tone: "neutral" },
-  pending_approval: { label: "Waiting for the DAF", tone: "warning" },
-  returned: { label: "Returned", tone: "warning" },
-  approved: { label: "Posted", tone: "success" },
+  pending_approval: { label: "Pending approval", tone: "warning", note: "With the DAF" },
+  returned: { label: "Returned", tone: "violet" },
+  approved: { label: "Completed", tone: "success", note: "Posted" },
   rejected: { label: "Rejected", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
-  reversed: { label: "Reversed", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "danger" },
+  reversed: { label: "Cancelled", tone: "danger", note: "Reversed" },
 };
 
-export const REC_STATUS: Record<string, { label: string; tone: Tone }> = {
-  draft: { label: "Being prepared", tone: "neutral" },
-  pending_approval: { label: "Waiting for the DAF", tone: "warning" },
-  returned: { label: "Returned", tone: "warning" },
+export const REC_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  draft: { label: "Draft", tone: "neutral", note: "Being prepared" },
+  pending_approval: { label: "Pending approval", tone: "warning", note: "With the DAF" },
+  returned: { label: "Returned", tone: "violet" },
   approved: { label: "Approved", tone: "success" },
   rejected: { label: "Rejected", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
 
-export const STATEMENT_STATUS: Record<string, { label: string; tone: Tone }> = {
-  imported: { label: "Imported", tone: "info" },
-  reconciled: { label: "Reconciled", tone: "success" },
+export const STATEMENT_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  imported: { label: "In progress", tone: "info", note: "Imported" },
+  reconciled: { label: "Completed", tone: "success", note: "Reconciled" },
 };
 
 export const METHOD_LABELS: Record<string, string> = {

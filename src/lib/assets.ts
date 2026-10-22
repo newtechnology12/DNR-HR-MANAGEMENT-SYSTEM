@@ -5,28 +5,29 @@ import pocketbase from "@/lib/pocketbase";
 import type { Tone } from "@/lib/procurement";
 import type { ServerReportResult } from "@/components/enterprise/ServerReportPage";
 
-export const ASSET_STATUS: Record<string, { label: string; tone: Tone }> = {
-  in_use: { label: "In use", tone: "success" },
-  in_stock: { label: "In store", tone: "info" },
-  under_maintenance: { label: "Under maintenance", tone: "warning" },
-  damaged: { label: "Damaged", tone: "danger" },
-  lost: { label: "Lost", tone: "danger" },
-  disposed: { label: "Disposed", tone: "neutral" },
+/** An asset is a record, so its state reads Active / Inactive / Closed; where it is or what is wrong is the note. */
+export const ASSET_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  in_use: { label: "Active", tone: "success", note: "In use" },
+  in_stock: { label: "Active", tone: "success", note: "In store" },
+  under_maintenance: { label: "Inactive", tone: "neutral", note: "Under maintenance" },
+  damaged: { label: "Inactive", tone: "neutral", note: "Damaged" },
+  lost: { label: "Inactive", tone: "neutral", note: "Lost" },
+  disposed: { label: "Closed", tone: "success", note: "Disposed" },
 };
 export const CONDITIONS: Record<string, string> = { new: "New", good: "Good", fair: "Fair", poor: "Poor", damaged: "Damaged" };
 export const DEPRECIATION_METHODS: Record<string, string> = { straight_line: "Straight line", reducing_balance: "Reducing balance", none: "Not depreciated" };
 export const DISPOSAL_METHODS: Record<string, string> = {
   sale: "Sale", auction: "Public auction", donation: "Donation", scrap: "Scrapping", write_off: "Write-off", theft_loss: "Theft or loss", transfer_out: "Transfer to another institution",
 };
-export const DOC_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const DOC_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
   draft: { label: "Draft", tone: "neutral" },
-  pending_approval: { label: "Waiting for approval", tone: "warning" },
-  returned: { label: "Returned", tone: "warning" },
+  pending_approval: { label: "Pending approval", tone: "warning" },
+  returned: { label: "Returned", tone: "violet" },
   approved: { label: "Approved", tone: "success" },
   rejected: { label: "Rejected", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
-export const RUN_STATUS: Record<string, { label: string; tone: Tone }> = { ...DOC_STATUS, approved: { label: "Posted", tone: "success" } };
+export const RUN_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = { ...DOC_STATUS, approved: { label: "Completed", tone: "success", note: "Posted" } };
 export const MAINTENANCE_KINDS: Record<string, string> = { service: "Service", repair: "Repair", inspection: "Inspection", upgrade: "Upgrade", insurance: "Insurance", other: "Other" };
 export const COUNT_RESULTS: Record<string, { label: string; tone: Tone }> = {
   pending: { label: "Not counted", tone: "neutral" },

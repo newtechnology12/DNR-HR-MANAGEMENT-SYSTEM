@@ -59,15 +59,15 @@ export const leaveApi = {
 };
 
 // ------------------------------------------------------------------ payroll
-export const PAYROLL_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const PAYROLL_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
   draft: { label: "Draft", tone: "neutral" },
-  computed: { label: "Calculated", tone: "info" },
-  pending_approval: { label: "In approval", tone: "warning" },
+  computed: { label: "Draft", tone: "neutral", note: "Calculated" },
+  pending_approval: { label: "Pending approval", tone: "warning" },
   returned: { label: "Returned", tone: "violet" },
-  approved: { label: "Approved — to pay", tone: "info" },
+  approved: { label: "Approved", tone: "success", note: "To be paid" },
   rejected: { label: "Rejected", tone: "danger" },
-  paid: { label: "Paid", tone: "success" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  paid: { label: "Completed", tone: "success", note: "Paid" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
 export const EMPLOYMENT_TYPES = [
   { value: "permanent", label: "Permanent" },
@@ -94,12 +94,12 @@ export const payrollApi = {
 
 // ------------------------------------------------------------------ staff loans
 export const LOAN_TYPES: Record<string, string> = { staff_loan: "Staff loan", salary_advance: "Salary advance (several months)", emergency: "Emergency loan" };
-export const LOAN_STATUS: Record<string, { label: string; tone: Tone }> = {
-  pending_approval: { label: "Waiting for Finance", tone: "warning" },
-  active: { label: "Being repaid", tone: "info" },
-  repaid: { label: "Repaid", tone: "success" },
+export const LOAN_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  pending_approval: { label: "Pending approval", tone: "warning", note: "With Finance" },
+  active: { label: "In progress", tone: "info", note: "Being repaid" },
+  repaid: { label: "Completed", tone: "success", note: "Repaid" },
   rejected: { label: "Rejected", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
 export const loansApi = {
   create: (body: Record<string, unknown>) => pocketbase.send("/api/ims/payroll-loans", { method: "POST", body }) as Promise<{ id: string; number: string; status: string }>,
@@ -107,20 +107,20 @@ export const loansApi = {
 };
 
 // ------------------------------------------------------------------ appraisals
-export const APPRAISAL_STATUS: Record<string, { label: string; tone: Tone }> = {
-  not_started: { label: "Not started", tone: "neutral" },
+export const APPRAISAL_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  not_started: { label: "Draft", tone: "neutral", note: "Not started" },
   in_progress: { label: "In progress", tone: "info" },
-  submitted: { label: "Evaluated", tone: "info" },
-  shared: { label: "Shared with employee", tone: "warning" },
-  acknowledged: { label: "Acknowledged", tone: "success" },
-  disputed: { label: "Claim raised", tone: "danger" },
-  finalized: { label: "Final", tone: "success" },
+  submitted: { label: "In progress", tone: "info", note: "Evaluated" },
+  shared: { label: "In progress", tone: "info", note: "With the employee" },
+  acknowledged: { label: "Completed", tone: "success", note: "Acknowledged" },
+  disputed: { label: "Returned", tone: "violet", note: "Claim raised" },
+  finalized: { label: "Closed", tone: "success", note: "Final" },
 };
-export const CLAIM_STATUS: Record<string, { label: string; tone: Tone }> = {
-  open: { label: "Open", tone: "warning" },
-  upheld: { label: "Accepted — being corrected", tone: "success" },
-  rejected: { label: "Not accepted", tone: "danger" },
-  answered: { label: "Answered", tone: "info" },
+export const CLAIM_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  open: { label: "Pending approval", tone: "warning", note: "Open claim" },
+  upheld: { label: "Approved", tone: "success", note: "Being corrected" },
+  rejected: { label: "Rejected", tone: "danger", note: "Not accepted" },
+  answered: { label: "Completed", tone: "success", note: "Answered" },
 };
 export const GRADE_TONE: Record<string, Tone> = { A: "success", B: "success", C: "info", D: "warning", E: "danger" };
 export interface Criterion {

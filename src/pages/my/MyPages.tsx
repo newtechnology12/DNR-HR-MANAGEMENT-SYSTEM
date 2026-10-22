@@ -371,7 +371,7 @@ export function MyEquipment() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     {a.condition && <Pill tone={a.condition === "damaged" || a.condition === "poor" ? "danger" : "neutral"}>{CONDITIONS[a.condition]}</Pill>}
-                    <span className="text-t-small font-semibold text-ims-body">{ASSET_STATUS[a.status]?.label || a.status}</span>
+                    <StatusPill status={ASSET_STATUS[a.status]?.label || a.status} sub={ASSET_STATUS[a.status]?.note} />
                     {a.assigned_at && <span className="text-t-hint text-ims-muted">since {fmtDate(a.assigned_at)}</span>}
                   </div>
                 </li>

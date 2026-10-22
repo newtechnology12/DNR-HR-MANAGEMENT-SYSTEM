@@ -4,14 +4,14 @@
 import pocketbase from "@/lib/pocketbase";
 import type { Tone } from "@/lib/procurement";
 
-export const VOUCHER_STATUS: Record<string, { label: string; tone: Tone }> = {
+export const VOUCHER_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
   draft: { label: "Draft", tone: "neutral" },
-  pending_approval: { label: "Waiting for approval", tone: "warning" },
-  returned: { label: "Returned", tone: "warning" },
-  approved: { label: "Approved — to pay", tone: "info" },
-  paid: { label: "Paid", tone: "success" },
+  pending_approval: { label: "Pending approval", tone: "warning" },
+  returned: { label: "Returned", tone: "violet" },
+  approved: { label: "Approved", tone: "success", note: "To be paid" },
+  paid: { label: "Completed", tone: "success", note: "Paid" },
   rejected: { label: "Rejected", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
 
 export const VOUCHER_TYPES: Record<string, { label: string; hint: string }> = {

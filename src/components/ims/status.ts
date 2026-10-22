@@ -67,3 +67,6 @@ export const PILL_TONE: Record<PillTone, string> = {
   orange: "bg-ims-orange-bg text-ims-orange",
   danger: "bg-ims-danger-bg text-ims-danger",
 };
+
+/** A status as plain text (exports, filter options, subtitles): "Completed · Paid". */
+export const statusText = (meta?: { label: string; note?: string } | null, fallback = "") => (meta ? (meta.note ? `${meta.label} · ${meta.note}` : meta.label) : fallback);
