@@ -4,14 +4,12 @@
  */
 import * as React from "react";
 import { toast } from "sonner";
-import { ArrowRightLeft, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { METHOD_LABELS, TRANSFER_METHODS, treasuryApi } from "@/lib/treasury";
 import { errorMessage } from "@/lib/procurement";
-import { rwf, showDay } from "@/lib/ims";
-import { Field, FormBlock, FormDialog, inputCls, textareaCls } from "@/components/portal/kit";
+import { Button, DatePicker, Field, Input, Modal, ModalSection, Select, Textarea, fmtDate, fmtMoney } from "@/components/ims";
 import { AccountSelect, MoneyInput } from "@/components/treasury/TreasuryKit";
-import { cn } from "@/utils";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -46,13 +44,14 @@ export default function TransferDialog({ open, onClose, onSaved, transfer }: { o
   const restricted = Boolean(from?.funding_source && from.funding_source !== to?.funding_source);
   const errors = {
     from_account: !f.from_account && "Choose the account the money leaves.",
-    to_account: !f.to_account ? "Choose the account the money goes to." : f.to_account === f.from_account ? "Choose two different accounts." : from && to && !methods.length ? "Cash moves between cash books through a bank account." : "",
-    amount: (!f.amount || Number(f.amount) <= 0) ? "Enter the amount." : from && Number(f.amount) > from.book_balance ? `Only ${rwf(from.book_balance)} in ${from.code}.` : "",
-    transfer_date: !f.transfer_date ? "Enter the date." : f.transfer_date > today() ? "The date cannot be in the future." : "",
-    reference: f.method === "cheque" && f.reference.trim().length < 3 && "Enter the cheque number.",
-    description: restricted && f.description.trim().length < 15 && "Money leaves a restricted donor account: explain why (at least 15 characters).",
+    to_account: !f.to_account ? "Choose the account the money goes to." : f.to_account === f.from_account ? "Choose two different accounts." : from && to && !methods.length ? "Cash moves between cash books through a bank account: choose a bank account on one side." : "",
+    amount: (!f.amount || Number(f.amount) <= 0) ? "Enter the amount, above 0." : from && Number(f.amount) > from.book_balance ? `Enter at most ${fmtMoney(from.book_balance)}, the balance of ${from.code}.` : "",
+    transfer_date: !f.transfer_date ? "Enter the date." : f.transfer_date > today() ? "Choose today or a date in the past." : "",
+    reference: f.method === "cheque" && f.reference.trim().length < 3 && "Enter the cheque number (at least 3 characters).",
+    description: restricted && f.description.trim().length < 15 && "Money leaves a restricted donor account: explain why in at least 15 characters.",
   };
   const invalid = Object.values(errors).some(Boolean);
+  const err = (k: keyof typeof errors) => (tried ? errors[k] || null : null);
 
   async function save(submit: boolean) {
     setTried(true);
@@ -60,7 +59,7 @@ export default function TransferDialog({ open, onClose, onSaved, transfer }: { o
     setBusy(submit ? "submit" : "draft");
     const body = { ...f, amount: Number(f.amount), transfer_date: `${f.transfer_date} 12:00:00.000Z`, reference: f.reference.trim(), description: f.description.trim() };
     try {
-      const t = transfer ? await pocketbase.collection("bank_transfers").update(transfer.id, body) : await pocketbase.collection("bank_transfers").create(body);
+      const t = transfer?.id ? await pocketbase.collection("bank_transfers").update(transfer.id, body) : await pocketbase.collection("bank_transfers").create(body);
       if (submit) {
         await treasuryApi.doc("transfers", t.id, "submit");
         toast.success(`${t.number} sent for approval`);
@@ -74,50 +73,62 @@ export default function TransferDialog({ open, onClose, onSaved, transfer }: { o
   }
 
   return (
-    <FormDialog
+    <Modal
       open={open}
-      onClose={onClose}
-      icon={ArrowRightLeft}
-      title={transfer ? `Correct ${transfer.number}` : "Transfer between accounts"}
-      description="Moves money between RALGA's own accounts. The DAF approves (the Secretary General too above the DAF limit); it is then posted out of one account and into the other."
-      submitLabel={busy === "submit" ? "Sending…" : "Save and send for approval"}
-      busy={Boolean(busy)}
-      onSubmit={() => save(true)}
-      footerExtra={<button type="button" disabled={Boolean(busy)} onClick={() => save(false)} className="h-10 flex-1 rounded-md border border-slate-200 bg-white px-3 text-[13.5px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 sm:mr-auto sm:flex-none sm:px-4">{busy === "draft" ? "Saving…" : "Save draft"}</button>}
+      onClose={busy ? () => undefined : onClose}
+      size="lg"
+      title={transfer?.number ? <>Correct <span className="whitespace-nowrap">{transfer.number}</span></> : "Transfer between accounts"}
+      description="Moves money between RALGA's own accounts. The DAF approves (and the Secretary General above the DAF limit); it is then posted to both accounts."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={Boolean(busy)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => save(false)} loading={busy === "draft"} disabled={Boolean(busy)}>Save draft</Button>
+          <Button variant="primary" onClick={() => save(true)} loading={busy === "submit"} disabled={Boolean(busy)}>Submit for approval</Button>
+        </>
+      }
     >
-      <FormBlock icon={ArrowRightLeft} title="From and to">
+      {tried && invalid && (
+        <p role="alert" className="rounded-control border border-ims-danger/40 bg-ims-danger-bg px-3.5 py-2.5 text-t-small font-semibold text-ims-danger">
+          Check the fields marked in red before you save.
+        </p>
+      )}
+      <ModalSection title="From and to">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="From" required error={tried && errors.from_account} htmlFor="tr-from" hint={from ? `Cash book balance ${rwf(from.book_balance)}` : undefined}>
-            <AccountSelect id="tr-from" value={f.from_account} onChange={(v) => set("from_account", v)} invalid={Boolean(tried && errors.from_account)} />
+          <Field label="From" required error={err("from_account")} htmlFor="tr-from" hint={from ? `Cash book balance ${fmtMoney(from.book_balance)}` : undefined}>
+            <AccountSelect id="tr-from" value={f.from_account} onChange={(v) => set("from_account", v)} invalid={Boolean(err("from_account"))} />
           </Field>
-          <Field label="To" required error={tried && errors.to_account} htmlFor="tr-to">
-            <AccountSelect id="tr-to" value={f.to_account} exclude={f.from_account} onChange={(v) => set("to_account", v)} invalid={Boolean(tried && errors.to_account)} />
-          </Field>
-          <Field label="Amount" required error={tried && errors.amount} htmlFor="tr-amount">
-            <MoneyInput id="tr-amount" value={f.amount} onChange={(v) => set("amount", v)} invalid={Boolean(tried && errors.amount)} />
-          </Field>
-          <Field label="Date" required error={tried && errors.transfer_date} htmlFor="tr-date" hint={from ? `${from.code} starts on ${showDay(from.opening_date)}` : undefined}>
-            <input id="tr-date" type="date" className={inputCls} max={today()} value={f.transfer_date} onChange={(e) => set("transfer_date", e.target.value)} />
-          </Field>
-          <Field label="Method" htmlFor="tr-method">
-            <select id="tr-method" className={inputCls} value={f.method} disabled={!methods.length} onChange={(e) => set("method", e.target.value)}>
-              {!methods.length && <option value="">Choose the accounts first</option>}
-              {methods.map((m) => <option key={m} value={m}>{METHOD_LABELS[m]}</option>)}
-            </select>
-          </Field>
-          <Field label={f.method === "cheque" ? "Cheque number" : "Bank reference"} required={f.method === "cheque"} error={tried && errors.reference} htmlFor="tr-ref">
-            <input id="tr-ref" className={cn(inputCls, "font-mono")} value={f.reference} onChange={(e) => set("reference", e.target.value)} placeholder={f.method === "cheque" ? "e.g. 100259" : "e.g. BPR-TRF-0912"} />
-          </Field>
-          <Field label="Why" required={restricted} error={tried && errors.description} className="sm:col-span-2" htmlFor="tr-desc">
-            <textarea id="tr-desc" className={cn(textareaCls, "min-h-[64px]")} value={f.description} onChange={(e) => set("description", e.target.value)} placeholder="e.g. Petty cash replenishment" />
+          <Field label="To" required error={err("to_account")} htmlFor="tr-to">
+            <AccountSelect id="tr-to" value={f.to_account} exclude={f.from_account} onChange={(v) => set("to_account", v)} invalid={Boolean(err("to_account"))} />
           </Field>
         </div>
         {restricted && (
-          <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
-            <Info size={15} className="mt-0.5 shrink-0" /> {from.code} holds restricted money of {from.expand?.funding_source?.name || "a donor"}. Moving it out must be justified (for example a reimbursement of project costs paid from the operating account) and is visible to the auditors.
+          <p className="flex items-start gap-2 rounded-control border border-ims-warning/30 bg-ims-warning-bg px-3.5 py-2.5 text-t-small text-ims-warning">
+            <Info size={15} className="mt-px shrink-0" aria-hidden /> {from.code} holds restricted money of {from.expand?.funding_source?.name || "a donor"}. Moving it out must be justified (for example a reimbursement of project costs paid from the operating account) and is visible to the auditors.
           </p>
         )}
-      </FormBlock>
-    </FormDialog>
+      </ModalSection>
+      <ModalSection title="Amount and method">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Amount" required error={err("amount")} htmlFor="tr-amount">
+            <MoneyInput id="tr-amount" value={f.amount} onChange={(v) => set("amount", v)} invalid={Boolean(err("amount"))} />
+          </Field>
+          <Field label="Date" required error={err("transfer_date")} htmlFor="tr-date" hint={from ? `${from.code} starts on ${fmtDate(from.opening_date)}` : undefined}>
+            <DatePicker id="tr-date" max={today()} value={f.transfer_date} onChange={(v) => set("transfer_date", v)} invalid={Boolean(err("transfer_date"))} />
+          </Field>
+          <Field label="Method" htmlFor="tr-method">
+            <Select id="tr-method" value={f.method} disabled={!methods.length} onChange={(e) => set("method", e.target.value)}>
+              {!methods.length && <option value="">Choose the accounts first</option>}
+              {methods.map((m) => <option key={m} value={m}>{METHOD_LABELS[m]}</option>)}
+            </Select>
+          </Field>
+          <Field label={f.method === "cheque" ? "Cheque number" : "Bank reference"} required={f.method === "cheque"} error={err("reference")} htmlFor="tr-ref">
+            <Input id="tr-ref" className="font-mono" value={f.reference} onChange={(e) => set("reference", e.target.value)} placeholder={f.method === "cheque" ? "e.g. 100259" : "e.g. BPR-TRF-0912"} invalid={Boolean(err("reference"))} />
+          </Field>
+          <Field label="Why" required={restricted} error={err("description")} className="sm:col-span-2" htmlFor="tr-desc">
+            <Textarea id="tr-desc" className="min-h-[72px]" value={f.description} onChange={(e) => set("description", e.target.value)} placeholder="e.g. Petty cash replenishment" invalid={Boolean(err("description"))} />
+          </Field>
+        </div>
+      </ModalSection>
+    </Modal>
   );
 }

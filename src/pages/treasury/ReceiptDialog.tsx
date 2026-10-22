@@ -5,14 +5,12 @@
 import * as React from "react";
 import { useQuery } from "react-query";
 import { toast } from "sonner";
-import { PiggyBank, Info, Landmark, Receipt } from "lucide-react";
+import { Info } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { PAYER_TYPES, METHOD_LABELS, RECEIPT_METHODS, treasuryApi } from "@/lib/treasury";
 import { errorMessage } from "@/lib/procurement";
-import { rwf, showDay } from "@/lib/ims";
-import { Field, FormBlock, FormDialog, inputCls, textareaCls } from "@/components/portal/kit";
+import { Button, DatePicker, Field, Input, Modal, ModalSection, Select, Textarea, fmtDate, fmtMoney } from "@/components/ims";
 import { AccountSelect, MoneyInput } from "@/components/treasury/TreasuryKit";
-import { cn } from "@/utils";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -84,13 +82,14 @@ export default function ReceiptDialog({ open, onClose, onSaved, receipt, prefill
 
   const errors = {
     account: !f.account && "Choose the account the money came into.",
-    receipt_date: !f.receipt_date ? "Enter the date the money was received." : f.receipt_date > today() ? "The date cannot be in the future." : account && f.receipt_date < String(account.opening_date).slice(0, 10) ? `The account starts on ${showDay(account.opening_date)}.` : "",
-    payer_name: f.payer_name.trim().length < 2 && "Enter who paid.",
-    amount: (!f.amount || Number(f.amount) <= 0) && "Enter the amount received.",
-    reference: f.method === "cheque" && f.reference.trim().length < 3 && "Enter the cheque number.",
+    receipt_date: !f.receipt_date ? "Enter the date the money was received." : f.receipt_date > today() ? "Choose today or a date in the past." : account && f.receipt_date < String(account.opening_date).slice(0, 10) ? `Choose a date on or after ${fmtDate(account.opening_date)}, when the account starts.` : "",
+    payer_name: f.payer_name.trim().length < 2 && "Enter who paid (at least 2 characters).",
+    amount: (!f.amount || Number(f.amount) <= 0) && "Enter the amount received, above 0.",
+    reference: f.method === "cheque" && f.reference.trim().length < 3 && "Enter the cheque number (at least 3 characters).",
     income_account: !f.income_account && "Choose what the money is for.",
   };
   const invalid = Object.values(errors).some(Boolean);
+  const err = (k: keyof typeof errors) => (tried ? errors[k] || null : null);
 
   async function save(submit: boolean) {
     setTried(true);
@@ -117,80 +116,88 @@ export default function ReceiptDialog({ open, onClose, onSaved, receipt, prefill
 
   const groups: [string, string][] = [["revenue", "Income"], ["liability", "Received on behalf of / deferred"], ["asset", "Repayment of a receivable or advance"]];
   return (
-    <FormDialog
+    <Modal
       open={open}
-      onClose={onClose}
-      icon={PiggyBank}
-      title={receipt ? `Correct ${receipt.number}` : "Record a receipt"}
+      onClose={busy ? () => undefined : onClose}
+      size="lg"
+      title={receipt ? <>Correct <span className="whitespace-nowrap">{receipt.number}</span></> : "Record a receipt"}
       description="Money received in a RALGA bank account or the petty cash. The DAF verifies it before it is posted to the cash book."
-      submitLabel={busy === "submit" ? "Sending…" : "Save and send to the DAF"}
-      busy={Boolean(busy)}
-      onSubmit={() => save(true)}
-      footerExtra={<button type="button" disabled={Boolean(busy)} onClick={() => save(false)} className="h-10 flex-1 rounded-md border border-slate-200 bg-white px-3 text-[13.5px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 sm:mr-auto sm:flex-none sm:px-4">{busy === "draft" ? "Saving…" : "Save draft"}</button>}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={Boolean(busy)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => save(false)} loading={busy === "draft"} disabled={Boolean(busy)}>Save draft</Button>
+          <Button variant="primary" onClick={() => save(true)} loading={busy === "submit"} disabled={Boolean(busy)}>Submit for approval</Button>
+        </>
+      }
     >
-      {f.statement_line && (
-        <p className="flex items-start gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[12.5px] text-sky-900">
-          <Info size={15} className="mt-0.5 shrink-0" /> From the bank statement: once the DAF approves, the receipt is matched to that statement line automatically.
+      {tried && invalid && (
+        <p role="alert" className="rounded-control border border-ims-danger/40 bg-ims-danger-bg px-3.5 py-2.5 text-t-small font-semibold text-ims-danger">
+          Check the fields marked in red before you save.
         </p>
       )}
-      <FormBlock icon={Landmark} title="Money received">
+      {f.statement_line && (
+        <p className="flex items-start gap-2 rounded-control border border-ims-link/30 bg-ims-info-bg px-3.5 py-2.5 text-t-small text-ims-info">
+          <Info size={15} className="mt-px shrink-0" aria-hidden /> From the bank statement: once the DAF approves, the receipt is matched to that statement line automatically.
+        </p>
+      )}
+      <ModalSection title="Money received">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Into account" required error={tried && errors.account} className="sm:col-span-2" htmlFor="rc-account">
-            <AccountSelect id="rc-account" value={f.account} onChange={(v) => set("account", v)} invalid={Boolean(tried && errors.account)} />
+          <Field label="Into account" required error={err("account")} className="sm:col-span-2" htmlFor="rc-account">
+            <AccountSelect id="rc-account" value={f.account} onChange={(v) => set("account", v)} invalid={Boolean(err("account"))} />
           </Field>
-          <Field label="Date received" required error={tried && errors.receipt_date} htmlFor="rc-date">
-            <input id="rc-date" type="date" className={inputCls} max={today()} value={f.receipt_date} onChange={(e) => set("receipt_date", e.target.value)} aria-invalid={Boolean(tried && errors.receipt_date) || undefined} />
+          <Field label="Date received" required error={err("receipt_date")} htmlFor="rc-date">
+            <DatePicker id="rc-date" max={today()} value={f.receipt_date} onChange={(v) => set("receipt_date", v)} invalid={Boolean(err("receipt_date"))} />
           </Field>
-          <Field label="Amount" required error={tried && errors.amount} htmlFor="rc-amount" hint={f.amount ? rwf(Number(f.amount)) : undefined}>
-            <MoneyInput id="rc-amount" value={f.amount} onChange={(v) => set("amount", v)} invalid={Boolean(tried && errors.amount)} />
+          <Field label="Amount" required error={err("amount")} htmlFor="rc-amount" hint={f.amount ? fmtMoney(Number(f.amount)) : undefined}>
+            <MoneyInput id="rc-amount" value={f.amount} onChange={(v) => set("amount", v)} invalid={Boolean(err("amount"))} />
           </Field>
           <Field label="How" required htmlFor="rc-method">
-            <select id="rc-method" className={inputCls} value={f.method} onChange={(e) => set("method", e.target.value)}>
+            <Select id="rc-method" value={f.method} onChange={(e) => set("method", e.target.value)}>
               {methods.map((m) => <option key={m} value={m}>{METHOD_LABELS[m]}</option>)}
-            </select>
+            </Select>
           </Field>
-          <Field label={f.method === "cheque" ? "Cheque number" : "Bank reference"} required={f.method === "cheque"} error={tried && errors.reference} htmlFor="rc-ref" hint={f.method === "cheque" ? undefined : "Helps the automatic matching with the bank statement"}>
-            <input id="rc-ref" className={cn(inputCls, "font-mono")} value={f.reference} onChange={(e) => set("reference", e.target.value)} placeholder={f.method === "cheque" ? "e.g. 004417" : "e.g. GSB-CONTR-2627"} />
+          <Field label={f.method === "cheque" ? "Cheque number" : "Bank reference"} required={f.method === "cheque"} error={err("reference")} htmlFor="rc-ref" hint={f.method === "cheque" ? undefined : "Helps the automatic matching with the bank statement"}>
+            <Input id="rc-ref" className="font-mono" value={f.reference} onChange={(e) => set("reference", e.target.value)} placeholder={f.method === "cheque" ? "e.g. 004417" : "e.g. GSB-CONTR-2627"} invalid={Boolean(err("reference"))} />
           </Field>
         </div>
-      </FormBlock>
-      <FormBlock icon={Receipt} title="From whom and what for">
+      </ModalSection>
+      <ModalSection title="From whom and what for">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Kind of payer" htmlFor="rc-ptype">
-            <select id="rc-ptype" className={inputCls} value={f.payer_type} onChange={(e) => set("payer_type", e.target.value)}>
+            <Select id="rc-ptype" value={f.payer_type} onChange={(e) => set("payer_type", e.target.value)}>
               {Object.entries(PAYER_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
+            </Select>
           </Field>
-          <Field label="Received from" required error={tried && errors.payer_name} htmlFor="rc-payer">
-            <input id="rc-payer" className={inputCls} value={f.payer_name} onChange={(e) => set("payer_name", e.target.value)} placeholder="e.g. Gasabo District" aria-invalid={Boolean(tried && errors.payer_name) || undefined} />
+          <Field label="Received from" required error={err("payer_name")} htmlFor="rc-payer">
+            <Input id="rc-payer" value={f.payer_name} onChange={(e) => set("payer_name", e.target.value)} placeholder="e.g. Gasabo District" invalid={Boolean(err("payer_name"))} />
           </Field>
-          <Field label="What it is for (account)" required error={tried && errors.income_account} className="sm:col-span-2" htmlFor="rc-income" hint="Member contributions 4101, Government transfers 4102, donor grants 4104, fees 4201–4202…">
-            <select id="rc-income" className={inputCls} value={f.income_account} onChange={(e) => set("income_account", e.target.value)} aria-invalid={Boolean(tried && errors.income_account) || undefined}>
-              <option value="">Choose…</option>
+          <Field label="What it is for (account)" required error={err("income_account")} className="sm:col-span-2" htmlFor="rc-income" hint="Member contributions 4101, Government transfers 4102, donor grants 4104, fees 4201–4202…">
+            <Select id="rc-income" value={f.income_account} onChange={(e) => set("income_account", e.target.value)} invalid={Boolean(err("income_account"))}>
+              <option value="">Choose an account</option>
               {groups.map(([t, label]) => (
                 <optgroup key={t} label={label}>
                   {(ref.data?.gl || []).filter((g: any) => g.type === t).map((g: any) => <option key={g.id} value={g.id}>{g.code} {g.name}</option>)}
                 </optgroup>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Funding source" htmlFor="rc-fund" hint={account?.funding_source ? "This account holds restricted money of this funding source only." : undefined}>
-            <select id="rc-fund" className={inputCls} value={f.funding_source} disabled={Boolean(account?.funding_source)} onChange={(e) => set("funding_source", e.target.value)}>
+            <Select id="rc-fund" value={f.funding_source} disabled={Boolean(account?.funding_source)} onChange={(e) => set("funding_source", e.target.value)}>
               <option value="">Not specified</option>
               {(ref.data?.funds || []).map((x: any) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
-            </select>
+            </Select>
           </Field>
           <Field label="Project" htmlFor="rc-project">
-            <select id="rc-project" className={inputCls} value={f.project} onChange={(e) => set("project", e.target.value)}>
+            <Select id="rc-project" value={f.project} onChange={(e) => set("project", e.target.value)}>
               <option value="">None</option>
               {(ref.data?.projects || []).filter((p: any) => !f.funding_source || p.funding_source === f.funding_source).map((p: any) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
-            </select>
+            </Select>
           </Field>
           <Field label="Description" className="sm:col-span-2" htmlFor="rc-desc">
-            <textarea id="rc-desc" className={cn(textareaCls, "min-h-[64px]")} value={f.description} onChange={(e) => set("description", e.target.value)} placeholder="e.g. Annual member contribution 2026/27" />
+            <Textarea id="rc-desc" className="min-h-[72px]" value={f.description} onChange={(e) => set("description", e.target.value)} placeholder="e.g. Annual member contribution 2026/27" />
           </Field>
         </div>
-      </FormBlock>
-    </FormDialog>
+      </ModalSection>
+    </Modal>
   );
 }

@@ -116,6 +116,7 @@ export function MoneyInput({
   disabled,
   className,
   currency = "RWF",
+  "aria-label": ariaLabel,
 }: {
   value: number | "" | null | undefined;
   onChange: (v: number | "") => void;
@@ -126,6 +127,8 @@ export function MoneyInput({
   className?: string;
   /** Shown before the number; RWF unless the document is in another currency. */
   currency?: string;
+  /** For inputs without a visible label (inside table rows). */
+  "aria-label"?: string;
 }) {
   const shown = value === "" || value === null || value === undefined ? "" : Number(value).toLocaleString("en-US");
   return (
@@ -139,6 +142,7 @@ export function MoneyInput({
         disabled={disabled}
         placeholder={placeholder}
         aria-invalid={invalid || undefined}
+        aria-label={ariaLabel}
         onChange={(e) => {
           const digits = e.target.value.replace(/[^\d]/g, "");
           onChange(digits ? Number(digits) : "");

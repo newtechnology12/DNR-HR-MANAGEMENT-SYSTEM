@@ -1,17 +1,18 @@
 /**
- * Small pieces shared by the bank and cash screens: a money input with thousands separators, the account
- * picker (with the live balance), money in / out amounts and the reconciliation status of an account.
+ * Small pieces shared by the bank and cash screens, built on the ims kit: a money input capped at the
+ * largest amount the server accepts, the account picker (with the live balance), money in / out amounts,
+ * the reconciliation state of an account, the reason dialog and a single key figure.
  */
 import * as React from "react";
 import { useQuery } from "react-query";
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Clock3, Landmark, Wallet } from "lucide-react";
 import { activeAccounts } from "@/lib/treasury";
-import { rwf, showDay } from "@/lib/ims";
-import { inputCls } from "@/components/portal/kit";
 import { cn } from "@/utils";
-import { ConfirmDialog } from "@/components/ims";
+import { ConfirmDialog, MoneyInput as ImsMoneyInput, Select, fmtDate, fmtMoney, fmtMoneyShort, fmtNumber } from "@/components/ims";
 
-/** Whole-RWF amount input: digits only, shown with thousands separators. */
+const MAX_AMOUNT = 999999999999;
+
+/** Whole-RWF amount input: "RWF" before the number, thousands separators while typing (the ims MoneyInput). */
 export function MoneyInput({ value, onChange, id, invalid, placeholder = "0", className, disabled }: {
   value: number | "";
   onChange: (v: number | "") => void;
@@ -21,32 +22,24 @@ export function MoneyInput({ value, onChange, id, invalid, placeholder = "0", cl
   className?: string;
   disabled?: boolean;
 }) {
-  const shown = value === "" ? "" : Number(value).toLocaleString("en-US");
   return (
-    <div className="relative">
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] font-medium text-ims-faint">RWF</span>
-      <input
-        id={id}
-        inputMode="numeric"
-        autoComplete="off"
-        disabled={disabled}
-        aria-invalid={invalid || undefined}
-        className={cn(inputCls, "pl-12 text-right font-medium tabular-nums", className)}
-        value={shown}
-        placeholder={placeholder}
-        onChange={(e) => {
-          const digits = e.target.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
-          onChange(digits === "" ? "" : Math.min(Number(digits), 999999999999));
-        }}
-      />
-    </div>
+    <ImsMoneyInput
+      id={id}
+      value={value}
+      invalid={invalid}
+      placeholder={placeholder}
+      disabled={disabled}
+      className={className}
+      onChange={(v) => onChange(v === "" ? "" : Math.min(Number(v), MAX_AMOUNT))}
+    />
   );
 }
 
+/** Bank (landmark) or cash book (wallet) mark, for pickers and lists of accounts. */
 export function KindIcon({ kind, className }: { kind?: string; className?: string }) {
   const Icon = kind === "cash" ? Wallet : Landmark;
   return (
-    <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", kind === "cash" ? "bg-amber-50 text-amber-700" : "bg-ralga-navy/[0.08] text-ralga-navy", className)}>
+    <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", kind === "cash" ? "bg-ims-warning-bg text-ims-warning" : "bg-ims-info-bg text-ims-primary", className)} aria-hidden>
       <Icon size={15} />
     </span>
   );
@@ -65,20 +58,14 @@ export function AccountSelect({ value, onChange, kind, exclude, id, invalid, pla
   const q = useQuery(["treasury-accounts", kind || "all"], () => activeAccounts(kind), { staleTime: 30000 });
   const rows = (q.data || []).filter((a: any) => a.id !== exclude);
   return (
-    <select
-      id={id}
-      aria-invalid={invalid || undefined}
-      className={inputCls}
-      value={value}
-      onChange={(e) => onChange(e.target.value, rows.find((a: any) => a.id === e.target.value))}
-    >
-      <option value="">{q.isLoading ? "Loading…" : placeholder}</option>
+    <Select id={id} invalid={invalid} value={value} onChange={(e) => onChange(e.target.value, rows.find((a: any) => a.id === e.target.value))}>
+      <option value="">{q.isLoading ? "Loading accounts…" : placeholder}</option>
       {rows.map((a: any) => (
         <option key={a.id} value={a.id}>
-          {a.code} · {a.name} — {rwf(a.book_balance)}{a.funding_source ? " · restricted" : ""}
+          {a.code} · {a.name} — {fmtMoney(a.book_balance)}{a.funding_source ? " · restricted" : ""}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -86,23 +73,58 @@ export function AccountSelect({ value, onChange, kind, exclude, id, invalid, pla
 export function Flow({ direction, amount, className, bold }: { direction: string; amount: number; className?: string; bold?: boolean }) {
   const inn = direction === "in";
   return (
-    <span className={cn("inline-flex items-center justify-end gap-1 whitespace-nowrap tabular-nums", bold && "font-semibold", inn ? "text-emerald-700" : "text-ims-text", className)}>
+    <span className={cn("inline-flex items-center justify-end gap-1 whitespace-nowrap tabular-nums", bold && "font-semibold", inn ? "text-ims-success" : "text-ims-text", className)}>
       {inn ? <ArrowDownLeft size={13} aria-hidden /> : <ArrowUpRight size={13} className="text-ims-faint" aria-hidden />}
-      {inn ? "+" : "−"}{Math.round(amount).toLocaleString("en-US")}
+      {inn ? "+" : "−"}{fmtNumber(Math.round(amount))}
     </span>
   );
 }
 
-/** "Reconciled to 30 Sep" (green), "due" (amber) or "never reconciled". */
+/** "Reconciled to 30 Sep 2026" (green), "Due 30 Sep 2026 · last 31 Aug 2026" (amber) or "Not reconciled yet". */
 export function ReconState({ reconciledTo, due, kind }: { reconciledTo?: string; due?: string; kind?: string }) {
   const late = Boolean(due && (!reconciledTo || reconciledTo < due));
   if (reconciledTo && !late) {
-    return <span className="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-700"><CheckCircle2 size={13} aria-hidden /> {kind === "cash" ? "Counted" : "Reconciled"} to {showDay(reconciledTo)}</span>;
+    return (
+      <span className="inline-flex items-start gap-1 text-t-small font-semibold text-ims-success">
+        <CheckCircle2 size={13} className="mt-[2.5px] shrink-0" aria-hidden /> {kind === "cash" ? "Counted" : "Reconciled"} to {fmtDate(reconciledTo)}
+      </span>
+    );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[12px] font-medium text-amber-700">
-      <Clock3 size={13} aria-hidden /> {reconciledTo ? `Due ${showDay(due)} · last ${showDay(reconciledTo)}` : kind === "cash" ? "No cash count yet" : "Not reconciled yet"}
+    <span className="inline-flex items-start gap-1 text-t-small font-semibold text-ims-warning">
+      <Clock3 size={13} className="mt-[2.5px] shrink-0" aria-hidden /> {reconciledTo ? `Due ${fmtDate(due)} · last ${fmtDate(reconciledTo)}` : kind === "cash" ? "No cash count yet" : "Not reconciled yet"}
     </span>
+  );
+}
+
+/** "12/15" with a thin progress bar. */
+export function MatchBar({ matched, total }: { matched: number; total: number }) {
+  const pct = total ? Math.round((matched / total) * 100) : 0;
+  return (
+    <span className="flex min-w-[130px] items-center gap-2" title={`${pct}% matched`}>
+      <span className="h-1.5 w-16 overflow-hidden rounded-pill bg-ims-subtle" aria-hidden>
+        <span className="block h-full rounded-pill bg-ims-link" style={{ width: `${pct}%` }} />
+      </span>
+      <span className="text-t-small tabular-nums text-ims-body">{fmtNumber(matched)}/{fmtNumber(total)}</span>
+    </span>
+  );
+}
+
+/** "1 Oct – 16 Oct 2026" (the year once when both dates share it). */
+export const periodText = (from?: string, to?: string) => {
+  const a = fmtDate(from);
+  const b = fmtDate(to);
+  const sameYear = /\d{4}$/.test(a) && a.slice(-4) === b.slice(-4);
+  return sameYear ? `${a.slice(0, -5)} – ${b}` : `${a} – ${b}`;
+};
+
+/** Money in a KpiBand: the exact amount on wider screens, "RWF 1.3B" on phones where the exact one would break mid-number. */
+export function KpiMoney({ value }: { value?: number | null }) {
+  return (
+    <>
+      <span className="whitespace-nowrap sm:hidden">{fmtMoneyShort(value)}</span>
+      <span className="hidden whitespace-nowrap sm:inline">{fmtMoney(value)}</span>
+    </>
   );
 }
 
@@ -136,7 +158,7 @@ export function ReasonDialog({ open, title, description, confirmLabel, min = 3, 
   );
 }
 
-/** One key figure (KPI-band style). */
+/** One key figure in its own card. Pages with several figures use the ims KpiBand instead. */
 export function Stat({ label, value, sub, tone = "default" }: { label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "default" | "warning" | "success" }) {
   return (
     <div className="min-w-0 rounded-card border border-ims-border bg-ims-card px-5 py-4">

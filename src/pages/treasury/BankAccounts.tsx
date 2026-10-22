@@ -3,30 +3,36 @@
  * statement, how far each is reconciled and what is still to match. The DAF sets accounts up.
  */
 import * as React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "react-query";
-import { Landmark, Lock, Plus, Scale, Star } from "lucide-react";
+import { ExternalLink, Landmark, Plus, Scale } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { PERMS } from "@/lib/treasury";
-import { rwf, showDay } from "@/lib/ims";
+import { showDay } from "@/lib/ims";
 import { exportReport } from "@/lib/exporter";
-import { Button } from "@/components/ui/button";
-import { Badge, EmptyState, ListSkeleton, PageHeader } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
-import { KindIcon, ReconState, lastMonthEnd } from "@/components/treasury/TreasuryKit";
+import { Button, Card, Column, DataTable, EmptyState, Num, Page, PageHeader, Pill, RowAction, Tabs, fmtDate, fmtNumber } from "@/components/ims";
+import { ReconState, lastMonthEnd } from "@/components/treasury/TreasuryKit";
+import { cn } from "@/utils";
 import AccountDialog from "./AccountDialog";
+
+type TabKey = "bank" | "cash" | "closed";
 
 export default function BankAccounts() {
   const navigate = useNavigate();
   const { can } = usePermissions();
   const [open, setOpen] = React.useState(false);
-  const [showClosed, setShowClosed] = React.useState(false);
+  const [tab, setTab] = React.useState<TabKey | "">("");
   const q = useQuery(["bank-accounts"], () => pocketbase.collection("bank_accounts").getFullList({ sort: "kind,code", expand: "funding_source,custodian,gl_account" }));
   const all = (q.data || []) as any[];
   const active = all.filter((a) => a.status === "active");
   const closed = all.filter((a) => a.status !== "active");
   const due = lastMonthEnd();
+  const lists: Record<TabKey, any[]> = { bank: active.filter((a) => a.kind === "bank"), cash: active.filter((a) => a.kind === "cash"), closed };
+  const current: TabKey = tab || (lists.bank.length || !lists.cash.length ? "bank" : "cash");
+  const canReconcile = can("prepare_bank_reconciliation");
+  const canManage = can("manage_bank_accounts");
 
   const doExport = (format: "xlsx" | "pdf" | "csv") =>
     exportReport({
@@ -44,103 +50,146 @@ export default function BankAccounts() {
         { header: "Statement balance", value: (a: any) => (a.kind === "bank" ? a.statement_balance : ""), format: "money", width: 16 },
         { header: "Statement to", value: (a: any) => a.statement_date, format: "date", width: 12 },
         { header: "Reconciled to", value: (a: any) => a.reconciled_to, format: "date", width: 12 },
-        { header: "Status", value: (a: any) => a.status, width: 10 },
+        { header: "Status", value: (a: any) => (a.status === "active" ? "Active" : "Closed"), width: 10 },
       ],
     });
 
-  return (
-    <div className="space-y-4 px-3 sm:px-4">
-      <PageHeader
-        title="Bank & cash accounts"
-        description="Each account's cash book balance, its last bank statement and how far it is reconciled. Balances update with every receipt, payment and transfer."
-        breadcrumbs={[{ title: "Bank & cash", link: "/dashboard/treasury" }, { title: "Accounts", link: "/dashboard/treasury/accounts" }]}
-        actions={
-          <>
-            <ExportMenu onExport={doExport} permission={PERMS.export} disabled={!all.length} />
-            {can("manage_bank_accounts") && <Button onClick={() => setOpen(true)}><Plus size={15} /> New account</Button>}
-          </>
-        }
-      />
-      {q.isLoading ? <ListSkeleton rows={4} /> : !all.length ? (
-        <EmptyState icon={Landmark} title="No accounts yet" text="The Director of Finance sets up RALGA's bank accounts and the petty cash book, with their opening balances." />
-      ) : (
-        <>
-          {(["bank", "cash"] as const).map((kind) => {
-            const list = active.filter((a) => a.kind === kind);
-            if (!list.length) return null;
-            return (
-              <section key={kind} className="space-y-2">
-                <h3 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{kind === "bank" ? "Bank accounts" : "Cash books"}</h3>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {list.map((a) => <AccountCard key={a.id} a={a} due={due} onOpen={() => navigate(`/dashboard/treasury/accounts/${a.id}`)} canReconcile={can("prepare_bank_reconciliation")} />)}
-                </div>
-              </section>
-            );
-          })}
-          {closed.length > 0 && (
-            <section className="space-y-2">
-              <button type="button" onClick={() => setShowClosed((x) => !x)} className="text-[12.5px] font-medium text-primaryDark hover:underline">{showClosed ? "Hide" : "Show"} closed accounts ({closed.length})</button>
-              {showClosed && <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{closed.map((a) => <AccountCard key={a.id} a={a} due={due} onOpen={() => navigate(`/dashboard/treasury/accounts/${a.id}`)} canReconcile={false} />)}</div>}
-            </section>
-          )}
-        </>
-      )}
-      <AccountDialog open={open} onClose={() => setOpen(false)} onSaved={(id) => { setOpen(false); q.refetch(); navigate(`/dashboard/treasury/accounts/${id}`); }} />
-    </div>
-  );
-}
+  const openAccount = (a: any) => navigate(`/dashboard/treasury/accounts/${a.id}`);
+  const dueFor = (a: any) => (a.status === "active" && String(a.opening_date).slice(0, 10) <= due ? due : undefined);
+  const rows = lists[current];
+  const totalBook = rows.reduce((s, a) => s + (a.book_balance || 0), 0);
 
-function AccountCard({ a, due, onOpen, canReconcile }: { a: any; due: string; onOpen: () => void; canReconcile: boolean }) {
-  const bank = a.kind === "bank";
-  const over = !bank && a.cash_limit > 0 && a.book_balance > a.cash_limit;
-  const toMatch = (a.unmatched_bank || 0) + (bank ? a.unmatched_book || 0 : 0);
+  const nameCol: Column<any> = {
+    key: "name",
+    header: "Account",
+    className: "min-w-[220px]",
+    cell: (a) => (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <span className="font-semibold text-ims-text">{a.name}</span>
+        {a.is_default && <Pill tone="neutral">Default for payments</Pill>}
+        {a.expand?.funding_source && <Pill tone="info" title={`Only for ${a.expand.funding_source.name}`}>Restricted</Pill>}
+      </span>
+    ),
+    sub: (a) =>
+      a.kind === "bank"
+        ? [a.code, a.bank_name, a.account_number].filter(Boolean).join(" · ")
+        : `${a.code} · Held by ${a.expand?.custodian?.name || "—"}`,
+  };
+  const bookCol: Column<any> = {
+    key: "book",
+    header: "Cash book (RWF)",
+    numeric: true,
+    cell: (a) => {
+      const over = a.kind === "cash" && a.cash_limit > 0 && a.book_balance > a.cash_limit;
+      return <span className={cn("font-semibold", over && "text-ims-danger")}><Num value={a.book_balance} /></span>;
+    },
+    sub: (a) => (a.kind === "cash" && a.cash_limit > 0 && a.book_balance > a.cash_limit ? <span className="text-ims-danger">Above the limit: bank the surplus</span> : null),
+    total: <Num value={totalBook} />,
+  };
+  const recCol: Column<any> = {
+    key: "rec",
+    header: current === "cash" ? "Cash count" : "Reconciliation",
+    cell: (a) => <ReconState reconciledTo={String(a.reconciled_to || "").slice(0, 10)} due={dueFor(a)} kind={a.kind} />,
+  };
+
+  const columns: Column<any>[] =
+    current === "bank"
+      ? [
+          nameCol,
+          bookCol,
+          {
+            key: "statement",
+            header: "Bank statement (RWF)",
+            numeric: true,
+            cell: (a) => (a.statement_date ? <Num value={a.statement_balance} /> : <span className="text-ims-faint">None imported</span>),
+            sub: (a) => (a.statement_date ? `to ${fmtDate(a.statement_date)}` : null),
+          },
+          recCol,
+          {
+            key: "match",
+            header: "To match",
+            numeric: true,
+            cell: (a) => {
+              const n = (a.unmatched_bank || 0) + (a.unmatched_book || 0);
+              return `${fmtNumber(n)} item${n === 1 ? "" : "s"}`;
+            },
+          },
+        ]
+      : current === "cash"
+        ? [
+            nameCol,
+            bookCol,
+            { key: "limit", header: "Cash limit (RWF)", numeric: true, cell: (a) => (a.cash_limit ? <Num value={a.cash_limit} /> : <span className="text-ims-faint">None</span>) },
+            recCol,
+            {
+              key: "since",
+              header: "Since last count",
+              numeric: true,
+              cell: (a) => `${fmtNumber(a.unmatched_book || 0)} entr${a.unmatched_book === 1 ? "y" : "ies"}`,
+            },
+          ]
+        : [
+            nameCol,
+            { key: "type", header: "Type", cell: (a) => (a.kind === "cash" ? "Cash book" : "Bank account") },
+            bookCol,
+            { key: "reconciled", header: "Last reconciled", nowrap: true, cell: (a) => fmtDate(String(a.reconciled_to || "").slice(0, 10)) },
+          ];
+
+  const rowActions = (a: any): RowAction<any>[] => [
+    { label: "Open", icon: ExternalLink, onSelect: openAccount },
+    ...(canReconcile && a.status === "active" ? [{ label: a.kind === "bank" ? "Reconcile" : "Count cash", icon: Scale, onSelect: () => navigate(`/dashboard/treasury/reconcile/${a.id}`) }] : []),
+  ];
+
   return (
-    <article className="flex flex-col rounded-lg border border-slate-200 bg-white shadow-card transition-shadow hover:shadow-card-hover">
-      <button type="button" onClick={onOpen} className="flex flex-1 flex-col gap-3 px-4 pb-3 pt-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-        <div className="flex items-start gap-3">
-          <KindIcon kind={a.kind} />
-          <div className="min-w-0 flex-1">
-            <p className="flex flex-wrap items-center gap-1.5 text-[14px] font-semibold text-slate-900">
-              {a.name}
-              {a.is_default && <span title="Default for payments"><Star size={13} className="fill-amber-400 text-amber-400" aria-label="Default for payments" /></span>}
-            </p>
-            <p className="truncate text-[12px] text-slate-500">{a.code} · {bank ? `${a.bank_name}${a.account_number ? ` · ${a.account_number}` : ""}` : `Held by ${a.expand?.custodian?.name || "—"}`}</p>
-          </div>
-          {a.status !== "active" ? <Badge tone="neutral">Closed</Badge> : a.expand?.funding_source ? <Badge tone="violet"><Lock size={11} className="mr-1" />Restricted</Badge> : null}
-        </div>
-        <div>
-          <p className="text-[11.5px] text-slate-500">Cash book balance</p>
-          <p className={over ? "text-[22px] font-semibold tabular-nums text-red-600" : "text-[22px] font-semibold tabular-nums text-slate-900"}>{rwf(a.book_balance)}</p>
-          {over && <p className="text-[11.5px] font-medium text-red-600">Above the cash limit of {rwf(a.cash_limit)}: bank the surplus</p>}
-          {a.expand?.funding_source && <p className="truncate text-[11.5px] text-violet-700">Only for {a.expand.funding_source.name}</p>}
-        </div>
-        <dl className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2.5 text-[12px]">
-          {bank ? (
-            <div>
-              <dt className="text-slate-500">Bank statement</dt>
-              <dd className="font-medium tabular-nums text-slate-800">{a.statement_date ? `${rwf(a.statement_balance)}` : "None imported"}</dd>
-              {a.statement_date && <dd className="text-[11px] text-slate-400">to {showDay(a.statement_date)}</dd>}
-            </div>
-          ) : (
-            <div>
-              <dt className="text-slate-500">Cash limit</dt>
-              <dd className="font-medium tabular-nums text-slate-800">{a.cash_limit ? rwf(a.cash_limit) : "None"}</dd>
-            </div>
-          )}
-          <div>
-            <dt className="text-slate-500">{bank ? "To match" : "Since last count"}</dt>
-            <dd className="font-medium tabular-nums text-slate-800">{bank ? `${toMatch} item${toMatch === 1 ? "" : "s"}` : `${a.unmatched_book || 0} entr${a.unmatched_book === 1 ? "y" : "ies"}`}</dd>
-          </div>
-        </dl>
-      </button>
-      <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-2.5">
-        <ReconState reconciledTo={String(a.reconciled_to || "").slice(0, 10)} due={a.status === "active" && String(a.opening_date).slice(0, 10) <= due ? due : undefined} kind={a.kind} />
-        {canReconcile && a.status === "active" && (
-          <Link to={`/dashboard/treasury/reconcile/${a.id}`} className="inline-flex items-center gap-1 whitespace-nowrap text-[12.5px] font-medium text-primaryDark hover:underline">
-            <Scale size={13} /> {bank ? "Reconcile" : "Count cash"}
-          </Link>
-        )}
-      </div>
-    </article>
+    <Page>
+      <PageHeader
+        breadcrumbs={[{ label: "Bank & cash", to: "/dashboard/treasury" }, { label: "Accounts" }]}
+        title="Bank and cash accounts"
+        subtitle="Each account's cash book balance, its last bank statement and how far it is reconciled."
+        actions={<ExportMenu onExport={doExport} permission={PERMS.export} disabled={!all.length} size="default" />}
+        primary={canManage ? { label: "New account", icon: Plus, onClick: () => setOpen(true) } : undefined}
+      />
+      <Card padded={false} className="overflow-hidden">
+        <Tabs
+          inset
+          label="Account types"
+          active={current}
+          onChange={(k) => setTab(k as TabKey)}
+          tabs={[
+            { key: "bank", label: "Bank accounts", count: q.isLoading ? null : lists.bank.length },
+            { key: "cash", label: "Cash books", count: q.isLoading ? null : lists.cash.length },
+            ...(closed.length ? [{ key: "closed", label: "Closed", count: closed.length }] : []),
+          ]}
+        />
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(a) => a.id}
+          onRowClick={openAccount}
+          rowActions={rowActions}
+          loading={q.isLoading}
+          error={q.isError ? q.error : undefined}
+          onRetry={() => q.refetch()}
+          minWidth={820}
+          caption={current === "bank" ? "Bank accounts" : current === "cash" ? "Cash books" : "Closed accounts"}
+          empty={
+            <EmptyState
+              icon={Landmark}
+              text={
+                all.length
+                  ? current === "cash"
+                    ? "No cash book is set up."
+                    : current === "closed"
+                      ? "No closed accounts."
+                      : "No bank account is set up."
+                  : "No accounts yet. The Director of Finance sets up the bank accounts and the petty cash book, with their opening balances."
+              }
+              action={canManage && current !== "closed" ? <Button variant="primary" icon={Plus} onClick={() => setOpen(true)}>New account</Button> : undefined}
+            />
+          }
+        />
+      </Card>
+      <AccountDialog open={open} onClose={() => setOpen(false)} onSaved={(id) => { setOpen(false); q.refetch(); navigate(`/dashboard/treasury/accounts/${id}`); }} />
+    </Page>
   );
 }

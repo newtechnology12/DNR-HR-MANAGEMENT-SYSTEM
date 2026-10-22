@@ -4,16 +4,15 @@
  */
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import { FileSpreadsheet, Upload } from "lucide-react";
+import { ExternalLink, FileSpreadsheet, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/context/auth.context";
 import { PERMS, STATEMENT_STATUS, activeAccounts } from "@/lib/treasury";
 import { showDay } from "@/lib/ims";
-import { Button } from "@/components/ui/button";
-import { PageHeader, StatusBadge } from "@/components/enterprise/ui";
+import { StatusBadge } from "@/components/enterprise/ui";
 import RecordTable from "@/components/enterprise/RecordTable";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { KindIcon } from "@/components/treasury/TreasuryKit";
+import { Button, DocNo, EmptyState, Modal, Num, Page, PageHeader, fmtDate, statusText } from "@/components/ims";
+import { KindIcon, MatchBar, periodText } from "@/components/treasury/TreasuryKit";
 import StatementImport from "./StatementImport";
 
 export default function Statements() {
@@ -23,6 +22,7 @@ export default function Statements() {
   const [accounts, setAccounts] = React.useState<any[]>([]);
   const [account, setAccount] = React.useState<any>(null);
   const [refresh, setRefresh] = React.useState(0);
+  const canImport = can("prepare_bank_reconciliation");
 
   async function start() {
     const list = await activeAccounts("bank");
@@ -33,21 +33,23 @@ export default function Statements() {
     }
   }
 
+  const openStatement = (r: any) => navigate(`/dashboard/treasury/statements/${r.id}`);
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Bank & cash", to: "/dashboard/treasury" }, { label: "Bank statements" }]}
         title="Bank statements"
-        description="Statements imported from the banks' Excel or CSV files. Each line is matched to the cash book automatically; the rest is matched on the reconciliation screen."
-        breadcrumbs={[{ title: "Bank & cash", link: "/dashboard/treasury" }, { title: "Bank statements", link: "/dashboard/treasury/statements" }]}
-        actions={can("prepare_bank_reconciliation") && <Button onClick={start}><Upload size={15} /> Import a statement</Button>}
+        subtitle="Statements imported from the banks' Excel or CSV files, each line matched to the cash book."
+        primary={canImport ? { label: "Import a statement", icon: Upload, onClick: start } : undefined}
       />
       <RecordTable<any>
         collection="bank_statements"
         expand="account,imported_by"
         searchFields={["number", "file_name"]}
+        searchPlaceholder="Search number or file name"
         filters={[
           { field: "account", label: "Account", collection: "bank_accounts", optionLabel: (a) => `${a.code} · ${a.name}`, optionFilter: 'kind = "bank"' },
-          { field: "status", label: "Status", options: Object.entries(STATEMENT_STATUS).map(([value, s]) => ({ value, label: s.label })) },
+          { field: "status", label: "Status", options: Object.entries(STATEMENT_STATUS).map(([value, s]) => ({ value, label: statusText(s) })) },
         ]}
         dateField="statement_to"
         dateLabel="Statement to"
@@ -56,49 +58,55 @@ export default function Statements() {
         exportName="bank-statements"
         exportTitle="Bank statements imported"
         exportPermission={PERMS.export}
-        onRowClick={(r) => navigate(`/dashboard/treasury/statements/${r.id}`)}
-        empty={{ icon: FileSpreadsheet, title: "No statement imported", text: "The Accountant imports the bank's statement file every month." }}
+        onRowClick={openStatement}
+        rowActions={() => [{ label: "Open", icon: ExternalLink, onSelect: openStatement }]}
+        empty={{
+          icon: FileSpreadsheet,
+          title: "No statement imported",
+          text: "No statement imported yet. The Accountant imports the bank's statement file every month.",
+          action: canImport ? <Button variant="primary" icon={Upload} onClick={start}>Import a statement</Button> : undefined,
+        }}
         columns={[
-          { key: "number", header: "Statement", sortField: "number", cell: (r) => <span className="whitespace-nowrap font-mono text-[12.5px] font-semibold text-slate-800">{r.number}</span> },
-          { key: "account", header: "Account", csv: (r) => r.expand?.account?.code || "", cell: (r) => <span className="text-[12.5px] text-slate-700">{r.expand?.account?.code} · {r.expand?.account?.name}</span> },
-          { key: "period", header: "Period", sortField: "statement_from", csv: (r) => `${showDay(r.statement_from)} – ${showDay(r.statement_to)}`, cell: (r) => <span className="whitespace-nowrap text-[12.5px]">{showDay(r.statement_from)} – {showDay(r.statement_to)}</span> },
-          { key: "opening", header: "Opening", align: "right", format: "money", csv: (r) => r.opening_balance, cell: (r) => <span className="whitespace-nowrap tabular-nums">{r.opening_balance.toLocaleString("en-US")}</span> },
-          { key: "closing", header: "Closing", sortField: "closing_balance", align: "right", format: "money", csv: (r) => r.closing_balance, cell: (r) => <span className="whitespace-nowrap font-medium tabular-nums">{r.closing_balance.toLocaleString("en-US")}</span> },
-          {
-            key: "matched", header: "Matched", csv: (r) => `${r.matched_count}/${r.line_count}`,
-            cell: (r) => {
-              const pct = r.line_count ? Math.round((r.matched_count / r.line_count) * 100) : 0;
-              return (
-                <span className="flex min-w-[130px] items-center gap-2">
-                  <span className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-[#2a78d6]" style={{ width: `${pct}%` }} /></span>
-                  <span className="text-[12px] tabular-nums text-slate-600">{r.matched_count}/{r.line_count}</span>
-                </span>
-              );
-            },
-          },
+          { key: "number", header: "Statement", sortField: "number", nowrap: true, cell: (r) => <DocNo value={r.number} />, sub: (r) => r.file_name },
+          { key: "account", header: "Account", nowrap: true, csv: (r) => r.expand?.account?.code || "", cell: (r) => r.expand?.account?.code || "—", sub: (r) => r.expand?.account?.name },
+          { key: "period", header: "Period", sortField: "statement_from", nowrap: true, csv: (r) => `${showDay(r.statement_from)} – ${showDay(r.statement_to)}`, cell: (r) => periodText(r.statement_from, r.statement_to) },
+          { key: "opening", header: "Opening (RWF)", exportOnly: true, align: "right", format: "money", csv: (r) => r.opening_balance, cell: (r) => <Num value={r.opening_balance} /> },
+          { key: "closing", header: "Closing (RWF)", sortField: "closing_balance", align: "right", format: "money", csv: (r) => r.closing_balance, cell: (r) => <span className="font-semibold"><Num value={r.closing_balance} /></span> },
+          { key: "matched", header: "Matched", csv: (r) => `${r.matched_count}/${r.line_count}`, cell: (r) => <MatchBar matched={r.matched_count} total={r.line_count} /> },
           { key: "by", header: "Imported by", exportOnly: true, csv: (r) => r.expand?.imported_by?.name || "", cell: () => null },
-          { key: "status", header: "Status", sortField: "status", csv: (r) => STATEMENT_STATUS[r.status]?.label || r.status, cell: (r) => <StatusBadge status={r.status} map={STATEMENT_STATUS} /> },
+          { key: "status", header: "Status", sortField: "status", csv: (r) => statusText(STATEMENT_STATUS[r.status], r.status), cell: (r) => <StatusBadge status={r.status} map={STATEMENT_STATUS} /> },
         ]}
       />
-      <Dialog open={choosing} onOpenChange={setChoosing}>
-        <DialogContent className="max-w-md bg-white">
-          <DialogHeader>
-            <DialogTitle>Which account?</DialogTitle>
-            <DialogDescription>Choose the bank account the statement belongs to.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
+      <Modal
+        open={choosing}
+        onClose={() => setChoosing(false)}
+        size="sm"
+        title="Which account?"
+        description="Choose the bank account the statement belongs to."
+        footer={<Button variant="secondary" onClick={() => setChoosing(false)}>Cancel</Button>}
+      >
+        {accounts.length ? (
+          <ul className="space-y-2">
             {accounts.map((a) => (
-              <button key={a.id} type="button" onClick={() => { setChoosing(false); setAccount(a); }} className="flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5 text-left hover:border-primary hover:bg-primary/5">
-                <KindIcon kind="bank" />
-                <span className="min-w-0">
-                  <span className="block text-[13.5px] font-semibold text-slate-900">{a.code} · {a.name}</span>
-                  <span className="block text-[12px] text-slate-500">{a.bank_name} · {a.statement_date ? `imported up to ${showDay(a.statement_date)}` : "no statement yet"}</span>
-                </span>
-              </button>
+              <li key={a.id}>
+                <button
+                  type="button"
+                  onClick={() => { setChoosing(false); setAccount(a); }}
+                  className="flex w-full items-center gap-3 rounded-control border border-ims-border px-3.5 py-3 text-left transition-colors hover:border-ims-link hover:bg-ims-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus"
+                >
+                  <KindIcon kind="bank" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-t-body font-semibold text-ims-text">{a.code} · {a.name}</span>
+                    <span className="block truncate text-t-small text-ims-muted">{a.bank_name} · {a.statement_date ? `imported up to ${fmtDate(a.statement_date)}` : "no statement yet"}</span>
+                  </span>
+                </button>
+              </li>
             ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+          </ul>
+        ) : (
+          <EmptyState compact icon={FileSpreadsheet} text="No active bank account. The Director of Finance sets up the bank accounts first." />
+        )}
+      </Modal>
       {account && (
         <StatementImport
           account={account}
@@ -111,6 +119,6 @@ export default function Statements() {
           }}
         />
       )}
-    </div>
+    </Page>
   );
 }

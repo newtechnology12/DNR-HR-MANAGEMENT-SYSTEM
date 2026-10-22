@@ -4,23 +4,24 @@
 import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "react-query";
-import { FileSpreadsheet, Scale } from "lucide-react";
+import { AlertTriangle, FileSpreadsheet, Scale } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { FOLLOW_UP, STATEMENT_STATUS } from "@/lib/treasury";
-import { rwf, showDay } from "@/lib/ims";
-import { Button } from "@/components/ui/button";
-import { Badge, EmptyState, ListSkeleton, PageHeader, StatusBadge } from "@/components/enterprise/ui";
-import { Notebook } from "@/components/enterprise/DocumentLayout";
+import { DOCUMENT_LINKS } from "@/lib/ims";
+import { Skeleton } from "@/components/ui/skeleton";
 import DocumentUploads from "@/components/enterprise/Attachments";
-import { Flow, Stat } from "@/components/treasury/TreasuryKit";
-import { Chip } from "@/components/portal/kit";
+import { Button, ButtonLink, Card, CardHeader, Column, DataTable, DetailHeader, EmptyState, FilterBar, FilterSelect, KpiBand, Num, Page, Pill, PillTone, Tabs, fmtDate, fmtNumber } from "@/components/ims";
+import { Flow, KpiMoney, periodText } from "@/components/treasury/TreasuryKit";
+
+type TabKey = "lines" | "file";
+const LIST = "/dashboard/treasury/statements";
 
 export default function StatementDetail() {
   const { statementId } = useParams();
   const navigate = useNavigate();
   const { can } = usePermissions();
-  const [tab, setTab] = React.useState("lines");
+  const [tab, setTab] = React.useState<TabKey>("lines");
   const [only, setOnly] = React.useState<"all" | "open" | "matched">("all");
   const q = useQuery(["statement", statementId], async () => {
     const s: any = await pocketbase.collection("bank_statements").getOne(statementId!, { expand: "account,imported_by" });
@@ -33,81 +34,159 @@ export default function StatementDetail() {
     }
     return { s, lines, entries };
   });
-  if (q.isLoading) return <div className="p-6"><ListSkeleton rows={8} /></div>;
-  if (!q.data) return <div className="p-6"><EmptyState icon={FileSpreadsheet} title="Statement not found" text="It may have been deleted." /></div>;
+  if (q.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </Page>
+    );
+  }
+  if (!q.data) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState icon={FileSpreadsheet} text="This statement is not available. It may have been deleted." action={<ButtonLink to={LIST}>Back to bank statements</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
   const { s, lines, entries } = q.data;
   const byGroup: Record<string, any[]> = {};
   for (const e of entries) (byGroup[e.match_group] = byGroup[e.match_group] || []).push(e);
   const shown = lines.filter((l) => only === "all" || (only === "open" ? !l.match_group : Boolean(l.match_group)));
   const open = lines.filter((l) => !l.match_group).length;
-  const link = (e: any) => (e.source_type === "cash_receipt" ? `/dashboard/treasury/receipts/${e.source_id}` : e.source_type === "bank_transfer" ? `/dashboard/treasury/transfers/${e.source_id}` : e.source_type === "payment_voucher" ? `/dashboard/finance/vouchers/${e.source_id}` : "");
+  const link = (e: any) => (e.source_type && e.source_id ? DOCUMENT_LINKS[e.source_type]?.(e.source_id) || "" : "");
+  const net = shown.reduce((t, l) => t + (l.direction === "in" ? l.amount : -l.amount), 0);
+  const status = STATEMENT_STATUS[s.status];
+
+  const columns: Column<any>[] = [
+    { key: "no", header: "#", width: "52px", cell: (l) => <span className="text-ims-muted tabular-nums">{l.line_no}</span> },
+    { key: "date", header: "Date", nowrap: true, cell: (l) => fmtDate(l.txn_date) },
+    { key: "description", header: "Description", clamp: true, cell: (l) => l.description },
+    { key: "reference", header: "Reference", nowrap: true, cell: (l) => (l.reference ? <span className="font-mono text-t-small text-ims-muted">{l.reference}</span> : "") },
+    {
+      key: "amount",
+      header: "Amount (RWF)",
+      numeric: true,
+      cell: (l) => <Flow direction={l.direction} amount={l.amount} />,
+      total: <span className={net > 0 ? "text-ims-success" : undefined}>{net > 0 ? "+" : net < 0 ? "−" : ""}{fmtNumber(Math.abs(net))}</span>,
+    },
+    { key: "balance", header: "Balance (RWF)", numeric: true, cell: (l) => (l.has_balance ? <span className="text-ims-muted"><Num value={l.balance} /></span> : "") },
+    {
+      key: "matched",
+      header: "Matched to",
+      className: "min-w-[220px]",
+      cell: (l) => {
+        if (!l.match_group) {
+          return (
+            <span className="flex flex-wrap items-center gap-1.5">
+              <Pill tone="warning">Not matched</Pill>
+              {l.follow_up && <Pill tone={(FOLLOW_UP[l.follow_up]?.tone as PillTone) || "neutral"} title={FOLLOW_UP[l.follow_up]?.hint}>{FOLLOW_UP[l.follow_up]?.label || l.follow_up}</Pill>}
+            </span>
+          );
+        }
+        const es = byGroup[l.match_group] || [];
+        if (!es.length) return <span className="text-t-small text-ims-muted">Matched with other bank lines (they cancel out)</span>;
+        return (
+          <span className="block space-y-0.5">
+            {es.map((e) => (
+              <span key={e.id} className="block text-t-small">
+                {link(e) ? <Link to={link(e)} className="whitespace-nowrap font-mono font-semibold text-ims-link hover:underline">{e.source_number}</Link> : <span className="whitespace-nowrap font-mono">{e.source_number}</span>}
+                <span className="text-ims-muted"> · {e.type === "bank_charge" ? "bank charge recorded" : e.type === "interest" ? "interest recorded" : fmtDate(e.entry_date)}</span>
+                {l.reconciliation && <span className="ml-1.5 font-semibold text-ims-success">Reconciled</span>}
+              </span>
+            ))}
+          </span>
+        );
+      },
+    },
+  ];
 
   return (
-    <div className="space-y-4 px-3 sm:px-4">
-      <PageHeader
-        title={<span className="flex items-center gap-2">{s.number} <StatusBadge status={s.status} map={STATEMENT_STATUS} /></span>}
-        description={`${s.expand?.account?.code} · ${s.expand?.account?.name} · ${showDay(s.statement_from)} – ${showDay(s.statement_to)} · imported by ${s.expand?.imported_by?.name || "—"} on ${showDay(s.created)}`}
-        breadcrumbs={[{ title: "Bank & cash", link: "/dashboard/treasury" }, { title: "Bank statements", link: "/dashboard/treasury/statements" }, { title: s.number, link: `/dashboard/treasury/statements/${s.id}` }]}
-        actions={can("prepare_bank_reconciliation") && open > 0 && <Button onClick={() => navigate(`/dashboard/treasury/reconcile/${s.account}`)}><Scale size={15} /> Match the {open} open line{open === 1 ? "" : "s"}</Button>}
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to bank statements", to: LIST }}
+        number={s.number}
+        type="Bank statement"
+        status={status?.label || s.status}
+        statusNote={status?.note}
+        title={`${s.expand?.account?.code || ""} · ${s.expand?.account?.name || "Bank account"}`}
+        facts={[
+          periodText(s.statement_from, s.statement_to),
+          { label: "Imported by", value: s.expand?.imported_by?.name || "—" },
+          fmtDate(s.created),
+          `${fmtNumber(lines.length - open)} of ${fmtNumber(lines.length)} lines matched`,
+        ]}
+        actions={
+          can("prepare_bank_reconciliation") && open > 0 ? (
+            <Button variant="primary" icon={Scale} onClick={() => navigate(`/dashboard/treasury/reconcile/${s.account}`)}>
+              Match the {open} open line{open === 1 ? "" : "s"}
+            </Button>
+          ) : undefined
+        }
       />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Opening balance" value={rwf(s.opening_balance)} sub={showDay(s.statement_from)} />
-        <Stat label="Money in" value={rwf(s.total_in)} sub={`${lines.filter((l) => l.direction === "in").length} credits`} />
-        <Stat label="Money out" value={rwf(s.total_out)} sub={`${lines.filter((l) => l.direction === "out").length} debits`} />
-        <Stat label="Closing balance" value={rwf(s.closing_balance)} sub={showDay(s.statement_to)} />
-      </div>
-      {s.notes && <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">{s.notes}</p>}
-      <section className="rounded-lg border border-slate-200 bg-white px-4 pb-4 pt-1 shadow-card">
-        <Notebook tabs={[{ key: "lines", label: "Lines", count: lines.length }, { key: "file", label: "Original file", count: (s.attachments || []).length }]} active={tab} onChange={setTab} />
-        <div className="pt-4">
-          {tab === "lines" && (
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-1.5">
-                <Chip active={only === "all"} onClick={() => setOnly("all")} count={lines.length}>All lines</Chip>
-                <Chip active={only === "open"} onClick={() => setOnly("open")} count={open}>Not matched</Chip>
-                <Chip active={only === "matched"} onClick={() => setOnly("matched")} count={lines.length - open}>Matched</Chip>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="dnr-grid w-full min-w-[860px]">
-                  <thead><tr><th>#</th><th>Date</th><th>Description</th><th>Reference</th><th className="text-right">Amount</th><th className="text-right">Balance</th><th>Matched to</th></tr></thead>
-                  <tbody>
-                    {shown.map((l) => {
-                      const es = l.match_group ? byGroup[l.match_group] || [] : [];
-                      return (
-                        <tr key={l.id}>
-                          <td className="text-[12px] text-slate-400">{l.line_no}</td>
-                          <td className="whitespace-nowrap text-[12.5px]">{showDay(l.txn_date)}</td>
-                          <td className="max-w-[300px] text-[12.5px]"><span className="line-clamp-2">{l.description}</span></td>
-                          <td className="whitespace-nowrap font-mono text-[12px] text-slate-500">{l.reference}</td>
-                          <td className="text-right"><Flow direction={l.direction} amount={l.amount} /></td>
-                          <td className="whitespace-nowrap text-right tabular-nums text-slate-500">{l.has_balance ? l.balance.toLocaleString("en-US") : ""}</td>
-                          <td className="min-w-[200px] text-[12.5px]">
-                            {l.match_group ? (
-                              es.length ? es.map((e) => (
-                                <span key={e.id} className="block">
-                                  {link(e) ? <Link to={link(e)} className="font-mono text-primaryDark hover:underline">{e.source_number}</Link> : <span className="font-mono">{e.source_number}</span>}
-                                  <span className="text-slate-500"> · {e.type === "bank_charge" ? "bank charge recorded" : e.type === "interest" ? "interest recorded" : showDay(e.entry_date)}</span>
-                                  {l.reconciliation && <Badge tone="success" className="ml-1.5">Reconciled</Badge>}
-                                </span>
-                              )) : <span className="text-slate-500">Matched with other bank lines (they cancel out)</span>
-                            ) : (
-                              <span className="flex flex-wrap items-center gap-1.5">
-                                <Badge tone="warning">Not matched</Badge>
-                                {l.follow_up && <Badge tone={FOLLOW_UP[l.follow_up]?.tone}>{FOLLOW_UP[l.follow_up]?.label}</Badge>}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-          {tab === "file" && <DocumentUploads collection="bank_statements" record={s} canAdd={can("prepare_bank_reconciliation")} canRemove={s.status === "imported" && can("prepare_bank_reconciliation")} onChange={() => q.refetch()} hint="The statement as received from the bank (Excel, CSV or PDF)" />}
-        </div>
-      </section>
-    </div>
+
+      <KpiBand
+        items={[
+          { label: "Opening balance", value: <KpiMoney value={s.opening_balance} />, sub: fmtDate(s.statement_from) },
+          { label: "Money in", value: <KpiMoney value={s.total_in} />, tone: "success", sub: `${fmtNumber(lines.filter((l) => l.direction === "in").length)} credits` },
+          { label: "Money out", value: <KpiMoney value={s.total_out} />, sub: `${fmtNumber(lines.filter((l) => l.direction === "out").length)} debits` },
+          { label: "Closing balance", value: <KpiMoney value={s.closing_balance} />, sub: fmtDate(s.statement_to) },
+        ]}
+      />
+
+      {s.notes && (
+        <p className="flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden /> <span>{s.notes}</span>
+        </p>
+      )}
+
+      <Tabs
+        label="Statement sections"
+        active={tab}
+        onChange={(k) => setTab(k as TabKey)}
+        tabs={[
+          { key: "lines", label: "Lines", count: lines.length },
+          { key: "file", label: "Documents", count: (s.attachments || []).length },
+        ]}
+      />
+
+      {tab === "lines" && (
+        <Card padded={false} className="overflow-hidden">
+          <FilterBar>
+            <FilterSelect
+              label="Lines"
+              all={false}
+              value={only}
+              onChange={(v) => setOnly(v as typeof only)}
+              options={[
+                { value: "all", label: `All lines (${lines.length})` },
+                { value: "open", label: `Not matched (${open})` },
+                { value: "matched", label: `Matched (${lines.length - open})` },
+              ]}
+            />
+          </FilterBar>
+          <DataTable
+            columns={columns}
+            rows={shown}
+            rowKey={(l) => l.id}
+            totalLabel="Total"
+            minWidth={980}
+            caption={`Lines of ${s.number}`}
+            empty={<EmptyState compact icon={FileSpreadsheet} text={only === "open" ? "Every line is matched." : only === "matched" ? "No line is matched yet." : "This statement has no lines."} />}
+          />
+        </Card>
+      )}
+
+      {tab === "file" && (
+        <Card>
+          <CardHeader title="Original file" subtitle="The statement as received from the bank (Excel, CSV or PDF)." />
+          <DocumentUploads collection="bank_statements" record={s} canAdd={can("prepare_bank_reconciliation")} canRemove={s.status === "imported" && can("prepare_bank_reconciliation")} onChange={() => q.refetch()} hint="The statement as received from the bank (Excel, CSV or PDF)" />
+        </Card>
+      )}
+    </Page>
   );
 }

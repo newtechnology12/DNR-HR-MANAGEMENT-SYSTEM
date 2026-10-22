@@ -4,14 +4,14 @@
  */
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { PiggyBank, Plus } from "lucide-react";
+import { ExternalLink, PiggyBank, Plus } from "lucide-react";
 import { usePermissions } from "@/context/auth.context";
 import { METHOD_LABELS, PAYER_TYPES, TREASURY_DOC_STATUS } from "@/lib/treasury";
-import { rwf, showDay } from "@/lib/ims";
+import { showDay } from "@/lib/ims";
 import { IMPORTS } from "@/lib/importConfigs";
-import { Button } from "@/components/ui/button";
-import { PageHeader, StatusBadge } from "@/components/enterprise/ui";
+import { StatusBadge } from "@/components/enterprise/ui";
 import RecordTable, { RecordView } from "@/components/enterprise/RecordTable";
+import { Button, DocNo, Num, Page, PageHeader, fmtDate, statusText } from "@/components/ims";
 import ReceiptDialog from "./ReceiptDialog";
 
 export default function Receipts() {
@@ -20,21 +20,23 @@ export default function Receipts() {
   const { can } = usePermissions();
   const [open, setOpen] = React.useState(false);
   const [refresh, setRefresh] = React.useState(0);
-  const view = params.get("view") || (can("approve_treasury") && !can("manage_treasury") ? "pending" : "all");
+  const canRecord = can("manage_treasury");
+  const view = params.get("view") || (can("approve_treasury") && !canRecord ? "pending" : "all");
   const views: RecordView[] = [
-    { key: "all", label: "All" },
+    { key: "all", label: "All receipts" },
     { key: "draft", label: "Drafts", filter: 'status = "draft" || status = "returned"' },
-    { key: "pending", label: "Waiting for the DAF", filter: 'status = "pending_approval"' },
+    { key: "pending", label: "Pending approval", filter: 'status = "pending_approval"' },
     { key: "posted", label: "Posted", filter: 'status = "approved"' },
-    { key: "closed", label: "Reversed / cancelled", filter: 'status = "reversed" || status = "cancelled" || status = "rejected"' },
+    { key: "closed", label: "Reversed or cancelled", filter: 'status = "reversed" || status = "cancelled" || status = "rejected"' },
   ];
+  const openReceipt = (r: any) => navigate(`/dashboard/treasury/receipts/${r.id}`);
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Bank & cash", to: "/dashboard/treasury" }, { label: "Receipts" }]}
         title="Receipts"
-        description="Money received by RALGA: member contributions, Government transfers, donor grants, fees. The Cashier records each receipt; the DAF verifies it before it reaches the cash book."
-        breadcrumbs={[{ title: "Bank & cash", link: "/dashboard/treasury" }, { title: "Receipts", link: "/dashboard/treasury/receipts" }]}
-        actions={can("manage_treasury") && <Button onClick={() => setOpen(true)}><Plus size={15} /> Record a receipt</Button>}
+        subtitle="Money received by RALGA, recorded by the Cashier and verified by the DAF before it reaches the cash book."
+        primary={canRecord ? { label: "Record a receipt", icon: Plus, onClick: () => setOpen(true) } : undefined}
       />
       <RecordTable<any>
         collection="cash_receipts"
@@ -43,6 +45,7 @@ export default function Receipts() {
         activeView={view}
         onViewChange={(v) => setParams(v === "all" ? {} : { view: v })}
         searchFields={["number", "payer_name", "reference", "description"]}
+        searchPlaceholder="Search number, payer or reference"
         filters={[
           { field: "account", label: "Account", collection: "bank_accounts", optionLabel: (a) => `${a.code} · ${a.name}` },
           { field: "payer_type", label: "Payer", options: Object.entries(PAYER_TYPES).map(([value, label]) => ({ value, label })) },
@@ -56,30 +59,36 @@ export default function Receipts() {
         exportName="receipts"
         exportTitle="Receipts"
         exportPermission={["export_treasury", "manage_treasury", "approve_treasury"]}
-        importConfig={can("manage_treasury") ? IMPORTS.receipts : undefined}
-        onRowClick={(r) => navigate(`/dashboard/treasury/receipts/${r.id}`)}
-        empty={{ icon: PiggyBank, title: "No receipts", text: "The Cashier records money received; the DAF verifies it." }}
+        importConfig={canRecord ? IMPORTS.receipts : undefined}
+        onRowClick={openReceipt}
+        rowActions={() => [{ label: "Open", icon: ExternalLink, onSelect: openReceipt }]}
+        empty={{
+          icon: PiggyBank,
+          title: "No receipts",
+          text: view === "pending" ? "No receipt is waiting for the DAF." : "No receipts yet. The Cashier records money received; the DAF verifies it.",
+          action: canRecord && view !== "pending" ? <Button variant="primary" icon={Plus} onClick={() => setOpen(true)}>Record a receipt</Button> : undefined,
+        }}
         columns={[
-          { key: "number", header: "Receipt", sortField: "number", cell: (r) => <span className="whitespace-nowrap font-mono text-[12.5px] font-semibold text-slate-800">{r.number}</span> },
-          { key: "date", header: "Received", sortField: "receipt_date", format: "date", csv: (r) => showDay(r.receipt_date), cell: (r) => <span className="whitespace-nowrap text-[12.5px] text-slate-600">{showDay(r.receipt_date)}</span> },
+          { key: "number", header: "Number", sortField: "number", nowrap: true, cell: (r) => <DocNo value={r.number} /> },
+          { key: "date", header: "Received", sortField: "receipt_date", nowrap: true, format: "date", csv: (r) => showDay(r.receipt_date), cell: (r) => fmtDate(r.receipt_date) },
           {
-            key: "payer", header: "Received from", sortField: "payer_name", csv: (r) => r.payer_name,
-            cell: (r) => (
-              <span className="block min-w-[180px]">
-                <span className="block font-medium text-slate-900">{r.payer_name}</span>
-                <span className="block truncate text-[12px] text-slate-500">{r.expand?.income_account ? `${r.expand.income_account.code} ${r.expand.income_account.name}` : PAYER_TYPES[r.payer_type]}</span>
-              </span>
-            ),
+            key: "payer", header: "Received from", sortField: "payer_name", clamp: true, csv: (r) => r.payer_name,
+            cell: (r) => <span className="font-semibold text-ims-text">{r.payer_name}</span>,
+            sub: (r) => (r.expand?.income_account ? `${r.expand.income_account.code} ${r.expand.income_account.name}` : PAYER_TYPES[r.payer_type]),
           },
-          { key: "account", header: "Into", csv: (r) => r.expand?.account?.code || "", cell: (r) => <span className="whitespace-nowrap text-[12.5px] text-slate-700">{r.expand?.account?.code}</span> },
-          { key: "method", header: "Method / reference", csv: (r) => `${METHOD_LABELS[r.method] || r.method} ${r.reference}`, cell: (r) => <span className="block max-w-[200px] truncate text-[12.5px] text-slate-600">{METHOD_LABELS[r.method] || r.method}{r.reference ? ` · ${r.reference}` : ""}</span> },
+          { key: "account", header: "Into", nowrap: true, csv: (r) => r.expand?.account?.code || "", cell: (r) => r.expand?.account?.code || "—", sub: (r) => r.expand?.account?.name },
+          {
+            key: "method", header: "Method", nowrap: true, csv: (r) => `${METHOD_LABELS[r.method] || r.method} ${r.reference}`,
+            cell: (r) => METHOD_LABELS[r.method] || r.method,
+            sub: (r) => (r.reference ? <span className="font-mono">{r.reference}</span> : null),
+          },
           { key: "fund", header: "Funding source", exportOnly: true, csv: (r) => r.expand?.funding_source?.name || "", cell: () => null },
-          { key: "amount", header: "Amount", sortField: "amount", align: "right", format: "money", csv: (r) => r.amount, cell: (r) => <span className="whitespace-nowrap font-semibold tabular-nums">{rwf(r.amount)}</span> },
+          { key: "amount", header: "Amount (RWF)", sortField: "amount", align: "right", sum: "amount", format: "money", csv: (r) => r.amount, cell: (r) => <span className="font-semibold"><Num value={r.amount} /></span> },
           { key: "by", header: "Recorded by", exportOnly: true, csv: (r) => r.expand?.recorded_by?.name || "", cell: () => null },
-          { key: "status", header: "Status", sortField: "status", csv: (r) => TREASURY_DOC_STATUS[r.status]?.label || r.status, cell: (r) => <StatusBadge status={r.status} map={TREASURY_DOC_STATUS} /> },
+          { key: "status", header: "Status", sortField: "status", csv: (r) => statusText(TREASURY_DOC_STATUS[r.status], r.status), cell: (r) => <StatusBadge status={r.status} map={TREASURY_DOC_STATUS} /> },
         ]}
       />
       <ReceiptDialog open={open} onClose={() => setOpen(false)} onSaved={(id) => { setOpen(false); setRefresh((n) => n + 1); navigate(`/dashboard/treasury/receipts/${id}`); }} />
-    </div>
+    </Page>
   );
 }

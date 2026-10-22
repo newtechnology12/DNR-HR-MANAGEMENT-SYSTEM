@@ -6,30 +6,27 @@ import * as React from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "react-query";
 import { toast } from "sonner";
-import { BookCheck, CircleDashed, PiggyBank, Pencil, Send, Undo2, XCircle } from "lucide-react";
+import { Ban, BookCheck, CircleDashed, CornerUpLeft, Pencil, PiggyBank, Send, Undo2 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { METHOD_LABELS, PAYER_TYPES, TREASURY_DOC_STATUS, treasuryApi } from "@/lib/treasury";
-import { rwf, showDay } from "@/lib/ims";
 import { errorMessage } from "@/lib/procurement";
-import { Button } from "@/components/ui/button";
-import { EmptyState, ListSkeleton, StatusBadge } from "@/components/enterprise/ui";
-import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, toChatter } from "@/components/enterprise/DocumentLayout";
-import { ApprovalTracker } from "@/components/enterprise/Approval";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Activity, ApprovalTracker } from "@/components/enterprise/Approval";
 import { DecisionButtons, useApprovalTrail } from "@/components/enterprise/useApprovalTrail";
 import DocumentUploads from "@/components/enterprise/Attachments";
+import { Button, ButtonLink, Card, CardHeader, DetailHeader, Details, EmptyState, MenuItem, MoreMenu, Page, Tabs, fmtDate, fmtDateTime, fmtMoney } from "@/components/ims";
 import { ReasonDialog } from "@/components/treasury/TreasuryKit";
+import { cn } from "@/utils";
 import ReceiptDialog from "./ReceiptDialog";
 
-const STEPS = [{ key: "draft", label: "Recorded" }, { key: "pending_approval", label: "DAF verification" }, { key: "approved", label: "Posted" }];
-const RIBBON: Record<string, { label: string; tone: "success" | "danger" | "warning" | "neutral" }> = {
-  approved: { label: "Posted", tone: "success" }, reversed: { label: "Reversed", tone: "danger" }, rejected: { label: "Rejected", tone: "danger" }, cancelled: { label: "Cancelled", tone: "neutral" },
-};
+type TabKey = "details" | "documents" | "approvals" | "activity";
+const LIST = "/dashboard/treasury/receipts";
 
 export default function ReceiptDetail() {
   const { receiptId } = useParams();
   const { can } = usePermissions();
-  const [tab, setTab] = React.useState("cashbook");
+  const [tab, setTab] = React.useState<TabKey>("details");
   const [editing, setEditing] = React.useState(false);
   const [ask, setAsk] = React.useState<"" | "cancel" | "reverse">("");
   const [busy, setBusy] = React.useState(false);
@@ -50,7 +47,7 @@ export default function ReceiptDetail() {
     setBusy(true);
     try {
       await treasuryApi.doc("receipts", receiptId!, "submit");
-      toast.success("Sent to the DAF for verification");
+      toast.success(`${q.data?.r.number || "Receipt"} sent to the DAF for verification`);
       refresh();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -59,8 +56,24 @@ export default function ReceiptDetail() {
     }
   }
 
-  if (q.isLoading) return <div className="p-6"><ListSkeleton rows={6} /></div>;
-  if (!q.data) return <div className="p-6"><EmptyState icon={PiggyBank} title="Receipt not found" text="It may have been deleted, or it is outside what your role can see." /></div>;
+  if (q.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-64 w-full" />
+      </Page>
+    );
+  }
+  if (!q.data) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState icon={PiggyBank} text="This receipt is not available. It may have been deleted, or your role cannot see it." action={<ButtonLink to={LIST}>Back to receipts</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
   const { r, entries, lines } = q.data;
   const a = r.expand?.account;
   const editable = ["draft", "returned"].includes(r.status);
@@ -68,67 +81,113 @@ export default function ReceiptDetail() {
   const posted = entries.find((e) => !e.reversal_of);
   const reversal = entries.find((e) => e.reversal_of);
   const bankLine = posted?.match_group ? lines.find((l) => l.match_group === posted.match_group) : null;
+  const canEdit = editable && can("manage_treasury");
+  const status = TREASURY_DOC_STATUS[r.status];
+  const returnNote = r.status === "returned" ? [...trail.actions].reverse().find((x: any) => x.action === "return")?.comment : null;
+
+  const more: MenuItem[] = [
+    { label: "Reverse receipt", icon: Undo2, danger: true, onSelect: () => setAsk("reverse"), hidden: !(r.status === "approved" && can("approve_treasury") && !bankLine) },
+    { label: "Cancel receipt", icon: Ban, danger: true, onSelect: () => setAsk("cancel"), hidden: !(open && can(["manage_treasury", "approve_treasury"])) },
+  ];
 
   return (
-    <DocumentPage chatter={<Chatter items={toChatter(trail.actions, trail.audit)} />}>
-      <ControlBar
-        breadcrumbs={[{ title: "Bank & cash", link: "/dashboard/treasury" }, { title: "Receipts", link: "/dashboard/treasury/receipts" }, { title: r.number }]}
-        steps={STEPS}
-        current={r.status === "returned" ? "draft" : ["approved", "reversed"].includes(r.status) ? "approved" : r.status}
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to receipts", to: LIST }}
+        number={r.number}
+        type="Receipt"
+        status={status?.label || r.status}
+        statusNote={status?.note}
+        title={`From ${r.payer_name}`}
+        facts={[
+          <strong key="amount" className="font-bold text-ims-text">{fmtMoney(r.amount)}</strong>,
+          { label: "Received", value: fmtDate(r.receipt_date) },
+          a ? { label: "Into", value: a.code } : null,
+          `${METHOD_LABELS[r.method] || r.method}${r.reference ? ` · ${r.reference}` : ""}`,
+        ]}
         actions={
           <>
-            {editable && can("manage_treasury") && <Button size="sm" onClick={submit} disabled={busy}><Send size={14} /> Send to the DAF</Button>}
-            {editable && can("manage_treasury") && <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>}
+            <MoreMenu items={more} />
+            {canEdit && <Button icon={Pencil} onClick={() => setEditing(true)}>Edit</Button>}
+            {canEdit && <Button variant="primary" icon={Send} loading={busy} onClick={submit}>Submit for approval</Button>}
             <DecisionButtons approval={r.expand?.approval} number={r.number} onDone={refresh} />
-            {r.status === "approved" && can("approve_treasury") && !bankLine && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setAsk("reverse")}><Undo2 size={14} /> Reverse</Button>}
-            {open && can(["manage_treasury", "approve_treasury"]) && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setAsk("cancel")}><XCircle size={14} /> Cancel</Button>}
           </>
         }
       />
-      <Sheet ribbon={RIBBON[r.status]}>
-        <SheetTitle kicker="Receipt" title={r.number} badges={<StatusBadge status={r.status} map={TREASURY_DOC_STATUS} />} />
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/70 px-4 py-3">
-          <div>
-            <p className="text-[12px] text-slate-500">Amount received</p>
-            <p className="text-[26px] font-semibold tabular-nums tracking-tight text-slate-900">{rwf(r.amount)}</p>
-          </div>
-          <p className="text-[12.5px] text-slate-600">{METHOD_LABELS[r.method] || r.method}{r.reference ? <> · <span className="font-mono">{r.reference}</span></> : ""}</p>
-        </div>
-        <FieldGrid
-          left={[
-            { label: "Received from", value: r.payer_name, hint: PAYER_TYPES[r.payer_type] },
-            { label: "Date received", value: showDay(r.receipt_date) },
-            { label: "Into account", value: a ? <Link to={`/dashboard/treasury/accounts/${a.id}`} className="text-primaryDark hover:underline">{a.code} · {a.name}</Link> : "—", hint: a?.bank_name },
-            { label: "Description", value: r.description },
-          ]}
-          right={[
-            { label: "What it is for", value: r.expand?.income_account ? `${r.expand.income_account.code} ${r.expand.income_account.name}` : "—" },
-            { label: "Funding source", value: r.expand?.funding_source?.name || "Not specified" },
-            { label: "Project", value: r.expand?.project ? `${r.expand.project.code} · ${r.expand.project.name}` : "" },
-            { label: "Recorded by", value: r.expand?.recorded_by?.name, hint: showDay(r.created) },
-            { label: "Reversed", value: r.status === "reversed" ? `${showDay(r.reversed_at)} by ${r.expand?.reversed_by?.name || "the DAF"}` : "", hint: r.reversal_reason },
-            { label: "Cancelled because", value: r.cancel_reason },
-          ]}
-        />
-        <Notebook tabs={[{ key: "cashbook", label: "Cash book & bank" }, { key: "documents", label: "Documents", count: (r.attachments || []).length }, { key: "approval", label: "Verification" }]} active={tab} onChange={setTab} />
-        <div className="pt-4">
-          {tab === "cashbook" && (
-            <ol className="space-y-3">
-              <Milestone done={Boolean(posted)} title={posted ? `Posted to the cash book on ${showDay(posted.entry_date)}` : "Not yet in the cash book"} text={posted ? `${a?.code} cash book: +${rwf(posted.amount)}` : "It is posted when the DAF verifies it."} />
+
+      {r.status === "returned" && (
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-orange/30 bg-ims-orange-bg px-4 py-3 text-t-body text-ims-orange">
+          <CornerUpLeft size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Returned for changes{returnNote ? `: “${returnNote}”` : ""}. Correct it and submit it again.</span>
+        </p>
+      )}
+      {r.cancel_reason && (
+        <p className="rounded-card border border-ims-border bg-ims-card px-4 py-3 text-t-body text-ims-body">
+          <span className="font-semibold text-ims-text">Cancelled.</span> {r.cancel_reason}
+        </p>
+      )}
+
+      <Tabs
+        label="Receipt sections"
+        active={tab}
+        onChange={(k) => setTab(k as TabKey)}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "documents", label: "Documents", count: (r.attachments || []).length },
+          { key: "approvals", label: "Approvals" },
+          { key: "activity", label: "Activity" },
+        ]}
+      />
+
+      {tab === "details" && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
+            <CardHeader title="Receipt" />
+            <Details
+              items={[
+                { label: "Received from", value: r.payer_name, hint: PAYER_TYPES[r.payer_type] },
+                { label: "Amount", value: fmtMoney(r.amount) },
+                { label: "Date received", value: fmtDate(r.receipt_date) },
+                { label: "Into account", value: a ? <Link to={`/dashboard/treasury/accounts/${a.id}`} className="font-semibold text-ims-link hover:underline">{a.code} · {a.name}</Link> : null, hint: a?.bank_name },
+                { label: "Method", value: METHOD_LABELS[r.method] || r.method },
+                { label: "Reference", value: r.reference ? <span className="font-mono">{r.reference}</span> : null },
+                { label: "What it is for", value: r.expand?.income_account ? `${r.expand.income_account.code} ${r.expand.income_account.name}` : null },
+                { label: "Funding source", value: r.expand?.funding_source?.name || "Not specified" },
+                { label: "Project", value: r.expand?.project ? `${r.expand.project.code} · ${r.expand.project.name}` : null },
+                { label: "Recorded by", value: r.expand?.recorded_by?.name, hint: fmtDateTime(r.created) },
+                ...(r.status === "reversed" ? [{ label: "Reversed", value: `${fmtDate(r.reversed_at)} by ${r.expand?.reversed_by?.name || "the DAF"}`, hint: r.reversal_reason }] : []),
+                { label: "Description", value: r.description ? <span className="whitespace-pre-line">{r.description}</span> : null, wide: true },
+              ]}
+            />
+          </Card>
+          <Card>
+            <CardHeader title="Cash book and bank" subtitle="Where the money stands in RALGA's books." />
+            <ol className="space-y-4">
+              <Milestone done={Boolean(posted)} title={posted ? `Posted to the cash book on ${fmtDate(posted.entry_date)}` : "Not yet in the cash book"} text={posted ? `${a?.code} cash book: +${fmtMoney(posted.amount)}` : "It is posted when the DAF verifies it."} />
               {a?.kind === "bank" && (
                 <Milestone
                   done={Boolean(bankLine)}
-                  title={bankLine ? `On the bank statement of ${showDay(bankLine.txn_date)}` : "Not yet on a bank statement"}
+                  title={bankLine ? `On the bank statement of ${fmtDate(bankLine.txn_date)}` : "Not yet on a bank statement"}
                   text={bankLine ? `${bankLine.expand?.statement?.number || "Statement"} · line ${bankLine.line_no}: ${bankLine.description}` : "It is matched automatically when the Accountant imports the statement that shows it."}
                 />
               )}
-              {reversal && <Milestone done title={`Reversed in the cash book on ${showDay(reversal.entry_date)}`} text={`−${rwf(reversal.amount)} · ${r.reversal_reason}`} tone="danger" />}
+              {reversal && <Milestone done title={`Reversed in the cash book on ${fmtDate(reversal.entry_date)}`} text={`−${fmtMoney(reversal.amount)} · ${r.reversal_reason}`} tone="danger" />}
             </ol>
-          )}
-          {tab === "documents" && <DocumentUploads collection="cash_receipts" record={r} canAdd={can(["manage_treasury", "approve_treasury"])} canRemove={editable && can("manage_treasury")} onChange={refresh} hint="Bank advice, deposit slip, remittance letter or a copy of the receipt issued" />}
-          {tab === "approval" && <ApprovalTracker approval={r.expand?.approval} actions={trail.actions} />}
+          </Card>
         </div>
-      </Sheet>
+      )}
+
+      {tab === "documents" && (
+        <Card>
+          <CardHeader title="Documents" subtitle="Bank advice, deposit slip, remittance letter or a copy of the receipt issued." />
+          <DocumentUploads collection="cash_receipts" record={r} canAdd={can(["manage_treasury", "approve_treasury"])} canRemove={editable && can("manage_treasury")} onChange={refresh} hint="Bank advice, deposit slip, remittance letter or a copy of the receipt issued" />
+        </Card>
+      )}
+
+      {tab === "approvals" && <ApprovalTracker approval={r.expand?.approval} actions={trail.actions} />}
+
+      {tab === "activity" && <Activity actions={trail.actions} audit={trail.audit} loading={trail.loading} />}
+
       <ReceiptDialog open={editing} receipt={r} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh(); }} />
       <ReasonDialog
         open={ask === "cancel"}
@@ -144,13 +203,14 @@ export default function ReceiptDetail() {
             refresh();
           } catch (e) {
             toast.error(errorMessage(e));
+            throw e;
           }
         }}
       />
       <ReasonDialog
         open={ask === "reverse"}
         title={`Reverse ${r.number}?`}
-        description={`An opposite entry of ${rwf(r.amount)} is posted today in ${a?.code}. Use it when the money did not arrive (e.g. a cheque returned unpaid).`}
+        description={`An opposite entry of ${fmtMoney(r.amount)} is posted today in ${a?.code}. Use it when the money did not arrive (for example a cheque returned unpaid).`}
         confirmLabel="Reverse receipt"
         min={10}
         onClose={() => setAsk("")}
@@ -162,20 +222,26 @@ export default function ReceiptDetail() {
             refresh();
           } catch (e) {
             toast.error(errorMessage(e));
+            throw e;
           }
         }}
       />
-    </DocumentPage>
+    </Page>
   );
 }
 
+/** One step of a document's way through the books: done (check) or still to come (dashed circle). */
 export function Milestone({ done, title, text, tone }: { done: boolean; title: string; text: string; tone?: "danger" }) {
   return (
     <li className="flex items-start gap-3">
-      {done ? <BookCheck size={18} className={tone === "danger" ? "mt-0.5 text-red-600" : "mt-0.5 text-emerald-600"} aria-hidden /> : <CircleDashed size={18} className="mt-0.5 text-slate-300" aria-hidden />}
-      <div>
-        <p className="text-[13.5px] font-medium text-slate-900">{title}</p>
-        <p className="text-[12.5px] text-slate-500">{text}</p>
+      {done ? (
+        <BookCheck size={18} className={cn("mt-px shrink-0", tone === "danger" ? "text-ims-danger" : "text-ims-success")} aria-label="Done" />
+      ) : (
+        <CircleDashed size={18} className="mt-px shrink-0 text-ims-faint" aria-label="Not yet" />
+      )}
+      <div className="min-w-0">
+        <p className="text-t-body font-semibold text-ims-text">{title}</p>
+        <p className="text-t-small text-ims-muted">{text}</p>
       </div>
     </li>
   );
