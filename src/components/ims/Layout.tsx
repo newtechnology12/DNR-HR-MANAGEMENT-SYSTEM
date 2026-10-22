@@ -111,7 +111,7 @@ export function PageHeader({
 // ------------------------------------------------------------------ card
 export function Card({ children, className, padded = true, as: Tag = "section", ...rest }: { children: React.ReactNode; className?: string; padded?: boolean; as?: "section" | "div" | "article" } & React.HTMLAttributes<HTMLElement>) {
   return (
-    <Tag className={cn("min-w-0 rounded-card border border-ims-border bg-ims-card", padded && "px-[18px] py-[18px] sm:px-5 sm:py-5", className)} {...rest}>
+    <Tag className={cn("min-w-0 rounded-card border border-ims-border bg-ims-card", padded ? "px-[18px] py-[18px] sm:px-5 sm:py-5" : "overflow-hidden", className)} {...rest}>
       {children}
     </Tag>
   );

@@ -13,8 +13,7 @@ import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { errorMessage } from "@/lib/procurement";
 import { BRAND } from "@/lib/brand";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button, Checkbox, Modal } from "@/components/ims";
 import { cn } from "@/utils";
 
 export type ImportFieldType = "text" | "textarea" | "email" | "phone" | "select" | "relation" | "date" | "money" | "number" | "bool";
@@ -303,7 +302,7 @@ export function ImportButton({ config, onDone, size = "sm" }: { config: ImportCo
   if (config.permission && !can(config.permission)) return null;
   return (
     <>
-      <Button size={size} variant="outline" onClick={() => setOpen(true)}><Upload size={14} /> Import</Button>
+      <Button size={size === "sm" ? "sm" : "md"} icon={Upload} onClick={() => setOpen(true)}>Import</Button>
       {open && <ImportDialog config={config} onClose={() => setOpen(false)} onDone={onDone} />}
     </>
   );
@@ -377,12 +376,25 @@ export function ImportDialog({ config, onClose, onDone }: { config: ImportConfig
   const shown = (onlyProblems ? rows.filter((r) => r.errors.length || r.result === "failed") : rows).slice(0, 300);
 
   return (
-    <Dialog open onOpenChange={(o) => !o && stage !== "importing" && onClose()}>
-      <DialogContent className="flex max-h-[92vh] max-w-4xl flex-col bg-ims-card">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><FileSpreadsheet size={18} className="text-ims-success" /> Import {config.title.toLowerCase()} from Excel</DialogTitle>
-          <DialogDescription>Every row is checked before anything is saved, then each valid row is created with the same rules and audit trail as the form.</DialogDescription>
-        </DialogHeader>
+    <Modal
+      open
+      onClose={() => stage !== "importing" && onClose()}
+      size="xl"
+      title={<span className="flex items-center gap-2"><FileSpreadsheet size={18} className="text-ims-success" aria-hidden /> Import {config.title.toLowerCase()} from Excel</span>}
+      description="Every row is checked before anything is saved; each valid row is then created with the same rules and audit trail as the form."
+      footer={
+        <>
+          {stage === "review" && invalid.length > 0 && <Button icon={Download} onClick={() => downloadProblems(config, rows, "invalid")}>Rows to fix (.xlsx)</Button>}
+          {stage === "done" && failed.length > 0 && <Button icon={Download} onClick={() => downloadProblems(config, rows, "failed")}>Refused rows (.xlsx)</Button>}
+          {stage === "importing" ? (
+            <Button onClick={() => { cancelled.current = true; }}>Stop</Button>
+          ) : (
+            <Button onClick={stage === "review" ? () => { setStage("start"); setRows([]); } : onClose}>{stage === "review" ? "Choose another file" : "Close"}</Button>
+          )}
+          {stage === "review" && <Button variant="primary" icon={Upload} disabled={!valid.length} onClick={run}>Import {valid.length} valid row{valid.length === 1 ? "" : "s"}</Button>}
+        </>
+      }
+    >
 
         {stage === "start" && (
           <div className="space-y-3">
@@ -395,13 +407,13 @@ export function ImportDialog({ config, onClose, onDone }: { config: ImportConfig
                 </li>
               ))}
             </ol>
-            <Button variant="outline" onClick={() => downloadTemplate(config).catch((e) => toast.error(errorMessage(e)))}><Download size={14} /> Download the template</Button>
+            <Button icon={Download} onClick={() => downloadTemplate(config).catch((e) => toast.error(errorMessage(e)))}>Download the template</Button>
             <label
-              className={cn("flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-control border-2 border-dashed px-4 py-8 text-center text-t-small", busy ? "border-primary/40 bg-primary/[0.03]" : "border-ims-border bg-ims-thead hover:border-primary/40 hover:bg-primary/[0.03]")}
+              className={cn("flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-control border-2 border-dashed px-4 py-8 text-center text-t-small", busy ? "border-ims-link bg-ims-info-bg" : "border-ims-field bg-ims-thead hover:border-ims-faint")}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) read(f); }}
             >
-              {busy ? <Loader2 size={20} className="animate-spin text-primary" /> : <Upload size={20} className="text-ims-faint" />}
+              {busy ? <Loader2 size={20} className="animate-spin text-ims-link" /> : <Upload size={20} className="text-ims-faint" />}
               <span><span className="font-medium text-ims-link">Choose the filled file</span> or drop it here</span>
               <span className="text-t-hint text-ims-muted">.xlsx, .xls or .csv — up to 5,000 rows</span>
               <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) read(f); e.target.value = ""; }} />
@@ -423,11 +435,11 @@ export function ImportDialog({ config, onClose, onDone }: { config: ImportConfig
                 {failed.length > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-ims-danger-bg px-2.5 py-1 font-medium text-ims-danger"><XCircle size={13} /> {failed.length} refused by the server</span>}
                 {invalid.length > 0 && <span className="rounded-full bg-ims-warning-bg px-2.5 py-1 font-medium text-ims-warning">{invalid.length} skipped (problems in the file)</span>}
               </>}
-              <label className="ml-auto flex items-center gap-1.5 text-ims-body"><input type="checkbox" className="h-4 w-4 rounded border-ims-field" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} /> Only rows with problems</label>
+              <Checkbox className="ml-auto text-t-small" label="Only rows with problems" checked={onlyProblems} onChange={setOnlyProblems} />
             </div>
             {stage === "importing" && (
               <div>
-                <div className="h-2 overflow-hidden rounded-full bg-ims-subtle"><div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>
+                <div className="h-2 overflow-hidden rounded-full bg-ims-subtle"><div className="h-full bg-ims-link transition-all" style={{ width: `${progress}%` }} /></div>
                 <p className="mt-1 text-t-hint text-ims-muted">Importing… {progress}%</p>
               </div>
             )}
@@ -454,17 +466,6 @@ export function ImportDialog({ config, onClose, onDone }: { config: ImportConfig
           </div>
         )}
 
-        <DialogFooter className="gap-2">
-          {stage === "review" && invalid.length > 0 && <Button variant="outline" onClick={() => downloadProblems(config, rows, "invalid")}><Download size={14} /> Rows to fix (.xlsx)</Button>}
-          {stage === "done" && failed.length > 0 && <Button variant="outline" onClick={() => downloadProblems(config, rows, "failed")}><Download size={14} /> Refused rows (.xlsx)</Button>}
-          {stage === "importing" ? (
-            <Button variant="outline" onClick={() => { cancelled.current = true; }}>Stop</Button>
-          ) : (
-            <Button variant="outline" onClick={stage === "review" ? () => { setStage("start"); setRows([]); } : onClose}>{stage === "review" ? "Choose another file" : "Close"}</Button>
-          )}
-          {stage === "review" && <Button disabled={!valid.length} onClick={run}><Upload size={14} /> Import {valid.length} valid row{valid.length === 1 ? "" : "s"}</Button>}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </Modal>
   );
 }

@@ -10,11 +10,10 @@ import { LucideIcon, Pencil, Plus } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { errorMessage } from "@/lib/procurement";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/enterprise/ui";
 import RecordTable, { RecordColumn, RecordFilter, RecordView } from "@/components/enterprise/RecordTable";
 import { ImportConfig } from "@/components/enterprise/ExcelImport";
-import { Field, FormBlock, FormDialog, inputCls, textareaCls, toInputDate } from "@/components/portal/kit";
+import { toInputDate } from "@/components/portal/kit";
+import { Button, Checkbox, DatePicker, Field, Input, Modal, ModalSection, MoneyInput, Page, PageHeader, Select, Textarea } from "@/components/ims";
 import { cn } from "@/utils";
 
 export type FieldType = "text" | "textarea" | "select" | "relation" | "date" | "money" | "number" | "bool";
@@ -42,17 +41,17 @@ export interface FormSectionDef {
   fields: FormFieldDef[];
 }
 
-function RelationSelect({ f, value, onChange, disabled }: { f: FormFieldDef; value: string; onChange: (v: string) => void; disabled?: boolean }) {
+function RelationSelect({ f, value, onChange, disabled, id, invalid }: { f: FormFieldDef; value: string; onChange: (v: string) => void; disabled?: boolean; id?: string; invalid?: boolean }) {
   const q = useQuery(["master-relation", f.collection, f.optionFilter], () => pocketbase.collection(f.collection!).getFullList({ sort: "name", filter: f.optionFilter || "", batch: 500 }), { staleTime: 60_000 });
   return (
-    <select value={value || ""} onChange={(e) => onChange(e.target.value)} disabled={disabled} className={inputCls}>
-      <option value="">— None —</option>
+    <Select id={id} invalid={invalid} value={value || ""} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+      <option value="">None</option>
       {(q.data || []).map((r: any) => (
         <option key={r.id} value={r.id}>
           {f.optionLabel ? f.optionLabel(r) : r.code ? `${r.code} — ${r.name}` : r.name}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -164,26 +163,20 @@ export default function MasterDataPage<T extends { id: string }>({
   };
 
   const set = (name: string, value: any) => setEditing((s) => ({ ...(s || {}), [name]: value }));
-  const editColumn: RecordColumn<T>[] = canManage
-    ? [{ key: "_edit", header: "", className: "w-12", cell: (r: any) => (
-        <button type="button" onClick={(e) => { e.stopPropagation(); open(r); }} className="rounded-md p-1.5 text-ims-faint hover:bg-ims-subtle hover:text-ims-body" aria-label={`Edit ${r.name || r.code}`}>
-          <Pencil size={14} />
-        </button>
-      ) }]
-    : [];
+  const fieldError = (f: FormFieldDef) => (tried && missing(f) ? (f.type === "select" || f.type === "relation" ? `Choose the ${f.label.toLowerCase()}.` : `Enter the ${f.label.toLowerCase()}.`) : null);
 
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Setup" }, { label: title }]}
         title={title}
-        description={description}
-        breadcrumbs={[{ title: "Setup", link: "#" }, { title, link: "#" }]}
-        actions={canManage && <Button onClick={() => open()}><Plus size={15} /> New {itemLabel}</Button>}
+        subtitle={description}
+        primary={canManage ? { label: `New ${itemLabel}`, icon: Plus, onClick: () => open() } : undefined}
       />
       {aside}
       <RecordTable<T>
         collection={collection}
-        columns={[...columns, ...editColumn]}
+        columns={columns}
         views={views}
         activeView={view}
         onViewChange={setView}
@@ -195,57 +188,65 @@ export default function MasterDataPage<T extends { id: string }>({
         exportTitle={title}
         exportPermission={exportPermission}
         onRowClick={canManage ? (r) => open(r) : undefined}
+        rowActions={canManage ? () => [{ label: "Edit", icon: Pencil, onSelect: (r: any) => open(r) }] : undefined}
         refreshKey={refresh}
         importConfig={importConfig}
-        empty={{ icon, title: `No ${itemLabel}s yet`, text: canManage ? `Add the first ${itemLabel}.` : `Finance has not set up any ${itemLabel}s yet.` }}
+        empty={{ icon, title: `No ${itemLabel}s yet`, text: canManage ? `No ${itemLabel}s yet. Add the first one with New ${itemLabel}.` : `Finance has not set up any ${itemLabel}s yet.` }}
       />
-      <FormDialog
+      <Modal
         open={Boolean(editing)}
-        onClose={() => setEditing(null)}
-        icon={icon}
+        onClose={busy ? () => undefined : () => setEditing(null)}
+        size="lg"
         title={editing?.id ? `Edit ${itemLabel}` : `New ${itemLabel}`}
         description={editing?.id ? "Changes are recorded in the audit log." : "Saved records cannot be deleted; deactivate them instead."}
-        submitLabel={editing?.id ? "Save changes" : `Create ${itemLabel}`}
-        busy={busy}
-        onSubmit={save}
+        footer={
+          <>
+            <Button onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+            <Button variant="primary" onClick={save} loading={busy}>{editing?.id ? "Save changes" : `Create ${itemLabel}`}</Button>
+          </>
+        }
       >
         {sections.map((s) => (
-          <FormBlock key={s.title} icon={s.icon} title={s.title}>
+          <ModalSection key={s.title} title={s.title}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {s.fields.map((f) => (
-                <Field key={f.name} label={f.label} required={f.required} hint={f.hint} error={tried && missing(f) ? "Required" : null} className={cn(!f.half && f.type !== "bool" && "sm:col-span-2")}>
-                  {f.type === "textarea" ? (
-                    <textarea value={editing?.[f.name] || ""} onChange={(e) => set(f.name, e.target.value)} className={textareaCls} placeholder={f.placeholder} />
-                  ) : f.type === "select" ? (
-                    <select value={editing?.[f.name] || ""} onChange={(e) => set(f.name, e.target.value)} className={inputCls}>
-                      {!f.required && <option value="">— None —</option>}
-                      {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  ) : f.type === "relation" ? (
-                    <RelationSelect f={f} value={editing?.[f.name] || ""} onChange={(v) => set(f.name, v)} />
-                  ) : f.type === "bool" ? (
-                    <label className="flex h-10 items-center gap-2.5 text-t-body text-ims-body">
-                      <input type="checkbox" checked={Boolean(editing?.[f.name])} onChange={(e) => set(f.name, e.target.checked)} className="h-4 w-4 rounded border-ims-field text-primary focus:ring-primary" />
-                      {f.placeholder || "Yes"}
-                    </label>
-                  ) : (
-                    <input
-                      type={f.type === "date" ? "date" : f.type === "money" || f.type === "number" ? "number" : "text"}
-                      inputMode={f.type === "money" ? "numeric" : undefined}
-                      step={f.type === "money" ? 1 : undefined}
-                      min={f.type === "money" ? 0 : undefined}
-                      value={editing?.[f.name] ?? ""}
-                      onChange={(e) => set(f.name, f.upper ? e.target.value.toUpperCase() : e.target.value)}
-                      placeholder={f.placeholder}
-                      className={cn(inputCls, (f.type === "money" || f.type === "number") && "text-right tabular-nums", f.upper && "font-mono")}
-                    />
-                  )}
-                </Field>
-              ))}
+              {s.fields.map((f) => {
+                const id = `md-${f.name}`;
+                const err = fieldError(f);
+                return (
+                  <Field key={f.name} label={f.label} required={f.required} hint={f.hint} error={err} htmlFor={id} className={cn(!f.half && f.type !== "bool" && "sm:col-span-2")}>
+                    {f.type === "textarea" ? (
+                      <Textarea id={id} value={editing?.[f.name] || ""} onChange={(e) => set(f.name, e.target.value)} placeholder={f.placeholder} invalid={Boolean(err)} />
+                    ) : f.type === "select" ? (
+                      <Select id={id} value={editing?.[f.name] || ""} onChange={(e) => set(f.name, e.target.value)} invalid={Boolean(err)}>
+                        {!f.required ? <option value="">None</option> : <option value="">Choose…</option>}
+                        {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </Select>
+                    ) : f.type === "relation" ? (
+                      <RelationSelect f={f} id={id} invalid={Boolean(err)} value={editing?.[f.name] || ""} onChange={(v) => set(f.name, v)} />
+                    ) : f.type === "bool" ? (
+                      <Checkbox id={id} label={f.placeholder || "Yes"} checked={Boolean(editing?.[f.name])} onChange={(v) => set(f.name, v)} className="min-h-[42px] items-center" />
+                    ) : f.type === "date" ? (
+                      <DatePicker id={id} value={editing?.[f.name] || ""} onChange={(v) => set(f.name, v)} invalid={Boolean(err)} clearable={!f.required} />
+                    ) : f.type === "money" ? (
+                      <MoneyInput id={id} value={editing?.[f.name] ?? ""} onChange={(v) => set(f.name, v)} invalid={Boolean(err)} placeholder={f.placeholder} />
+                    ) : (
+                      <Input
+                        id={id}
+                        type={f.type === "number" ? "number" : "text"}
+                        value={editing?.[f.name] ?? ""}
+                        onChange={(e) => set(f.name, f.upper ? e.target.value.toUpperCase() : e.target.value)}
+                        placeholder={f.placeholder}
+                        invalid={Boolean(err)}
+                        className={cn(f.type === "number" && "text-right tabular-nums", f.upper && "font-mono")}
+                      />
+                    )}
+                  </Field>
+                );
+              })}
             </div>
-          </FormBlock>
+          </ModalSection>
         ))}
-      </FormDialog>
-    </div>
+      </Modal>
+    </Page>
   );
 }

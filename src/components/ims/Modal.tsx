@@ -121,7 +121,7 @@ export function ConfirmDialog({
       }
     >
       {reason && (
-        <Field label={reason.label || "Reason"} required={reason.required ?? true} htmlFor="confirm-reason" error={touched && tooShort ? `Write at least ${min} characters so the requester knows what to change.` : null}>
+        <Field label={reason.label || "Reason"} required={reason.required ?? true} htmlFor="confirm-reason" error={touched && tooShort ? `Write at least ${min} characters.` : null}>
           <Textarea id="confirm-reason" autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={reason.placeholder || "Explain the decision"} invalid={touched && tooShort} />
         </Field>
       )}
