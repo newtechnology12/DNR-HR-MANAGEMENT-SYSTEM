@@ -2,14 +2,12 @@ import * as React from "react";
 import { useMutation, useQuery } from "react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Info } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { errorMessage, money } from "@/lib/procurement";
 import { cn } from "@/utils";
+import { Totals } from "@/components/enterprise/DocumentLayout";
+import { Button, Column, DataTable, DatePicker, EmptyState, Field, Input, Modal, ModalSection, Num, Textarea, fmtMoney, fmtNumber } from "@/components/ims";
+import { errorMessage, money } from "@/lib/procurement";
 
 const BILLABLE = `status != "cancelled" && status != "rejected"`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -17,8 +15,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 type Line = { line: number; description: string; unit: string; ordered: number; received: number; billed: number; quantity: number; unit_price: number; tax_rate: number; po_price: number };
 
 /**
- * Records a supplier bill against a purchase order. Quantities default to "received but not yet billed"
- * and prices to the PO price; the server runs the three-way match and flags any difference.
+ * Records a supplier invoice against a purchase order. Quantities default to "received but not yet
+ * invoiced" and prices to the PO price; the server runs the three-way match and flags any difference.
  */
 export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
@@ -28,6 +26,7 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
   const [notes, setNotes] = React.useState("");
   const [lines, setLines] = React.useState<Line[]>([]);
   const [touched, setTouched] = React.useState(false);
+  const [tried, setTried] = React.useState(false);
 
   const prior = useQuery(["po-billed", po?.id], () => pocketbase.collection("supplier_invoices").getFullList({ filter: `purchase_order = "${po.id}" && ${BILLABLE}`, fields: "id,items" }), { enabled: open && Boolean(po) });
 
@@ -52,6 +51,7 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
     setDueDate("");
     setNotes("");
     setTouched(false);
+    setTried(false);
   }, [open, prior.data, po]);
 
   const totals = lines.reduce(
@@ -88,6 +88,7 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
         const code = e?.response?.data?.supplier_invoice_number?.code;
         if (code === "duplicate_invoice" || code === "possible_duplicate") {
           setDup({ kind: code, message: errorMessage(e) });
+          setTried(false);
           return;
         }
         toast.error(errorMessage(e));
@@ -96,115 +97,149 @@ export default function RecordInvoiceDialog({ po, open, onClose }: { po: any; op
   );
 
   const set = (i: number, k: keyof Line) => (e: React.ChangeEvent<HTMLInputElement>) => setLines((x) => x.map((l, idx) => (idx === i ? { ...l, [k]: e.target.value } : l)));
-  const cell = "h-8 px-2 text-right tabular-nums";
+  const cur = po?.currency || "RWF";
+  const amount = (n: number) => (cur === "RWF" ? fmtMoney(n) : money(n, cur));
+
+  const refMissing = !ref.trim();
+  const dupShort = dup?.kind === "possible_duplicate" && dupReason.trim().length < 15;
+  const blocked = dup?.kind === "duplicate_invoice";
+  const record = () => {
+    setTried(true);
+    setTouched(true);
+    if (refMissing || !anyQty || blocked || dupShort) return;
+    save.mutate();
+  };
+
+  const columns: Column<Line>[] = [
+    { key: "description", header: "Item or service", clamp: true, cell: (l) => l.description, sub: (l) => l.unit },
+    { key: "ordered", header: "Ordered", numeric: true, cell: (l) => fmtNumber(l.ordered, true) },
+    { key: "received", header: "Received", numeric: true, cell: (l) => fmtNumber(l.received, true) },
+    { key: "billed", header: "Invoiced before", numeric: true, cell: (l) => <span className="text-ims-muted">{fmtNumber(l.billed, true)}</span> },
+    {
+      key: "quantity",
+      header: "Invoice quantity",
+      width: "128px",
+      cell: (l, i) => {
+        const over = Number(l.quantity) > 0 && Number(l.quantity) + l.billed > l.received;
+        return (
+          <>
+            <Input type="number" min={0} step="any" inputMode="decimal" className="h-9 text-right tabular-nums" value={l.quantity} onChange={set(i, "quantity")} aria-label={`Line ${l.line} quantity`} invalid={over} />
+            {over && <span className="mt-0.5 block text-right text-t-hint text-ims-danger">Above received</span>}
+          </>
+        );
+      },
+    },
+    {
+      key: "unit_price",
+      header: `Unit price (${cur})`,
+      width: "150px",
+      cell: (l, i) => {
+        const diff = l.po_price ? ((Number(l.unit_price) - l.po_price) / l.po_price) * 100 : 0;
+        return (
+          <>
+            <Input type="number" min={0} step="any" inputMode="decimal" className="h-9 text-right tabular-nums" value={l.unit_price} onChange={set(i, "unit_price")} aria-label={`Line ${l.line} unit price`} />
+            {Math.abs(diff) > 0.01 && <span className="mt-0.5 block text-right text-t-hint text-ims-warning">{diff > 0 ? "+" : ""}{diff.toFixed(1)}% against the order</span>}
+          </>
+        );
+      },
+    },
+    {
+      key: "tax",
+      header: "Tax (%)",
+      width: "88px",
+      cell: (l, i) => <Input type="number" min={0} max={100} step="any" inputMode="decimal" className="h-9 text-right tabular-nums" value={l.tax_rate} onChange={set(i, "tax_rate")} aria-label={`Line ${l.line} tax`} />,
+    },
+    {
+      key: "subtotal",
+      header: `Subtotal (${cur})`,
+      numeric: true,
+      cell: (l) => <span className="font-semibold"><Num value={Math.round((Number(l.quantity) || 0) * (Number(l.unit_price) || 0))} /></span>,
+      total: <Num value={Math.round(totals.net)} />,
+    },
+  ];
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl bg-white">
-        <DialogHeader>
-          <DialogTitle>Record vendor bill · {po?.number}</DialogTitle>
-          <DialogDescription>{po?.expand?.supplier?.name} — enter the bill exactly as the supplier issued it. The system matches it against the order and the goods received.</DialogDescription>
-        </DialogHeader>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <label className="block text-[12.5px] font-medium text-slate-700">
-            Supplier invoice number <span className="text-red-600">*</span>
-            <Input className="mt-1" value={ref} onChange={(e) => { setRef(e.target.value); setDup(null); }} onBlur={() => setTouched(true)} placeholder="e.g. FV-2026-0142" aria-invalid={touched && !ref.trim()} />
-            {touched && !ref.trim() && <span className="mt-1 block text-[12px] text-red-600">Required — as printed on the supplier's bill.</span>}
-          </label>
-          <label className="block text-[12.5px] font-medium text-slate-700">
-            Bill date <span className="text-red-600">*</span>
-            <Input type="date" className="mt-1" value={invoiceDate} max={today()} onChange={(e) => setInvoiceDate(e.target.value)} />
-          </label>
-          <label className="block text-[12.5px] font-medium text-slate-700">
-            Due date
-            <Input type="date" className="mt-1" value={dueDate} min={invoiceDate} onChange={(e) => setDueDate(e.target.value)} />
-            <span className="mt-1 block text-[11.5px] text-slate-500">Leave empty for 30 days after the bill date.</span>
-          </label>
-        </div>
-
-        <div className="overflow-x-auto rounded-md border border-slate-200">
-          <table className="dnr-grid w-full min-w-[820px] text-[13px]">
-            <thead>
-              <tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                <th className="px-3 py-2">Product / service</th>
-                <th className="px-3 py-2 text-right">Ordered</th>
-                <th className="px-3 py-2 text-right">Received</th>
-                <th className="px-3 py-2 text-right">Billed before</th>
-                <th className="w-28 px-3 py-2 text-right">Bill qty</th>
-                <th className="w-36 px-3 py-2 text-right">Unit price</th>
-                <th className="w-20 px-3 py-2 text-right">Tax %</th>
-                <th className="px-3 py-2 text-right">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {prior.isLoading && (
-                <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">Loading order lines…</td></tr>
-              )}
-              {lines.map((l, i) => {
-                const overReceived = Number(l.quantity) + l.billed > l.received;
-                const priceDiff = l.po_price ? ((Number(l.unit_price) - l.po_price) / l.po_price) * 100 : 0;
-                return (
-                  <tr key={l.line}>
-                    <td className="px-3 py-1.5">{l.description}<span className="block text-[11.5px] text-slate-500">{l.unit}</span></td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{l.ordered}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{l.received}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">{l.billed}</td>
-                    <td className="px-2 py-1.5">
-                      <Input type="number" min={0} className={cell} value={l.quantity} onChange={set(i, "quantity")} aria-label={`Line ${l.line} quantity`} />
-                      {Number(l.quantity) > 0 && overReceived && <span className="block text-right text-[11px] text-red-600">above received</span>}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <Input type="number" min={0} className={cell} value={l.unit_price} onChange={set(i, "unit_price")} aria-label={`Line ${l.line} unit price`} />
-                      {Math.abs(priceDiff) > 0.01 && <span className="block text-right text-[11px] text-amber-700">{priceDiff > 0 ? "+" : ""}{priceDiff.toFixed(1)}% vs PO</span>}
-                    </td>
-                    <td className="px-2 py-1.5"><Input type="number" min={0} max={100} className={cell} value={l.tax_rate} onChange={set(i, "tax_rate")} aria-label={`Line ${l.line} tax`} /></td>
-                    <td className="px-3 py-1.5 text-right font-medium tabular-nums">{Math.round((Number(l.quantity) || 0) * (Number(l.unit_price) || 0)).toLocaleString()}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <label className="block flex-1 text-[12.5px] font-medium text-slate-700">
-            Notes
-            <Textarea className="mt-1 h-16" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
-          </label>
-          <dl className="w-full space-y-1 text-[13px] sm:w-72">
-            <div className="flex justify-between text-slate-600"><dt>Untaxed amount</dt><dd className="tabular-nums">{money(totals.net, po?.currency)}</dd></div>
-            <div className="flex justify-between text-slate-600"><dt>Tax</dt><dd className="tabular-nums">{money(totals.tax, po?.currency)}</dd></div>
-            <div className="flex justify-between border-t border-slate-300 pt-1 text-[15px] font-semibold"><dt>Total</dt><dd className="tabular-nums">{money(totals.net + totals.tax, po?.currency)}</dd></div>
-          </dl>
-        </div>
-        <p className="flex items-start gap-2 rounded-md bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
-          <Info size={14} className="mt-0.5 shrink-0" /> Differences from the order price or the received quantity are allowed but flagged as a match exception, which must be resolved before the bill can be approved.
-        </p>
-
-        {dup && (
-          <div role="alert" className={cn("space-y-2 rounded-md border px-3 py-2.5 text-[12.5px]", dup.kind === "duplicate_invoice" ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-900")}>
-            <p className="font-medium">{dup.message}</p>
-            {dup.kind === "possible_duplicate" && (
-              <label className="block">
-                Why is this a different invoice? <span className="text-red-600">*</span>
-                <Textarea className="mt-1 h-16 bg-white" value={dupReason} onChange={(e) => setDupReason(e.target.value)} placeholder="e.g. Second delivery billed separately; confirmed with the supplier by phone." />
-                <span className="mt-1 block text-[11.5px]">At least 15 characters. The bill is recorded as an exception; the Director of Finance must clear it before approval or payment.</span>
-              </label>
-            )}
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            disabled={!ref.trim() || !anyQty || save.isLoading || dup?.kind === "duplicate_invoice" || (dup?.kind === "possible_duplicate" && dupReason.trim().length < 15)}
-            onClick={() => save.mutate()}
-          >
-            {save.isLoading ? "Recording…" : dup?.kind === "possible_duplicate" ? "Record with this reason" : "Record bill"}
+    <Modal
+      open={open}
+      onClose={save.isLoading ? () => undefined : onClose}
+      size="xl"
+      title={<>Record a supplier invoice for <span className="whitespace-nowrap">{po?.number}</span></>}
+      description={`${po?.expand?.supplier?.name ? `${po.expand.supplier.name}. ` : ""}Enter the invoice exactly as the supplier issued it. It is matched against the order and the goods received.`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={save.isLoading}>Cancel</Button>
+          <Button variant="primary" onClick={record} loading={save.isLoading} disabled={blocked}>
+            {dup?.kind === "possible_duplicate" ? "Record with this reason" : "Record invoice"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <ModalSection title="Invoice">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="Supplier invoice number" required htmlFor="inv-ref" error={touched && refMissing ? "Enter the number printed on the supplier's invoice." : null}>
+            <Input id="inv-ref" value={ref} onChange={(e) => { setRef(e.target.value); setDup(null); }} onBlur={() => setTouched(true)} placeholder="For example: FV-2026-0142" invalid={touched && refMissing} />
+          </Field>
+          <Field label="Invoice date" required htmlFor="inv-date">
+            <DatePicker id="inv-date" value={invoiceDate} max={today()} onChange={setInvoiceDate} />
+          </Field>
+          <Field label="Due date" htmlFor="inv-due" hint={dueDate ? <button type="button" onClick={() => setDueDate("")} className="font-semibold text-ims-link hover:underline">Clear: 30 days after the invoice date</button> : "Leave empty for 30 days after the invoice date."}>
+            <DatePicker id="inv-due" value={dueDate} min={invoiceDate} onChange={setDueDate} placeholder="30 days after the invoice" />
+          </Field>
+        </div>
+      </ModalSection>
+
+      <ModalSection title="Items" description="Quantities start at what was received and not yet invoiced; prices at the order price.">
+        <div className="overflow-hidden rounded-control border border-ims-border">
+          <DataTable
+            columns={columns}
+            rows={lines}
+            rowKey={(l) => String(l.line)}
+            loading={prior.isLoading}
+            error={prior.isError ? prior.error : undefined}
+            onRetry={() => prior.refetch()}
+            minWidth={900}
+            caption="Invoice items"
+            empty={<EmptyState compact text="This order has no items to invoice." />}
+          />
+        </div>
+        {tried && !anyQty && (
+          <p role="alert" className="flex items-start gap-1 text-t-hint text-ims-danger">
+            <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden /> Enter a quantity above 0 on at least one line.
+          </p>
+        )}
+      </ModalSection>
+
+      <ModalSection title="Notes and total">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <Field label="Notes" htmlFor="inv-notes" className="flex-1">
+            <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-[72px]" />
+          </Field>
+          <div className="w-full sm:w-80 [&>dl]:mt-0">
+            <Totals rows={[["Untaxed amount", amount(totals.net)], ["Tax", amount(totals.tax)]]} total={["Total", amount(totals.net + totals.tax)]} />
+          </div>
+        </div>
+        <p className="flex items-start gap-2 rounded-control bg-ims-subtle px-3 py-2.5 text-t-small text-ims-body">
+          <Info size={15} className="mt-0.5 shrink-0 text-ims-muted" aria-hidden />
+          Differences from the order price or the received quantity are allowed but flagged as a match exception, which must be resolved before the invoice can be approved.
+        </p>
+      </ModalSection>
+
+      {dup && (
+        <div role="alert" className={cn("space-y-3 rounded-card border px-4 py-3 text-t-body", dup.kind === "duplicate_invoice" ? "border-ims-danger/30 bg-ims-danger-bg text-ims-danger" : "border-ims-warning/30 bg-ims-warning-bg text-ims-warning")}>
+          <p className="flex items-start gap-2 font-semibold"><AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden /> {dup.message}</p>
+          {dup.kind === "possible_duplicate" && (
+            <Field
+              label="Why is this a different invoice?"
+              required
+              htmlFor="inv-dup-reason"
+              error={tried && dupShort ? "Write at least 15 characters." : null}
+              hint="The invoice is recorded as an exception; the Director of Finance must clear it before approval or payment."
+            >
+              <Textarea id="inv-dup-reason" className="min-h-[72px]" value={dupReason} onChange={(e) => setDupReason(e.target.value)} invalid={tried && dupShort} placeholder="For example: second delivery invoiced separately, confirmed with the supplier by phone" />
+            </Field>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }

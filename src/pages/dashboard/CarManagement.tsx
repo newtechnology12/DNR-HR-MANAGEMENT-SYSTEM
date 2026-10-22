@@ -1,312 +1,79 @@
-import DataTable from "@/components/DataTable";
-import { ColumnDef, PaginationState } from "@tanstack/react-table";
-import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
-import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle } from "lucide-react";
-import pocketbase from "@/lib/pocketbase";
-import cleanObject from "@/utils/cleanObject";
 import { useState } from "react";
 import { useQuery } from "react-query";
-import BreadCrumb from "@/components/breadcrumb";
-import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { Car, CheckCircle2, Pencil, Plus, Trash2, XCircle } from "lucide-react";
+import pocketbase from "@/lib/pocketbase";
+import cleanObject from "@/utils/cleanObject";
 import TableTools from "@/components/enterprise/TableTools";
 import { EXPORTS } from "@/lib/exportConfigs";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
-import DataTableRowActions from "@/components/datatable/DataTableRowActions";
-import ConfirmModal from "@/components/modals/ConfirmModal";
-import useConfirmModal from "@/hooks/useConfirmModal";
-import { toast } from "sonner";
 import { CarRequestForm } from "@/components/Carmodel/CarRequestForm";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { Form } from "@/components/ui/form";
-import AppFormTextArea from "@/components/forms/AppFormTextArea";
-import Loader from "@/components/icons/Loader";
 import { useAuth } from "@/context/auth.context";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { cn } from "@/utils/cn";
-import formatFilter from "@/utils/formatFilter";
-import StatCard from "@/components/StatCard";
-import { Car, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { pbQuote } from "@/lib/procurement";
+import {
+  Button,
+  Card,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  Field,
+  FilterBar,
+  KpiBand,
+  Modal,
+  Num,
+  Page,
+  PageHeader,
+  Pager,
+  Person,
+  Tabs,
+  Textarea,
+  fmtDate,
+  fmtNumber,
+} from "@/components/ims";
+import { useDebounce } from "use-debounce";
 
-// const capitalizeFirstLetter = (str) => {
-//   return str.charAt(0).toUpperCase() + str.slice(1);
-// };
+type Tab = "pending" | "approved" | "rejected";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "pending", label: "Pending approval" },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+];
+
+/** "17 Oct 2026" or "27 Sep 2026 – 28 Sep 2026" */
+const tripDates = (start?: string, end?: string) => {
+  const a = fmtDate(start, "");
+  const b = fmtDate(end, "");
+  return !a ? b || "—" : !b || a === b ? a : `${a} – ${b}`;
+};
 
 export default function CarManagement() {
-  const columns: ColumnDef<any>[] = [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          // @ts-ignore
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-          className="translate-y-[2px]"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-          className="translate-y-[2px]"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "employee",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Employee" />
-      ),
-      cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => editRow.edit(row.original)}
-          className="capitalize hover:text-primary hover:underline"
-        >
-          {row.getValue("employee")}
-        </button>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "position",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Position" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("position")}</div>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "startTime",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Start Time" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("startTime")}</div>
-      ),
-      enableSorting: true,
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableHiding: true,
-    },
-    {
-      accessorKey: "endTime",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="End Time" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("endTime")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "purpose",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Purpose" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("purpose")}</div>
-      ),
-      enableSorting: true,
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableHiding: true,
-    },
-    {
-      accessorKey: "starting_km",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Starting KM" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("starting_km")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "ending_km",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Ending KM" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("ending_km")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "totalKm",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Total KM" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("totalKm")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "totalExpenses",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Total Expenses" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("totalExpenses")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "created",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created at" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      id: "actions",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Actions" />
-      ),
-      cell: ({ row }) => (
-        <DataTableRowActions
-          actions={[
-            {
-              title: "Edit CarRequests",
-              onClick: (e) => {
-                editRow.edit(e.original);
-              },
-            },
-            {
-              title: "Approve CarRequests",
-              onClick: (e) => {
-                setCarToApprove(e.original);
-              },
-              disabled:
-                row.original.status === "approved" ||
-                row.original.status === "rejected",
-            },
-            {
-              title: "Reject CarRequests",
-              onClick: (e) => {
-                setCarToReject(e.original);
-              },
-              disabled:
-                row.original.status === "approved" ||
-                row.original.status === "rejected",
-            },
-            {
-              title: "Delete leave",
-              onClick: (e) => {
-                confirmModal.open({ meta: e });
-              },
-            },
-          ]}
-          row={row}
-        />
-      ),
-    },
-  ];
-
-  const [CarToApprove, setCarToApprove] = useState(null);
-  const [carToReject, setCarToReject] = useState(null);
+  const [CarToApprove, setCarToApprove] = useState<any>(null);
+  const [carToReject, setCarToReject] = useState<any>(null);
+  const [toDelete, setToDelete] = useState<any>(null);
 
   const [searchText, setsearchText] = useState("");
+  const [search] = useDebounce(searchText, 300);
+  const [sort, setSort] = useState("-created");
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+  const [activeTab, setActiveTab] = useState<Tab>("pending");
 
-  const [columnFilters, setColumnFilters] = useState([]);
-  const [sorting, setSorting] = useState([
-    {
-      id: "created",
-      desc: true,
-    },
-  ]);
-
-  const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 10,
-  });
-
-  const [activeTab, setActiveTab] = useState("pending");
+  // Employee name or department, as the old search intended (the request has no name/department field of its own).
+  const searchQ = search.trim() ? `(users.name ~ ${pbQuote(search.trim())} || users.department.name ~ ${pbQuote(search.trim())})` : "";
+  const filter = [searchQ, `status="${activeTab}"`].filter((e) => e).join(" && ");
 
   const recordsQuery = useQuery({
-    queryKey: [
-      "CarRequests",
-      {
-        columnFilters,
-        search: searchText,
-        sort: sorting,
-        pageIndex,
-        pageSize,
-        activeTab,
-      },
-    ],
+    queryKey: ["CarRequests", { search, sort, pageIndex, pageSize, activeTab }],
     keepPreviousData: true,
     queryFn: () => {
-      const searchQ = searchText
-        ? `name~"${searchText}" || department.name~"${searchText}" `
-        : "";
-
-      const filters = formatFilter(columnFilters);
-
-      const sorters = sorting
-        .map((p) => `${p.desc ? "-" : "+"}${p.id}`)
-        .join(" && ");
-
       return pocketbase
         .collection("CarRequests")
         .getList(pageIndex + 1, pageSize, {
           ...cleanObject({
-            filter: [searchQ, filters, `status="${activeTab}"`]
-              .filter((e) => e)
-              .join(" && "),
-            sort: sorters,
+            filter,
+            sort,
             expand: `users,created_by`,
           }),
         })
@@ -317,16 +84,8 @@ export default function CarManagement() {
                 id: e.id,
                 employee: e?.expand?.users?.name,
                 created_by: e.expand?.created_by?.name,
-                startTime: new Date(e.start).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
-                endTime: new Date(e.end).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
+                start: e.start,
+                end: e.end,
                 purpose: e.purpose,
                 position: e.position,
                 starting_km: e.starting_km,
@@ -335,53 +94,45 @@ export default function CarManagement() {
                 expense_amount: e.expense_amount,
                 totalExpenses: e.totalExpenses,
                 status: e.status,
-                approved_at: new Date(e.start).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
                 reason: e.reason,
                 approved_by: e.approved_by || "---",
                 rejected_by: e.rejected_by || "---",
-                created: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
-                updated: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
+                created: e.created,
                 original: e,
               };
             }),
             totalPages: e.totalPages,
+            totalItems: e.totalItems,
           };
         });
     },
     enabled: true,
   });
 
-  const newRecordModal = useModalState();
+  // Totals over every request in this tab (not just this page) for the total row.
+  const sums = useQuery(
+    ["CarRequests-sums", filter],
+    async () => {
+      const rows = await pocketbase.collection("CarRequests").getFullList({ filter, fields: "id,totalKm,totalExpenses", batch: 1000 });
+      return { km: rows.reduce((s, r: any) => s + (Number(r.totalKm) || 0), 0), expenses: rows.reduce((s, r: any) => s + (Number(r.totalExpenses) || 0), 0) };
+    },
+    { keepPreviousData: true }
+  );
 
+  const newRecordModal = useModalState();
   const editRow = useEditRow();
 
-  const confirmModal = useConfirmModal();
-
-  const handleDelete = (e) => {
-    confirmModal.setIsLoading(true);
+  const handleDelete = (e: any) => {
     return pocketbase
       .collection("CarRequests")
       .delete(e.id)
       .then(() => {
         recordsQuery.refetch();
-        confirmModal.close();
-        toast.success("Car request deleted successfully");
+        toast.success(`Vehicle request of ${e.employee || "the employee"} deleted`);
       })
-      .catch((e) => {
-        confirmModal.setIsLoading(false);
-        toast.error(e.message);
+      .catch((err) => {
+        toast.error(err.message);
+        throw err;
       });
   };
 
@@ -408,141 +159,130 @@ export default function CarManagement() {
     enabled: true,
   });
   const statsLoading = statsQuery.status === "loading";
+  const pick = (t: Tab) => {
+    setActiveTab(t);
+    setPageIndex(0);
+  };
+
+  const columns: Column<any>[] = [
+    { key: "employee", header: "Employee", sortField: "users.name", className: "max-w-[200px]", cell: (r) => <Person name={r.employee} detail={r.position || undefined} /> },
+    {
+      key: "trip",
+      header: "Trip",
+      sortField: "start",
+      nowrap: true,
+      cell: (r) => tripDates(r.start, r.end),
+      sub: (r) => [r.original?.fromLocation, r.original?.toLocation].filter(Boolean).join(" → ") || null,
+    },
+    {
+      key: "purpose",
+      header: "Purpose",
+      sortField: "purpose",
+      clamp: true,
+      cell: (r) => r.purpose || "—",
+      sub: (r) => (r.original?.passengerCount ? `${r.original.passengerCount} passenger${r.original.passengerCount === 1 ? "" : "s"}` : null),
+    },
+    {
+      key: "km",
+      header: "Distance (km)",
+      sortField: "totalKm",
+      numeric: true,
+      cell: (r) => (r.totalKm ? <Num value={r.totalKm} /> : <span className="text-ims-faint">—</span>),
+      sub: (r) => (r.starting_km || r.ending_km ? `${fmtNumber(r.starting_km)} → ${fmtNumber(r.ending_km)}` : null),
+      total: sums.data ? <Num value={sums.data.km} /> : "…",
+    },
+    {
+      key: "expenses",
+      header: "Expenses (RWF)",
+      sortField: "totalExpenses",
+      numeric: true,
+      cell: (r) => (r.totalExpenses ? <Num value={r.totalExpenses} /> : <span className="text-ims-faint">—</span>),
+      total: sums.data ? <Num value={sums.data.expenses} /> : "…",
+    },
+    { key: "created", header: "Requested", sortField: "created", nowrap: true, cell: (r) => fmtDate(r.created), sub: (r) => (r.created_by && r.created_by !== r.employee ? `By ${r.created_by}` : null) },
+  ];
+
+  const data = recordsQuery.data;
+  const decided = (r: any) => r.status === "approved" || r.status === "rejected";
 
   return (
-    <>
-      <div className="px-4">
-        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Requests"
-            icon={Car}
-            tone="default"
-            loading={statsLoading}
-            value={statsQuery.data?.total}
-            description="All car requests"
-          />
-          <StatCard
-            title="Pending"
-            icon={Clock}
-            tone="warning"
-            loading={statsLoading}
-            value={statsQuery.data?.pending}
-            description="Awaiting approval"
-          />
-          <StatCard
-            title="Approved"
-            icon={CheckCircle2}
-            tone="success"
-            loading={statsLoading}
-            value={statsQuery.data?.approved}
-            description="Approved car requests"
-          />
-          <StatCard
-            title="Rejected"
-            icon={XCircle}
-            tone="danger"
-            loading={statsLoading}
-            value={statsQuery.data?.rejected}
-            description="Rejected car requests"
-          />
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
-              Car Requests
-            </h2>
-            <BreadCrumb
-              items={[{ title: "Car Requests ", link: "/dashboard" }]}
-            />
-          </div>
-          {/* <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Create new CarRequests.</span>
-          </Button> */}
-        </div>
-        <div className="bg-white scroller border-t border-l border-r rounded-t">
-          <ScrollArea className="w-full whitespace-nowrap">
-            <div className="flex px-2 items-center justify-start">
-              {[
-                { title: "Pending Leaves", name: "pending" },
-                { title: "Approved Leaves", name: "approved" },
-                { title: "Rejected Leaves", name: "rejected" },
-              ].map((e, i) => {
-                return (
-                  <a
-                    key={i}
-                    className={cn(
-                      "cursor-pointer px-6 capitalize text-center relative w-full text-slate-700 text-[13px] sm:text-sm py-3 font-medium",
-                      {
-                        "text-primary ": activeTab === e.name,
-                      }
-                    )}
-                    onClick={() => {
-                      setActiveTab(e.name);
-                    }}
-                  >
-                    {activeTab === e.name && (
-                      <div className="h-[3px] left-0 rounded-t-md bg-primary absolute bottom-0 w-full"></div>
-                    )}
-                    <span className=""> {e.title}</span>
-                  </a>
-                );
-              })}
-            </div>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
-        </div>
-        <DataTable
-          isFetching={recordsQuery.isFetching}
-          defaultColumnVisibility={{
-            select: true,
-            employee: true,
-            position: true,
-            startTime: true,
-            endTime: true,
-            purpose: true,
-            starting_km: true,
-            ending_km: true,
-            totalKm: true,
-            totalExpenses: true,
-            created: true,
-            actions: true,
+    <Page>
+      <PageHeader
+        breadcrumbs={[{ label: "Vehicles & expense reports" }, { label: "Vehicle requests" }]}
+        title="Vehicle requests"
+        subtitle="Requests to use an organisation vehicle, with the trip, the distance and the expenses."
+        primary={{ label: "Request a vehicle", icon: Plus, onClick: () => newRecordModal.open() }}
+      />
+
+      <KpiBand
+        loading={statsLoading}
+        items={[
+          { label: "All requests", value: fmtNumber(statsQuery.data?.total) },
+          { label: "Pending approval", value: fmtNumber(statsQuery.data?.pending), tone: statsQuery.data?.pending ? "warning" : "default", onClick: () => pick("pending") },
+          { label: "Approved", value: fmtNumber(statsQuery.data?.approved), onClick: () => pick("approved") },
+          { label: "Rejected", value: fmtNumber(statsQuery.data?.rejected), onClick: () => pick("rejected") },
+        ]}
+      />
+
+      <Card padded={false} className="overflow-hidden">
+        <Tabs inset label="Vehicle requests" active={activeTab} onChange={(k) => pick(k as Tab)} tabs={TABS} />
+        <FilterBar
+          search={{
+            value: searchText,
+            onChange: (v) => {
+              setsearchText(v);
+              setPageIndex(0);
+            },
+            placeholder: "Search employee or department",
           }}
-          isLoading={recordsQuery.status === "loading"}
-          data={recordsQuery?.data?.items || []}
-          columns={columns}
-          onSearch={(e) => {
-            setsearchText(e);
-          }}
-          sorting={sorting}
-          setSorting={setSorting}
-          pageCount={recordsQuery?.data?.totalPages}
-          setPagination={setPagination}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          setColumnFilters={setColumnFilters}
-          columnFilters={columnFilters}
-          Action={() =>{
-            return <span className="mr-2 inline-flex items-center gap-2">
-            <TableTools exportConfig={EXPORTS.vehicleRequests()} />
-            <Button onClick={() => newRecordModal.open()} size="sm">
-            <PlusCircle size={16} className="mr-2" />
-            <span>Request a vehicle</span>
-          </Button>
-          </span>
-          }}
-          facets={[
-            {
-              title: "Status",
-              items: [
-                { title: "Pending", value: "pending" },
-                { title: "Approved", value: "approved" },
-                { title: "Rejected", value: "rejected" },
-              ],
-            }
-          ]}
+          right={<TableTools exportConfig={EXPORTS.vehicleRequests()} />}
         />
-      </div>
+        <DataTable
+          columns={columns}
+          rows={data?.items || []}
+          rowKey={(r) => r.id}
+          onRowClick={(r) => editRow.edit(r)}
+          rowActions={(r) => [
+            { label: "Edit request", icon: Pencil, onSelect: (row) => editRow.edit(row) },
+            { label: "Approve", icon: CheckCircle2, onSelect: (row) => setCarToApprove(row), disabled: decided(r) },
+            { label: "Reject", icon: XCircle, onSelect: (row) => setCarToReject(row), disabled: decided(r) },
+            { label: "Delete request", icon: Trash2, danger: true, onSelect: (row) => setToDelete(row) },
+          ]}
+          sort={sort}
+          onSort={(s) => {
+            setSort(s);
+            setPageIndex(0);
+          }}
+          loading={recordsQuery.status === "loading"}
+          fetching={recordsQuery.isFetching}
+          error={recordsQuery.isError ? recordsQuery.error : undefined}
+          onRetry={() => recordsQuery.refetch()}
+          minWidth={860}
+          caption="Vehicle requests"
+          empty={
+            <EmptyState
+              icon={Car}
+              text={search.trim() ? "No request matches this search." : activeTab === "pending" ? "No vehicle request is waiting for approval." : `No ${activeTab} vehicle requests.`}
+              action={activeTab === "pending" && !search.trim() ? <Button variant="primary" icon={Plus} onClick={() => newRecordModal.open()}>Request a vehicle</Button> : undefined}
+            />
+          }
+          footer={
+            data && data.totalItems > 0 ? (
+              <Pager
+                page={pageIndex + 1}
+                perPage={pageSize}
+                total={data.totalItems}
+                sizes={[10, 30, 50]}
+                onPage={(p) => setPageIndex(p - 1)}
+                onPerPage={(n) => {
+                  setPageSize(n);
+                  setPageIndex(0);
+                }}
+              />
+            ) : null
+          }
+        />
+      </Card>
 
       <CarRequestForm
         onComplete={() => {
@@ -550,18 +290,23 @@ export default function CarManagement() {
           newRecordModal.close();
           editRow.close();
         }}
+        onRequestCreated={() => {
+          recordsQuery.refetch();
+          statsQuery.refetch();
+        }}
         record={editRow.row}
         setOpen={editRow.isOpen ? editRow.setOpen : newRecordModal.setisOpen}
         open={newRecordModal.isOpen || editRow.isOpen}
       />
-      <ConfirmModal
-        title={"Are you sure you want to delete?"}
-        description={"This action cannot be undone. This will permanently delete the selected record."}
-        meta={confirmModal.meta}
-        onConfirm={handleDelete}
-        isLoading={confirmModal.isLoading}
-        open={confirmModal.isOpen}
-        onClose={() => confirmModal.close()}
+
+      <ConfirmDialog
+        open={Boolean(toDelete)}
+        onClose={() => setToDelete(null)}
+        title={`Delete the vehicle request of ${toDelete?.employee || "this employee"}?`}
+        description="The request is removed for good. This cannot be undone."
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => handleDelete(toDelete)}
       />
 
       <ApproveOrRejectModal
@@ -578,98 +323,69 @@ export default function CarManagement() {
           recordsQuery.refetch();
         }}
       />
-    </>
+    </Page>
   );
 }
 
-const formSchema = z.object({
-  reason: z.string().min(1, { message: "Please enter a reason" }),
-});
-
-function ApproveOrRejectModal({ type, open, setOpen, car, onCompleted }) {
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      reason: "",
-    },
-  });
-
+function ApproveOrRejectModal({ type, open, setOpen, car, onCompleted }: { type: "approve" | "reject" | null; open: boolean; setOpen: (o: boolean) => void; car: any; onCompleted: () => void }) {
+  const [reason, setReason] = useState("");
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
   const { user } = useAuth();
+  const approve = type === "approve";
+  const missing = !reason.trim();
 
-  const onSubmit = (values) => {
+  const close = () => {
+    setOpen(false);
+    setReason("");
+    setTried(false);
+  };
+
+  const onSubmit = () => {
+    setTried(true);
+    if (missing) return;
+    setBusy(true);
     return pocketbase
       .collection("CarRequests")
       .update(car.id, {
-        status: type === "approve" ? "approved" : "rejected",
-        [type === "approve" ? "approved_by" : "rejected_by"]: user?.id,
-        [type === "approve" ? "approved_at" : "rejected_at"]: new Date(),
-        [type === "approve" ? "approved_reason" : "rejected_reason"]:
-          values.reason,
+        status: approve ? "approved" : "rejected",
+        [approve ? "approved_by" : "rejected_by"]: user?.id,
+        [approve ? "approved_at" : "rejected_at"]: new Date(),
+        [approve ? "approved_reason" : "rejected_reason"]: reason,
       })
       .then(() => {
-        setOpen(false);
-        toast.success(
-          `Car ${type === "approve" ? "approved" : "rejected"} successfully`
-        );
+        toast.success(`Vehicle request of ${car?.employee || "the employee"} ${approve ? "approved" : "rejected"}`);
         onCompleted();
-        form.reset();
+        close();
       })
       .catch((e) => {
         toast.error(e.message);
-      });
+      })
+      .finally(() => setBusy(false));
   };
 
+  const who = car?.employee || "this employee";
+  const trip = car ? tripDates(car.start, car.end) : "";
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[450px]">
-        <DialogHeader>
-          <DialogTitle>
-            <span className="text-base px-1 font-semibold py-2">
-              {type === "approve" ? "Approve leave." : "Reject leave"}
-            </span>
-          </DialogTitle>
-          <DialogDescription>
-            <span className="px-1 py-0 text-sm text-slate-500 leading-7">
-              Fill in the fields to {type === "approve" ? "approve" : "reject"}{" "}
-              a leave.
-            </span>
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="grid px-2 gap-2">
-              <div>
-                <AppFormTextArea
-                  form={form}
-                  label={"Enter a reason"}
-                  placeholder={"Enter reason"}
-                  name={"reason"}
-                />
-              </div>
-            </div>
-
-
-            <DialogFooter>
-              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-                <Button
-                  type="submit"
-                  onClick={() => form.handleSubmit(onSubmit)}
-                  disabled={
-                    form.formState.disabled || form.formState.isSubmitting
-                  }
-                  className="w-full"
-                  size="sm"
-                >
-                  {form.formState.isSubmitting && (
-                    <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
-                  )}
-                  {type === "approve" ? "Approve leave." : "Reject leave"}
-                </Button>
-              </div>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={open}
+      onClose={busy ? () => undefined : close}
+      size="sm"
+      title={approve ? `Approve the vehicle request of ${who}?` : `Reject the vehicle request of ${who}?`}
+      description={`${car?.purpose ? `${car.purpose}, ` : ""}${trip}. ${approve ? "The trip can go ahead." : "The employee sees your reason."}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={close} disabled={busy}>Cancel</Button>
+          <Button variant={approve ? "primary" : "danger"} icon={approve ? CheckCircle2 : XCircle} onClick={onSubmit} loading={busy}>
+            {approve ? "Approve" : "Reject"}
+          </Button>
+        </>
+      }
+    >
+      <Field label="Reason" required htmlFor="car-decision-reason" error={tried && missing ? "Write a short reason for the decision." : null}>
+        <Textarea id="car-decision-reason" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} invalid={tried && missing} placeholder={approve ? "For example: vehicle available, driver assigned" : "For example: no vehicle free on these dates"} />
+      </Field>
+    </Modal>
   );
 }

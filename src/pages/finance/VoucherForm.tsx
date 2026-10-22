@@ -7,20 +7,45 @@ import * as React from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "react-query";
 import { toast } from "sonner";
-import { AlertTriangle, FileCheck2, Landmark, Paperclip, Receipt, Save, Send, ShieldCheck, Trash2, Upload, Wallet } from "lucide-react";
+import { AlertTriangle, CornerUpLeft, FileCheck2, Receipt, ShieldCheck, X } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { BANK_LABELS, VOUCHER_TYPES, payablesApi, withholdingRates } from "@/lib/payables";
-import { rwf, showDay } from "@/lib/ims";
 import { errorMessage } from "@/lib/procurement";
-import { Button } from "@/components/ui/button";
-import { EmptyState, ListSkeleton, PageHeader } from "@/components/enterprise/ui";
-import { Field, FormBlock, inputCls, Segmented, textareaCls } from "@/components/portal/kit";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ChoiceCards, FileDrop } from "@/components/portal/kit";
 import { BudgetLinePicker } from "@/components/budget/BudgetKit";
 import { cn } from "@/utils";
+import {
+  ButtonLink,
+  Card,
+  Column,
+  DataTable,
+  DatePicker,
+  DocNo,
+  EmptyState,
+  ErrorSummary,
+  Field,
+  FormActions,
+  FormBody,
+  FormError,
+  FormSection,
+  Input,
+  MoneyInput,
+  Num,
+  Page,
+  PageHeader,
+  Select,
+  SummaryPanel,
+  Textarea,
+  checkboxClass,
+  fmtDate,
+  fmtMoney,
+  overdue,
+} from "@/components/ims";
 
 type Pick = { invoice: string; amount: string; checked: boolean };
-const MAX_FILE = 20 * 1024 * 1024;
+const LIST = "/dashboard/finance/vouchers";
 
 export default function VoucherForm() {
   const { voucherId } = useParams();
@@ -30,7 +55,7 @@ export default function VoucherForm() {
   const editing = Boolean(voucherId);
 
   const existing = useQuery(["voucher", voucherId], () => pocketbase.collection("payment_vouchers").getOne(voucherId!), { enabled: editing });
-  const [type, setType] = React.useState<"invoice" | "direct">((params.get("type") as any) || "invoice");
+  const [type, setType] = React.useState<string>(params.get("type") || "invoice");
   const [supplier, setSupplier] = React.useState(params.get("supplier") || "");
   const [picks, setPicks] = React.useState<Record<string, Pick>>({});
   const [payeeName, setPayeeName] = React.useState("");
@@ -44,7 +69,7 @@ export default function VoucherForm() {
   const [files, setFiles] = React.useState<File[]>([]);
   const [removed, setRemoved] = React.useState<string[]>([]);
   const [tried, setTried] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
+  const [busy, setBusy] = React.useState<"submit" | "draft" | null>(null);
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
@@ -83,7 +108,7 @@ export default function VoucherForm() {
   for (const x of chosen) {
     const a = Math.round(Number(picks[x.id].amount) || 0);
     if (a <= 0) lineErrors[x.id] = "Enter the amount";
-    else if (a > x.open) lineErrors[x.id] = `At most ${rwf(x.open)}`;
+    else if (a > x.open) lineErrors[x.id] = `At most ${fmtMoney(x.open)}`;
   }
   const totals = type === "invoice"
     ? chosen.reduce((t, x) => {
@@ -95,30 +120,37 @@ export default function VoucherForm() {
   const whtAmount = Math.round((totals.base * rate) / 100);
 
   const errors = {
-    supplier: type === "invoice" && !supplier && "Choose the supplier.",
+    supplier: type === "invoice" && !supplier && "Choose the supplier to pay.",
     invoices: type === "invoice" && !chosen.length && "Tick at least one invoice to pay.",
-    lines: type === "invoice" && Object.keys(lineErrors).length > 0 && "Check the amounts.",
-    payee: type === "direct" && !supplier && !payeeName.trim() && "Enter the payee or choose a registered supplier.",
-    budgetLine: type === "direct" && !budgetLine && "Choose the budget line.",
-    gross: type === "direct" && !(Number(gross) > 0) && "Enter the amount.",
-    description: type === "direct" && description.trim().length < 5 && "Describe what is being paid.",
+    lines: type === "invoice" && Object.keys(lineErrors).length > 0 && "Check the amount on each ticked invoice: above 0 and not more than what is unpaid.",
+    payee: type === "direct" && !supplier && !payeeName.trim() && "Enter the payee's name, or choose a registered supplier.",
+    budgetLine: type === "direct" && !budgetLine && "Choose the budget line that pays for it.",
+    gross: type === "direct" && !(Number(gross) > 0) && "Enter the amount to pay.",
+    description: type === "direct" && description.trim().length < 5 && "Describe what is being paid, in at least 5 characters.",
   };
   const invalid = Object.values(errors).some(Boolean);
-
-  function addFiles(list: FileList | null) {
-    const ok: File[] = [];
-    for (const f of Array.from(list || [])) {
-      if (f.size > MAX_FILE) toast.error(`${f.name} is larger than 20 MB.`);
-      else ok.push(f);
-    }
-    setFiles((x) => [...x, ...ok].slice(0, 10));
-  }
+  const firstBadLine = chosen.find((x) => lineErrors[x.id]);
+  const fieldOf: Record<keyof typeof errors, string> = {
+    supplier: "supplier",
+    invoices: supplier ? "invoices" : "supplier",
+    lines: firstBadLine ? `pick-${firstBadLine.id}` : "invoices",
+    payee: "payee_name",
+    budgetLine: "budget_line",
+    gross: "gross",
+    description: "description",
+  };
+  const shownErrors: FormError[] = tried ? (Object.entries(errors).filter(([, m]) => m) as [keyof typeof errors, string][]).map(([k, m]) => ({ field: fieldOf[k], message: m })) : [];
+  const summaryErrors: FormError[] = [...shownErrors, ...(error ? [{ message: error }] : [])];
+  const err = (k: keyof typeof errors) => (tried && errors[k]) || null;
 
   async function save(submit: boolean) {
     setTried(true);
     setError("");
-    if (invalid) return;
-    setBusy(true);
+    if (invalid) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setBusy(submit ? "submit" : "draft");
     try {
       const body = new FormData();
       body.append("voucher_type", type);
@@ -142,187 +174,326 @@ export default function VoucherForm() {
       if (submit) {
         try {
           await payablesApi.action(v.id, "submit");
-          toast.success(`${v.number} sent for approval`);
+          toast.success(`${v.number} submitted for approval`);
         } catch (e) {
-          toast.error(`${v.number} saved as draft, but not submitted: ${errorMessage(e)}`);
-          navigate(`/dashboard/finance/vouchers/${v.id}`);
+          toast.error(`${v.number} saved as a draft but not submitted: ${errorMessage(e)}`);
+          navigate(`${LIST}/${v.id}`);
           return;
         }
-      } else toast.success(`${v.number} saved as draft`);
-      navigate(`/dashboard/finance/vouchers/${v.id}`);
+      } else toast.success(`${v.number} saved as a draft`);
+      navigate(`${LIST}/${v.id}`);
     } catch (e) {
       setError(errorMessage(e));
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
-  if (!can("manage_payment_vouchers")) return <div className="p-6"><EmptyState icon={FileCheck2} title="Not available" text="Only the Accountant prepares payment vouchers." /></div>;
-  if (editing && existing.isLoading) return <div className="p-6"><ListSkeleton rows={6} /></div>;
+  if (!can("manage_payment_vouchers")) {
+    return (
+      <Page narrow>
+        <Card>
+          <EmptyState icon={FileCheck2} text="Payment vouchers are prepared by the Accountant." action={<ButtonLink to={LIST}>Back to payment vouchers</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
+  if (editing && existing.isLoading) {
+    return (
+      <Page narrow>
+        <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-64 w-full" />
+      </Page>
+    );
+  }
   const ev: any = existing.data;
   if (ev && !["draft", "returned"].includes(ev.status)) {
-    return <div className="p-6"><EmptyState icon={FileCheck2} title={`${ev.number} can no longer be edited`} text="Only drafts and returned vouchers can be changed." action={<Button size="sm" onClick={() => navigate(`/dashboard/finance/vouchers/${ev.id}`)}>Open it</Button>} /></div>;
+    return (
+      <Page narrow>
+        <Card>
+          <EmptyState
+            icon={FileCheck2}
+            text={`${ev.number} is already in approval or closed, so it can no longer be edited. Only drafts and returned vouchers can be changed.`}
+            action={<ButtonLink to={`${LIST}/${ev.id}`} variant="primary">Open {ev.number}</ButtonLink>}
+          />
+        </Card>
+      </Page>
+    );
   }
 
+  const keptFiles: string[] = (ev?.attachments || []).filter((f: string) => !removed.includes(f));
+
+  const invoiceColumns: Column<any>[] = [
+    {
+      key: "pick",
+      header: <span className="sr-only">Pay</span>,
+      width: "44px",
+      cell: (x) => {
+        const p = picks[x.id];
+        return (
+          <input
+            type="checkbox"
+            className={checkboxClass}
+            checked={Boolean(p?.checked)}
+            disabled={!x.open && !p?.checked}
+            onChange={(e) => setPicks((all) => ({ ...all, [x.id]: { invoice: x.id, amount: all[x.id]?.amount || String(x.open), checked: e.target.checked } }))}
+            aria-label={`Pay ${x.number}`}
+          />
+        );
+      },
+    },
+    { key: "invoice", header: "Invoice", nowrap: true, cell: (x) => <DocNo value={x.number} />, sub: (x) => `Ref. ${x.supplier_invoice_number} · ${fmtDate(x.invoice_date)}` },
+    {
+      key: "due",
+      header: "Due",
+      nowrap: true,
+      cell: (x) => fmtDate(x.due_date),
+      sub: (x) => {
+        const late = overdue(x.due_date);
+        return late ? <span className="font-semibold text-ims-danger">{late}</span> : null;
+      },
+    },
+    { key: "total", header: "Total (RWF)", numeric: true, cell: (x) => <span className="text-ims-muted"><Num value={x.total} /></span> },
+    { key: "balance", header: "Unpaid (RWF)", numeric: true, cell: (x) => <span className="font-semibold"><Num value={x.balance} /></span> },
+    { key: "held", header: "On other vouchers (RWF)", numeric: true, cell: (x) => (x.held ? <Num value={x.held} /> : <span className="text-ims-faint">—</span>) },
+    {
+      key: "amount",
+      header: "Pay now (RWF)",
+      width: "190px",
+      cell: (x) => {
+        const p = picks[x.id];
+        const id = `pick-${x.id}`;
+        const bad = tried && lineErrors[x.id];
+        return (
+          <>
+            <label htmlFor={id} className="sr-only">Amount for {x.number}</label>
+            <MoneyInput
+              id={id}
+              value={p?.amount === undefined || p.amount === "" ? "" : Number(p.amount)}
+              disabled={!p?.checked}
+              invalid={Boolean(bad)}
+              onChange={(n) => setPicks((all) => ({ ...all, [x.id]: { ...all[x.id], amount: n === "" ? "" : String(n) } }))}
+            />
+            {bad && <span className="mt-0.5 block text-right text-t-hint text-ims-danger">{lineErrors[x.id]}</span>}
+          </>
+        );
+      },
+      total: <Num value={totals.gross} />,
+    },
+  ];
+
   return (
-    <div className="space-y-4 px-3 pb-24 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[
+          { label: "Payables", to: "/dashboard/finance/invoices" },
+          { label: "Payment vouchers", to: LIST },
+          { label: editing ? `Edit ${ev?.number || ""}`.trim() : "New payment voucher" },
+        ]}
         title={editing ? `Edit ${ev?.number || "voucher"}` : "New payment voucher"}
-        description={ev?.status === "returned" ? "Sent back for correction — update it and submit again; approval restarts from the first step." : "The server recomputes every amount, the tax withheld and the bank details from the verified records."}
-        breadcrumbs={[{ title: "Payables", link: "/dashboard/finance/invoices" }, { title: "Payment vouchers", link: "/dashboard/finance/vouchers" }, { title: editing ? "Edit" : "New", link: "#" }]}
+        subtitle="Choose what is paid and to whom. The server recomputes every amount, the tax withheld and the bank details."
       />
-      {error && <div role="alert" className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-[13px] text-red-800"><AlertTriangle size={16} className="mt-0.5 shrink-0" /> {error}</div>}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-4">
-          <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-card sm:p-5">
-            <FormBlock icon={FileCheck2} title="What is paid">
-              <Segmented value={type} onChange={(t) => { setType(t as any); setTried(false); }} options={Object.entries(VOUCHER_TYPES).map(([value, t]) => ({ value: value as any, label: t.label, hint: t.hint }))} ariaLabel="Voucher type" />
-              <p className="text-[12.5px] text-slate-500">{VOUCHER_TYPES[type].hint}.</p>
-            </FormBlock>
+      {ev?.status === "returned" && (
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-orange/30 bg-ims-orange-bg px-4 py-3 text-t-body text-ims-orange">
+          <CornerUpLeft size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>This voucher was returned for changes. Update it and submit it again; approval starts again from the first step.</span>
+        </p>
+      )}
 
-            <FormBlock icon={Landmark} title="Payee">
-              <Field label={type === "invoice" ? "Supplier" : "Registered supplier (optional)"} required={type === "invoice"} error={tried && errors.supplier}>
-                <select className={inputCls} value={supplier} onChange={(e) => { setSupplier(e.target.value); setPicks({}); }}>
-                  <option value="">{type === "invoice" ? "Choose the supplier…" : "— Not a registered supplier —"}</option>
-                  {(suppliers.data || []).map((s: any) => <option key={s.id} value={s.id}>{s.name}{s.tin ? ` · TIN ${s.tin}` : ""}</option>)}
-                </select>
-              </Field>
-              {sup && (
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px]">
-                  <p className="mb-1 flex items-center gap-1.5 font-medium text-slate-700"><ShieldCheck size={14} className="text-emerald-600" /> Verified bank details (paid to this account)</p>
-                  <p className="text-slate-600">{sup.bank_name || "—"}{sup.bank_branch ? `, ${sup.bank_branch}` : ""} · <span className="font-mono">{sup.bank_account_number || "no account on file"}</span> · {sup.bank_account_name}</p>
-                  {sup.bank_change_pending && <p className="mt-1 flex items-center gap-1 text-amber-800"><AlertTriangle size={13} /> A bank details change is waiting for Finance; this voucher uses the verified account above.</p>}
-                </div>
-              )}
-              {type === "direct" && !supplier && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Payee name" required error={tried && errors.payee} className="sm:col-span-2"><input className={inputCls} value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="e.g. Rwanda Energy Group (REG)" /></Field>
-                  {BANK_LABELS.map(([k, label]) => (
-                    <Field key={k} label={label}><input className={cn(inputCls, k === "bank_account_number" && "font-mono")} value={payeeBank[k] || ""} onChange={(e) => setPayeeBank((b) => ({ ...b, [k]: e.target.value }))} /></Field>
-                  ))}
-                </div>
-              )}
-            </FormBlock>
-          </section>
+      <ErrorSummary errors={summaryErrors} title={shownErrors.length ? "Check these fields before you submit" : "The voucher could not be saved"} />
+
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          save(true);
+        }}
+        className="flex flex-col gap-4"
+      >
+        <FormBody
+          aside={
+            <SummaryPanel
+              rows={[
+                ["Gross amount", fmtMoney(totals.gross)],
+                ["Taxable before VAT", fmtMoney(totals.base)],
+                [`Withholding tax${rate ? ` (${rate}%)` : ""}`, whtAmount ? `− ${fmtMoney(whtAmount)}` : "—"],
+                ["Net to the payee", fmtMoney(totals.gross - whtAmount)],
+              ]}
+              checklist={
+                type === "invoice"
+                  ? [
+                      { label: "Supplier", done: !errors.supplier },
+                      { label: "Invoices to pay", done: !errors.invoices },
+                      { label: "Amounts within what is unpaid", done: !errors.invoices && !errors.lines },
+                    ]
+                  : [
+                      { label: "Payee", done: !errors.payee },
+                      { label: "Budget line", done: !errors.budgetLine },
+                      { label: "Amount", done: !errors.gross },
+                      { label: "What is paid", done: !errors.description },
+                    ]
+              }
+            >
+              <p className="mt-4 border-t border-ims-divider pt-4 text-t-small text-ims-muted">
+                Approved by the Director of Finance, and by the Secretary General above the DAF limit. The Cashier then pays it; whoever prepared or approved it cannot.
+              </p>
+            </SummaryPanel>
+          }
+        >
+          <FormSection title="What is paid">
+            <ChoiceCards<string>
+              columns={Object.keys(VOUCHER_TYPES).length > 2 ? 3 : 2}
+              value={type}
+              onChange={(t) => {
+                setType(t);
+                setTried(false);
+              }}
+              options={Object.entries(VOUCHER_TYPES).map(([value, t]) => ({ value, label: t.label, description: t.hint }))}
+            />
+          </FormSection>
+
+          <FormSection title="Payee" description={type === "invoice" ? "The supplier whose approved invoices are paid." : "A registered supplier, or anyone else with their bank details."}>
+            <Field label={type === "invoice" ? "Supplier" : "Registered supplier"} required={type === "invoice"} htmlFor="supplier" error={err("supplier")} hint={type === "direct" ? "Optional. Leave it empty to pay someone who is not a registered supplier." : undefined}>
+              <Select
+                id="supplier"
+                value={supplier}
+                invalid={Boolean(err("supplier"))}
+                onChange={(e) => {
+                  setSupplier(e.target.value);
+                  setPicks({});
+                }}
+              >
+                <option value="">{type === "invoice" ? "Choose the supplier" : "Not a registered supplier"}</option>
+                {(suppliers.data || []).map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.name}{s.tin ? ` · TIN ${s.tin}` : ""}</option>
+                ))}
+              </Select>
+            </Field>
+            {sup && (
+              <div className="rounded-control border border-ims-border bg-ims-thead px-4 py-3 text-t-small">
+                <p className="mb-1 flex items-center gap-1.5 font-semibold text-ims-text"><ShieldCheck size={15} className="text-ims-success" aria-hidden /> Verified bank details: paid to this account</p>
+                <p className="text-ims-body">
+                  {sup.bank_name || "—"}{sup.bank_branch ? `, ${sup.bank_branch}` : ""} · <span className="font-mono">{sup.bank_account_number || "no account on file"}</span>{sup.bank_account_name ? ` · ${sup.bank_account_name}` : ""}
+                </p>
+                {sup.bank_change_pending && (
+                  <p className="mt-1 flex items-start gap-1 text-ims-warning">
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden /> A change of bank details is waiting for Finance; this voucher uses the verified account above.
+                  </p>
+                )}
+              </div>
+            )}
+            {type === "direct" && !supplier && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Payee name" required htmlFor="payee_name" error={err("payee")} className="sm:col-span-2">
+                  <Input id="payee_name" value={payeeName} invalid={Boolean(err("payee"))} onChange={(e) => setPayeeName(e.target.value)} placeholder="For example: Rwanda Energy Group (REG)" />
+                </Field>
+                {BANK_LABELS.map(([k, label]) => (
+                  <Field key={k} label={label} htmlFor={`bank-${k}`}>
+                    <Input id={`bank-${k}`} className={cn(k === "bank_account_number" && "font-mono")} value={payeeBank[k] || ""} onChange={(e) => setPayeeBank((b) => ({ ...b, [k]: e.target.value }))} />
+                  </Field>
+                ))}
+              </div>
+            )}
+          </FormSection>
 
           {type === "invoice" ? (
-            <section className="rounded-lg border border-slate-200 bg-white shadow-card">
-              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-900"><Receipt size={15} className="text-slate-400" /> Approved invoices to pay</h3>
-                {tried && (errors.invoices || errors.lines) && <span className="text-[12px] font-medium text-red-600">{errors.invoices || errors.lines}</span>}
-              </div>
-              {!supplier ? <p className="px-4 py-8 text-center text-[13px] text-slate-500">Choose the supplier to see its approved, unpaid invoices.</p> : payable.isLoading ? <div className="p-4"><ListSkeleton rows={3} /></div> : !payable.data?.items.length ? (
-                <p className="px-4 py-8 text-center text-[13px] text-slate-500">No approved invoice of this supplier is waiting for payment.</p>
+            <FormSection id="invoices" title="Invoices to pay" description="Approved, unpaid invoices of this supplier. Tick each one and the amount to pay now.">
+              {tried && (errors.invoices || errors.lines) && (
+                <p role="alert" className="flex items-start gap-1 text-t-hint text-ims-danger">
+                  <AlertTriangle size={13} className="mt-px shrink-0" aria-hidden /> {errors.invoices || errors.lines}
+                </p>
+              )}
+              {!supplier ? (
+                <EmptyState compact icon={Receipt} text="Choose the supplier to see its approved, unpaid invoices." className="rounded-control border border-dashed border-ims-field" />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="dnr-grid w-full min-w-[760px]">
-                    <thead><tr><th className="w-8" /><th>Invoice</th><th>Due</th><th className="text-right">Total</th><th className="text-right">Unpaid</th><th className="text-right">On other vouchers</th><th className="w-44 text-right">Pay now</th></tr></thead>
-                    <tbody>
-                      {payable.data.items.map((x) => {
-                        const p = picks[x.id];
-                        const late = x.due_date && x.due_date < new Date().toISOString().slice(0, 10);
-                        return (
-                          <tr key={x.id} className={cn(p?.checked && "bg-primary/[0.03]")}>
-                            <td><input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-primary" checked={Boolean(p?.checked)} disabled={!x.open && !p?.checked} onChange={(e) => setPicks((all) => ({ ...all, [x.id]: { invoice: x.id, amount: all[x.id]?.amount || String(x.open), checked: e.target.checked } }))} aria-label={`Pay ${x.number}`} /></td>
-                            <td><span className="block font-mono text-[12.5px] font-semibold">{x.number}</span><span className="block text-[12px] text-slate-500">Supplier ref. {x.supplier_invoice_number} · {showDay(x.invoice_date)}</span></td>
-                            <td className={cn("whitespace-nowrap text-[12.5px]", late ? "font-medium text-red-700" : "text-slate-600")}>{x.due_date ? showDay(x.due_date) : "—"}{late ? " · overdue" : ""}</td>
-                            <td className="text-right tabular-nums text-slate-600">{rwf(x.total)}</td>
-                            <td className="text-right font-medium tabular-nums">{rwf(x.balance)}</td>
-                            <td className="text-right tabular-nums text-slate-500">{x.held ? rwf(x.held) : "—"}</td>
-                            <td className="text-right">
-                              <input type="number" min={0} max={x.open} disabled={!p?.checked} value={p?.amount ?? ""} onChange={(e) => setPicks((all) => ({ ...all, [x.id]: { ...all[x.id], amount: e.target.value } }))} className={cn(inputCls, "h-9 w-40 text-right tabular-nums", lineErrors[x.id] && tried && "border-red-400")} aria-label={`Amount for ${x.number}`} />
-                              {tried && lineErrors[x.id] && <span className="mt-0.5 block text-[11.5px] text-red-600">{lineErrors[x.id]}</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="-mx-[18px] border-y border-ims-border sm:-mx-5">
+                  <DataTable
+                    columns={invoiceColumns}
+                    rows={payable.data?.items || []}
+                    rowKey={(x) => x.id}
+                    rowClassName={(x) => (picks[x.id]?.checked ? "bg-ims-info-bg/40" : undefined)}
+                    loading={payable.isLoading}
+                    error={payable.isError ? payable.error : undefined}
+                    onRetry={() => payable.refetch()}
+                    minWidth={860}
+                    caption="Approved invoices to pay"
+                    totalLabel="To pay"
+                    empty={<EmptyState compact icon={Receipt} text="No approved invoice of this supplier is waiting for payment." />}
+                  />
                 </div>
               )}
-            </section>
+            </FormSection>
           ) : (
-            <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-card sm:p-5">
-              <FormBlock icon={Wallet} title="Budget and amount">
-                <Field label="Budget line" required error={tried && errors.budgetLine}>
-                  <BudgetLinePicker value={budgetLine} onChange={setBudgetLine} amount={Number(gross) || undefined} anyDepartment />
+            <FormSection title="Budget and amount">
+              <Field label="Budget line" required htmlFor="budget_line" error={err("budgetLine")} hint="The money comes from this line. The amount is checked against what is left on it.">
+                <BudgetLinePicker id="budget_line" invalid={Boolean(err("budgetLine"))} value={budgetLine} onChange={setBudgetLine} amount={Number(gross) || undefined} anyDepartment />
+              </Field>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Amount" required htmlFor="gross" error={err("gross")} hint="VAT included, if any.">
+                  <MoneyInput id="gross" value={gross === "" ? "" : Number(gross)} invalid={Boolean(err("gross"))} onChange={(n) => setGross(n === "" ? "" : String(n))} />
                 </Field>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Amount (RWF, VAT included if any)" required error={tried && errors.gross}><input type="number" min={0} className={cn(inputCls, "text-right tabular-nums")} value={gross} onChange={(e) => setGross(e.target.value)} /></Field>
-                </div>
-                <Field label="What is paid" required error={tried && errors.description}><textarea className={cn(textareaCls, "min-h-[70px]")} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Electricity — Head Office, October 2026 (meter 0412337)" /></Field>
-              </FormBlock>
-            </section>
+              </div>
+              <Field label="What is paid" required htmlFor="description" error={err("description")}>
+                <Textarea id="description" className="min-h-[80px]" value={description} invalid={Boolean(err("description"))} onChange={(e) => setDescription(e.target.value)} placeholder="For example: electricity, head office, October 2026 (meter 0412337)" />
+              </Field>
+            </FormSection>
           )}
 
-          <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-card sm:p-5">
-            <FormBlock icon={Receipt} title="Tax and terms">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Withholding tax" hint={rateRec && !rateRec.confirmed_by_finance ? "This rate is not yet confirmed by Finance (Setup → Tax & statutory rates)." : "From the dated tax table; computed on the amount before VAT."}>
-                  <select className={inputCls} value={wht} onChange={(e) => setWht(e.target.value)}>
-                    <option value="">No withholding</option>
-                    {(rates.data || []).map((r: any) => <option key={r.id} value={r.code}>{r.name} — {r.rate}%</option>)}
-                  </select>
-                </Field>
-                <Field label="Pay by"><input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></Field>
-              </div>
-              {type === "invoice" && <Field label="Description"><input className={inputCls} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Filled in from the invoices when left empty" /></Field>}
-              <Field label="Notes for the approvers"><textarea className={cn(textareaCls, "min-h-[60px]")} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
-            </FormBlock>
-            <FormBlock icon={Paperclip} title="Supporting documents">
-              <label
-                className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-[13px] text-slate-600 hover:border-primary/40 hover:bg-primary/[0.03]"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
+          <FormSection title="Tax and terms">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                label="Withholding tax"
+                htmlFor="wht"
+                hint={rateRec && !rateRec.confirmed_by_finance ? "This rate is not yet confirmed by Finance (Setup › Tax and statutory rates)." : "From the dated tax table; worked out on the amount before VAT."}
               >
-                <Upload size={18} className="text-slate-400" />
-                <span><span className="font-medium text-primaryDark">Choose files</span> or drop them here</span>
-                <span className="text-[11.5px] text-slate-500">Invoice, delivery note, contract… PDF or images, up to 20 MB each, 10 files</span>
-                <input type="file" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
-              </label>
-              {(files.length > 0 || (ev?.attachments || []).length > 0) && (
-                <ul className="divide-y divide-slate-100 rounded-md border border-slate-200 text-[12.5px]">
-                  {(ev?.attachments || []).filter((f: string) => !removed.includes(f)).map((f: string) => (
-                    <li key={f} className="flex items-center justify-between gap-2 px-3 py-2">
-                      <a href={pocketbase.files.getUrl(ev, f)} target="_blank" rel="noreferrer" className="truncate text-primaryDark hover:underline">{f}</a>
-                      <button type="button" onClick={() => setRemoved((r) => [...r, f])} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${f}`}><Trash2 size={13} /></button>
-                    </li>
+                <Select id="wht" value={wht} onChange={(e) => setWht(e.target.value)}>
+                  <option value="">No withholding</option>
+                  {(rates.data || []).map((r: any) => (
+                    <option key={r.id} value={r.code}>{r.name} · {r.rate}%</option>
                   ))}
-                  {files.map((f, i) => (
-                    <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 px-3 py-2">
-                      <span className="truncate">{f.name} <span className="text-slate-400">· {(f.size / 1024 / 1024).toFixed(1)} MB · new</span></span>
-                      <button type="button" onClick={() => setFiles((x) => x.filter((_, j) => j !== i))} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${f.name}`}><Trash2 size={13} /></button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </FormBlock>
-          </section>
-        </div>
+                </Select>
+              </Field>
+              <Field label="Pay by" htmlFor="due_date" hint={dueDate ? <button type="button" onClick={() => setDueDate("")} className="font-semibold text-ims-link hover:underline">Clear the date</button> : "Optional."}>
+                <DatePicker id="due_date" value={dueDate} onChange={setDueDate} placeholder="No date" />
+              </Field>
+            </div>
+            {type === "invoice" && (
+              <Field label="Description" htmlFor="description" hint="Filled in from the invoices when left empty.">
+                <Input id="description" value={description} onChange={(e) => setDescription(e.target.value)} />
+              </Field>
+            )}
+            <Field label="Notes for the approvers" htmlFor="notes">
+              <Textarea id="notes" className="min-h-[72px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </Field>
+          </FormSection>
 
-        <aside className="space-y-3 lg:sticky lg:top-4 lg:self-start">
-          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-            <h3 className="mb-3 text-[13.5px] font-semibold text-slate-900">Summary</h3>
-            <dl className="space-y-1.5 text-[13px]">
-              <div className="flex justify-between"><dt className="text-slate-600">Gross amount</dt><dd className="font-medium tabular-nums">{rwf(totals.gross)}</dd></div>
-              <div className="flex justify-between"><dt className="text-slate-600">Taxable amount (before VAT)</dt><dd className="tabular-nums text-slate-600">{rwf(totals.base)}</dd></div>
-              <div className="flex justify-between"><dt className="text-slate-600">Withholding tax {rate ? `(${rate}%)` : ""}</dt><dd className="tabular-nums text-slate-600">{whtAmount ? `− ${rwf(whtAmount)}` : "—"}</dd></div>
-              <div className="flex justify-between border-t border-slate-200 pt-2 text-[15px] font-semibold"><dt>Net to the payee</dt><dd className="tabular-nums">{rwf(totals.gross - whtAmount)}</dd></div>
-            </dl>
-            <p className="mt-3 text-[11.5px] text-slate-500">Approval: Director of Finance, and the Secretary General above the DAF limit. The Cashier then executes; whoever prepared or approved it cannot.</p>
-          </section>
-        </aside>
-      </div>
+          <FormSection title="Supporting documents" description="Invoice, delivery note, contract. Up to 10 files of 20 MB each.">
+            {keptFiles.length > 0 && (
+              <ul className="space-y-1.5">
+                {keptFiles.map((f) => (
+                  <li key={f} className="flex items-center justify-between gap-2 rounded-control border border-ims-border px-3 py-2 text-t-body">
+                    <a className="truncate font-semibold text-ims-link hover:underline" href={pocketbase.files.getUrl(ev, f)} target="_blank" rel="noreferrer">{f}</a>
+                    <button type="button" onClick={() => setRemoved((r) => [...r, f])} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-ims-muted hover:bg-ims-danger-bg hover:text-ims-danger" aria-label={`Remove ${f}`}>
+                      <X size={15} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <FileDrop files={files} onChange={setFiles} accept="" max={10} hint="Click to choose files or drag them here · up to 20 MB each" />
+          </FormSection>
+        </FormBody>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:left-[280px]">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
-          <Button variant="outline" disabled={busy} onClick={() => save(false)}><Save size={14} /> Save draft</Button>
-          <Button disabled={busy} onClick={() => save(true)}><Send size={14} /> {busy ? "Saving…" : "Save and submit"}</Button>
-        </div>
-      </div>
-    </div>
+        <FormActions
+          submitType="submit"
+          onSaveDraft={() => save(false)}
+          cancelTo={editing ? `${LIST}/${voucherId}` : LIST}
+          busy={busy}
+          note="Save a draft to finish later."
+        />
+      </form>
+    </Page>
   );
 }
