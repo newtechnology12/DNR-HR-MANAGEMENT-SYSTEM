@@ -3,31 +3,62 @@
  * template, submission, approval (Budget Officer → DAF → SG) and, once approved, live utilisation per line.
  */
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "react-query";
 import { toast } from "sonner";
-import { CalendarRange, Download, FileSpreadsheet, ListTree, Pencil, Plus, Send, Trash2, Upload, Wallet, XCircle } from "lucide-react";
+import { Ban, Clock, CornerUpLeft, Download, FileSpreadsheet, FileText, GitCompareArrows, ListTree, Pencil, Plus, Search, Send, Sheet, Trash2, Upload } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { BudgetLineUsage, KIND_LABEL, MONTHS_FY, budgetApi } from "@/lib/budget";
-import { rwf, showDay } from "@/lib/ims";
 import { DOC_STATUS, errorMessage } from "@/lib/procurement";
 import { exportReport } from "@/lib/exporter";
-import { Button } from "@/components/ui/button";
-import { EmptyState, ListSkeleton, StatusBadge } from "@/components/enterprise/ui";
-import ExportMenu from "@/components/enterprise/ExportMenu";
-import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, toChatter } from "@/components/enterprise/DocumentLayout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Chatter, toChatter } from "@/components/enterprise/DocumentLayout";
 import { ApprovalTracker } from "@/components/enterprise/Approval";
 import { DecisionButtons, useApprovalTrail } from "@/components/enterprise/useApprovalTrail";
-import { Field, FormBlock, FormDialog, inputCls, Segmented } from "@/components/portal/kit";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Segmented } from "@/components/portal/kit";
+import DocumentUploads from "@/components/enterprise/Attachments";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  Checkbox,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  DetailHeader,
+  Details,
+  DocNo,
+  EmptyState,
+  Field,
+  FilterBar,
+  Input,
+  KpiBand,
+  MenuItem,
+  Modal,
+  ModalSection,
+  MoneyInput,
+  MoreMenu,
+  Num,
+  Page,
+  Pager,
+  Select,
+  Tabs,
+  buttonClass,
+  fmtDate,
+  fmtDateTime,
+  fmtMoney,
+  fmtMoneyShort,
+  fmtNumber,
+} from "@/components/ims";
 import { LineLedgerDialog, UseBar } from "@/components/budget/BudgetKit";
 import { cn } from "@/utils";
-import DocumentUploads from "@/components/enterprise/Attachments";
 
-const STEPS = [{ key: "draft", label: "Draft" }, { key: "pending_approval", label: "In approval" }, { key: "approved", label: "Approved" }];
 const KIND_ACCOUNT: Record<string, string> = { expense: "expense", capital: "asset", revenue: "revenue" };
 const EDITABLE = ["draft", "returned"];
+const LIST = "/dashboard/budget/budgets";
+type TabKey = "details" | "lines" | "approvals" | "documents" | "activity";
 
 function spread(amount: number) {
   const base = Math.floor(amount / 12);
@@ -36,13 +67,20 @@ function spread(amount: number) {
   return out;
 }
 
+const amountOf = (l: any) => l.revised_amount || l.original_amount;
+
 export default function BudgetDetail() {
   const { budgetId } = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
-  const [tab, setTab] = React.useState("lines");
+  const me = pocketbase.authStore.model as any;
+  const [tab, setTab] = React.useState<TabKey>("details");
+  const [view, setView] = React.useState<"amounts" | "phasing">("amounts");
+  const [search, setSearch] = React.useState("");
+  const [page, setPage] = React.useState(1);
+  const [perPage, setPerPage] = React.useState(15);
   const [editing, setEditing] = React.useState<any>(null);
+  const [removing, setRemoving] = React.useState<any>(null);
   const [importOpen, setImportOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -73,14 +111,17 @@ export default function BudgetDetail() {
     return { accounts, departments, funding, projects, centres };
   }, { enabled: Boolean(editable), staleTime: 5 * 60_000 });
 
+  /** Runs an action with a toast; resolves false when it failed (the error is already shown). */
   async function run(fn: () => Promise<unknown>, done: string) {
     setBusy(true);
     try {
       await fn();
       toast.success(done);
       refresh();
+      return true;
     } catch (e) {
       toast.error(errorMessage(e));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -90,7 +131,7 @@ export default function BudgetDetail() {
     const l = editing;
     const amount = Math.round(Number(l.original_amount) || 0);
     const phasing = (l.phasing || []).map((v: any) => Math.round(Number(v) || 0));
-    if (phasing.length === 12 && phasing.reduce((a: number, v: number) => a + v, 0) !== amount) return toast.error("The monthly amounts must add up to the annual amount — use “Spread evenly” or correct the months.");
+    if (phasing.length === 12 && phasing.reduce((a: number, v: number) => a + v, 0) !== amount) return toast.error("The monthly amounts must add up to the annual amount. Use “Spread evenly” or correct the months.");
     const data = {
       budget: b.id, code: String(l.code || "").trim().toUpperCase(), name: l.name || "", kind: l.kind, gl_account: l.gl_account, department: l.department,
       funding_source: l.funding_source, project: l.project || "", cost_centre: l.cost_centre || "", original_amount: amount, phasing, notes: l.notes || "",
@@ -115,135 +156,296 @@ export default function BudgetDetail() {
         ...MONTHS_FY.map((m, i) => ({ header: m, value: (l: any) => (l.phasing || [])[i] || 0, format: "money" as const })),
       ],
     });
+  // Same permission and error handling as the shared Export button, offered from the "More" menu.
+  const canExport = can(["export_budgets", "export_reports", "manage_budgets"]);
+  const exportAs = async (format: "xlsx" | "pdf" | "csv") => {
+    try {
+      await doExport(format);
+    } catch (e: any) {
+      toast.error(e?.message || "Export failed");
+    }
+  };
 
-  if (doc.isLoading) return <div className="p-6"><ListSkeleton rows={8} /></div>;
-  if (!b) return <div className="p-6"><EmptyState icon={FileSpreadsheet} title="Budget not found" text="It may have been deleted." /></div>;
+  // ------------------------------------------------------------------ table views (UI only)
+  const term = search.trim().toLowerCase();
+  const shown = items.filter((l) => !term || `${l.code} ${l.name} ${l.expand?.gl_account?.code} ${l.expand?.gl_account?.name} ${l.expand?.department?.name} ${l.expand?.funding_source?.code} ${l.expand?.project?.code || ""}`.toLowerCase().includes(term));
+  React.useEffect(() => setPage(1), [term, view]);
+  const pageRows = shown.slice((page - 1) * perPage, page * perPage);
+  const shownSpend = shown.filter((l) => l.kind !== "revenue");
+  const hasRevenue = shown.length > shownSpend.length;
+
+  if (doc.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-64 w-full" />
+      </Page>
+    );
+  }
+  if (!b) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState icon={FileSpreadsheet} text="This budget is not available. It may have been deleted, or your role cannot see it." action={<ButtonLink to={LIST}>Back to budgets</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
+
+  const approval: any = b.expand?.approval;
+  const isApprover = approval?.status === "pending" && String(approval.pending_approvers || "").split(",").includes(me?.id);
+  const stepName = approval?.status === "pending" ? approval.steps?.[approval.current_level]?.name : null;
+  const returnNote = [...trail.actions].reverse().find((a: any) => a.action === "return")?.comment;
+  const approved = b.status === "approved";
+  const fy = b.expand?.fiscal_year;
+
+  // Live use of this budget's spending lines (approved budgets only).
+  const live = approved && usage.data ? items.filter((l) => l.kind !== "revenue").map((l) => figures[l.id]).filter(Boolean) as BudgetLineUsage[] : [];
+  const liveSum = (k: "budget" | "committed" | "actual" | "available") => live.reduce((a, f) => a + f[k], 0);
+  const liveBudget = liveSum("budget");
+  const liveUsed = liveSum("committed") + liveSum("actual");
+
+  const openLine = (l: any) => setEditing({ ...l, phasing: l.phasing || [] });
+  const addLine = () => setEditing({ kind: "expense", department: b.department || "", phasing: [], original_amount: "" });
+
+  const primary = editable ? (
+    <Button variant="primary" icon={Send} onClick={() => run(() => budgetApi.budgetAction(b.id, "submit"), `${b.number} submitted for approval`)} loading={busy} disabled={!items.length}>Submit for approval</Button>
+  ) : approved ? (
+    <ButtonLink to="/dashboard/budget/revisions/new" variant={can("manage_budgets") ? "primary" : "secondary"} icon={GitCompareArrows}>Revise this budget</ButtonLink>
+  ) : null;
+  const secondary = editable ? (
+    <>
+      <Button icon={Plus} onClick={addLine}>Add line</Button>
+      <Button icon={Upload} onClick={() => setImportOpen(true)}>Import from Excel</Button>
+    </>
+  ) : null;
+  const more: MenuItem[] = [
+    { label: "Export to Excel", icon: FileSpreadsheet, onSelect: () => exportAs("xlsx"), hidden: !canExport, disabled: !items.length },
+    { label: "Export to PDF", icon: FileText, onSelect: () => exportAs("pdf"), hidden: !canExport, disabled: !items.length },
+    { label: "Export to CSV", icon: Sheet, onSelect: () => exportAs("csv"), hidden: !canExport, disabled: !items.length },
+    { label: "Cancel budget", icon: Ban, danger: true, onSelect: () => setCancelOpen(true), hidden: !(can("manage_budgets") && ["draft", "returned", "pending_approval"].includes(b.status)) },
+  ];
+
+  const amountColumns: Column<any>[] = [
+    { key: "code", header: "Line", nowrap: true, cell: (l) => <DocNo value={l.code} className="font-semibold text-ims-text" />, sub: (l) => `${l.expand?.gl_account?.code || ""} ${l.expand?.gl_account?.name || ""} · ${KIND_LABEL[l.kind] || l.kind}` },
+    { key: "department", header: "Department", clamp: true, cell: (l) => l.expand?.department?.name || "—" },
+    {
+      key: "funding",
+      header: "Funding / project",
+      cell: (l) => (
+        <>
+          {l.expand?.funding_source?.code || "—"}
+          {l.expand?.project && <span className="text-ims-muted"> · {l.expand.project.code}</span>}
+        </>
+      ),
+    },
+    {
+      key: "amount",
+      header: "Annual amount (RWF)",
+      numeric: true,
+      cell: (l) => <span className="font-semibold"><Num value={amountOf(l)} /></span>,
+      sub: (l) => (l.revised_amount && l.revised_amount !== l.original_amount ? `Original ${fmtNumber(l.original_amount)}` : null),
+      total: <Num value={shownSpend.reduce((a, l) => a + amountOf(l), 0)} />,
+    },
+    ...(approved
+      ? [{
+          key: "use",
+          header: "Use",
+          cell: (l: any) => (figures[l.id] && l.kind !== "revenue" ? <UseBar line={figures[l.id]} compact /> : <span className="text-t-small text-ims-muted">{l.kind === "revenue" ? "Revenue line" : "—"}</span>),
+        } as Column<any>]
+      : []),
+  ];
+  const phasingColumns: Column<any>[] = [
+    { key: "code", header: "Line", nowrap: true, cell: (l) => <DocNo value={l.code} className="font-semibold text-ims-text" />, sub: (l) => (l.kind === "revenue" ? "Revenue" : undefined) },
+    ...MONTHS_FY.map((m, i) => ({
+      key: m,
+      header: m,
+      numeric: true,
+      cell: (l: any) => <Num value={(l.phasing || [])[i] || 0} />,
+      total: <Num value={shownSpend.reduce((a, l) => a + ((l.phasing || [])[i] || 0), 0)} />,
+    })),
+    { key: "year", header: "Year (RWF)", numeric: true, className: "font-semibold", cell: (l) => <Num value={amountOf(l)} />, total: <Num value={shownSpend.reduce((a, l) => a + amountOf(l), 0)} /> },
+  ];
 
   return (
-    <DocumentPage chatter={<Chatter items={toChatter(trail.actions, trail.audit)} />}>
-      <ControlBar
-        breadcrumbs={[{ title: "Budget", link: "/dashboard/budget" }, { title: "Budgets", link: "/dashboard/budget/budgets" }, { title: b.number }]}
-        steps={STEPS}
-        current={b.status === "returned" ? "draft" : b.status}
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to budgets", to: LIST }}
+        number={b.number}
+        type={`Budget${fy?.name ? ` · ${fy.name}` : ""}`}
+        status={DOC_STATUS[b.status]?.label || b.status}
+        statusNote={stepName ? `At “${stepName}”` : DOC_STATUS[b.status]?.note}
+        title={b.name}
+        facts={[
+          b.expand?.prepared_by?.name ? { label: "Prepared by", value: b.expand.prepared_by.name } : null,
+          b.expand?.department?.name,
+          <strong key="total" className="font-bold text-ims-text">{fmtMoney(b.total)}</strong>,
+          `${fmtNumber(b.line_count)} line${b.line_count === 1 ? "" : "s"}`,
+          b.approved_at ? { label: "Approved", value: fmtDate(b.approved_at) } : null,
+        ]}
         actions={
           <>
-            {editable && <Button size="sm" onClick={() => run(() => budgetApi.budgetAction(b.id, "submit"), `${b.number} submitted for approval`)} disabled={busy || !items.length}><Send size={14} /> Submit for approval</Button>}
-            {editable && <Button size="sm" variant="outline" onClick={() => setEditing({ kind: "expense", department: b.department || "", phasing: [], original_amount: "" })}><Plus size={14} /> Add line</Button>}
-            {editable && <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}><Upload size={14} /> Import from Excel</Button>}
-            <DecisionButtons approval={b.expand?.approval} number={b.number} onDone={refresh} />
-            <ExportMenu onExport={doExport} permission={["export_budgets", "export_reports", "manage_budgets"]} disabled={!items.length} />
-            {can("manage_budgets") && ["draft", "returned", "pending_approval"].includes(b.status) && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setCancelOpen(true)}><XCircle size={14} /> Cancel</Button>}
+            <MoreMenu items={more} />
+            {secondary}
+            <DecisionButtons approval={approval} number={b.number} onDone={refresh} />
+            {primary}
           </>
         }
       />
-      <Sheet ribbon={b.status === "rejected" ? { label: "Rejected", tone: "danger" } : b.status === "cancelled" ? { label: "Cancelled", tone: "neutral" } : b.status === "approved" ? { label: "Approved", tone: "success" } : b.status === "returned" ? { label: "Returned", tone: "warning" } : undefined}>
-        <SheetTitle kicker={`Budget · ${b.expand?.fiscal_year?.name || ""}`} title={<>{b.number}</>} badges={<StatusBadge status={b.status} map={DOC_STATUS} />} />
-        <p className="-mt-4 mb-5 text-[15px] font-medium text-slate-700">{b.name}</p>
-        <FieldGrid
-          left={[
-            { label: "Fiscal year", value: b.expand?.fiscal_year ? `${b.expand.fiscal_year.name} (${showDay(b.expand.fiscal_year.start_date)} – ${showDay(b.expand.fiscal_year.end_date)})` : "" },
-            { label: "Prepared by", value: b.expand?.prepared_by?.name },
-            { label: "Description", value: b.description },
-          ]}
-          right={[
-            { label: "Spending budget", value: <span className="font-semibold tabular-nums">{rwf(b.total)}</span>, hint: "Expense and capital lines" },
-            { label: "Revenue budget", value: <span className="tabular-nums">{rwf(revenue)}</span> },
-            { label: "Lines", value: b.line_count },
-            { label: "Approved", value: b.approved_at ? showDay(b.approved_at) : "" },
+
+      {isApprover && (
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+          <Clock size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Waiting for your decision{stepName ? ` at step “${stepName}”` : ""}. Approve it, return it for changes, or reject it.</span>
+        </p>
+      )}
+      {b.status === "returned" && editable && (
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-orange/30 bg-ims-orange-bg px-4 py-3 text-t-body text-ims-orange">
+          <CornerUpLeft size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Returned for changes{returnNote ? `: “${returnNote}”` : ""}. Correct the lines and submit it again.</span>
+        </p>
+      )}
+
+      {live.length > 0 && (
+        <KpiBand
+          loading={usage.isLoading}
+          items={[
+            { label: "Revised budget", value: fmtMoneyShort(liveBudget), sub: "Spending lines" },
+            { label: "Committed", value: fmtMoneyShort(liveSum("committed")), sub: "Open orders" },
+            { label: "Actual", value: fmtMoneyShort(liveSum("actual")), sub: "Spent" },
+            { label: "Available", value: fmtMoneyShort(liveSum("available")), tone: liveSum("available") < 0 ? "danger" : "success", sub: `${liveBudget ? Math.round((liveUsed / liveBudget) * 1000) / 10 : 0}% used` },
           ]}
         />
-        <Notebook
-          tabs={[{ key: "lines", label: "Budget lines", count: items.length }, { key: "phasing", label: "Monthly phasing" }, { key: "documents", label: "Documents", count: (b.attachments || []).length }, { key: "approval", label: "Approval" }]}
-          active={tab}
-          onChange={setTab}
-        />
-        <div className="pt-4">
-          {tab === "lines" && (lines.isLoading ? <ListSkeleton rows={6} /> : !items.length ? (
-            <EmptyState icon={ListTree} title="No lines yet" text="Add lines one by one or import them from the Excel template." action={editable && <Button size="sm" onClick={() => setImportOpen(true)}><Upload size={14} /> Import from Excel</Button>} />
+      )}
+
+      <Tabs
+        label="Budget sections"
+        active={tab}
+        onChange={(k) => setTab(k as TabKey)}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "lines", label: "Budget lines", count: items.length },
+          { key: "approvals", label: "Approvals" },
+          { key: "documents", label: "Documents", count: (b.attachments || []).length },
+          { key: "activity", label: "Activity" },
+        ]}
+      />
+
+      {tab === "details" && (
+        <Card>
+          <CardHeader title="Budget" />
+          <Details
+            columns={3}
+            items={[
+              { label: "Fiscal year", value: fy?.name, hint: fy ? `${fmtDate(fy.start_date)} – ${fmtDate(fy.end_date)}` : undefined },
+              { label: "Department", value: b.expand?.department?.name },
+              { label: "Prepared by", value: b.expand?.prepared_by?.name },
+              { label: "Spending budget", value: fmtMoney(b.total), hint: "Expense and capital lines" },
+              { label: "Revenue budget", value: fmtMoney(revenue), hint: "Expected income" },
+              { label: "Lines", value: fmtNumber(b.line_count) },
+              { label: "Created", value: fmtDateTime(b.created) },
+              { label: "Approved", value: b.approved_at ? fmtDate(b.approved_at) : null },
+              { label: "Description", value: b.description ? <span className="whitespace-pre-line">{b.description}</span> : null, wide: true },
+            ]}
+          />
+        </Card>
+      )}
+
+      {tab === "lines" && (
+        <Card padded={false}>
+          <div className="px-5 pt-5">
+            <CardHeader
+              className="mb-0"
+              title="Budget lines"
+              subtitle={view === "phasing" ? "Monthly amounts from July to June, in RWF." : approved ? "Annual amount per line. Open a line for its commitments and actuals." : editable ? "Annual amount per line. Open a line to change it." : "Annual amount per line."}
+              action={
+                <Segmented
+                  ariaLabel="Show"
+                  className="w-full sm:w-auto"
+                  value={view}
+                  onChange={(v) => setView(v as "amounts" | "phasing")}
+                  options={[{ value: "amounts", label: "Annual amounts" }, { value: "phasing", label: "Monthly phasing" }]}
+                />
+              }
+            />
+          </div>
+          {lines.isLoading || items.length > 0 ? (
+            <>
+              <FilterBar
+                search={{ value: search, onChange: setSearch, placeholder: "Search line, account or department" }}
+                right={<span className="text-t-small tabular-nums text-ims-muted">{fmtNumber(shown.length)} of {fmtNumber(items.length)} lines</span>}
+              />
+              <div className="border-t border-ims-divider">
+                <DataTable
+                  columns={view === "phasing" ? phasingColumns : amountColumns}
+                  rows={pageRows}
+                  rowKey={(l) => l.id}
+                  loading={lines.isLoading}
+                  onRowClick={approved && usage.data ? (l) => figures[l.id] && setDrill(figures[l.id]) : editable ? openLine : undefined}
+                  rowActions={editable ? () => [
+                    { label: "Edit", icon: Pencil, onSelect: openLine },
+                    { label: "Remove", icon: Trash2, danger: true, onSelect: (l: any) => setRemoving(l) },
+                  ] : undefined}
+                  totalLabel={hasRevenue ? "Spending total" : "Total"}
+                  minWidth={view === "phasing" ? 1560 : 900}
+                  caption="Budget lines"
+                  empty={<EmptyState compact icon={Search} text="No line matches. Clear the search." />}
+                  footer={shown.length > 15 ? <Pager page={page} perPage={perPage} total={shown.length} onPage={setPage} onPerPage={(n) => { setPerPage(n); setPage(1); }} /> : undefined}
+                />
+              </div>
+              {hasRevenue && <p className="border-t border-ims-divider px-5 py-3 text-t-small text-ims-muted">Revenue lines are listed but not counted in the spending total.</p>}
+            </>
           ) : (
-            <div className="max-h-[620px] overflow-auto">
-              <table className="dnr-grid w-full min-w-[900px]">
-                <thead className="sticky top-0 z-10 bg-white">
-                  <tr><th>Line</th><th>Department</th><th>Funding / project</th><th className="text-right">Annual amount</th>{b.status === "approved" && <th>Utilisation</th>}{editable && <th />}</tr>
-                </thead>
-                <tbody>
-                  {items.map((l) => {
-                    const f = figures[l.id];
-                    return (
-                      <tr key={l.id} className={cn(f && "cursor-pointer hover:bg-slate-50")} onClick={() => f && setDrill(f)}>
-                        <td>
-                          <span className="block font-mono text-[12.5px] font-semibold text-slate-800">{l.code}</span>
-                          <span className="block text-[12px] text-slate-500">{l.expand?.gl_account?.code} {l.expand?.gl_account?.name} · {KIND_LABEL[l.kind]}</span>
-                        </td>
-                        <td className="text-[12.5px]">{l.expand?.department?.name}</td>
-                        <td className="text-[12.5px]">{l.expand?.funding_source?.code}{l.expand?.project && <span className="text-slate-500"> · {l.expand.project.code}</span>}</td>
-                        <td className="text-right font-medium tabular-nums">{rwf(l.revised_amount || l.original_amount)}{l.revised_amount && l.revised_amount !== l.original_amount ? <span className="block text-[11px] text-slate-400">original {rwf(l.original_amount)}</span> : null}</td>
-                        {b.status === "approved" && <td>{f && l.kind !== "revenue" ? <UseBar line={f} compact /> : <span className="text-[12px] text-slate-400">{l.kind === "revenue" ? "revenue" : "—"}</span>}</td>}
-                        {editable && (
-                          <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                            <span className="inline-flex gap-0.5">
-                              <button type="button" onClick={() => setEditing({ ...l, phasing: l.phasing || [] })} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={`Edit ${l.code}`}><Pencil size={14} /></button>
-                              <button type="button" onClick={() => run(() => pocketbase.collection("budget_lines").delete(l.id), `Line ${l.code} removed`)} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${l.code}`}><Trash2 size={14} /></button>
-                            </span>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ))}
-          {tab === "phasing" && (
-            <div className="overflow-x-auto">
-              <table className="dnr-grid w-full min-w-[1100px] text-[12px]">
-                <thead><tr><th>Line</th>{MONTHS_FY.map((m) => <th key={m} className="text-right">{m}</th>)}<th className="text-right">Year</th></tr></thead>
-                <tbody>
-                  {items.map((l) => (
-                    <tr key={l.id}>
-                      <td className="font-mono font-semibold">{l.code}</td>
-                      {MONTHS_FY.map((m, i) => <td key={m} className="text-right tabular-nums text-slate-600">{Math.round(((l.phasing || [])[i] || 0) / 1000).toLocaleString()}k</td>)}
-                      <td className="text-right font-semibold tabular-nums">{Math.round((l.revised_amount || l.original_amount) / 1000).toLocaleString()}k</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <EmptyState
+              icon={ListTree}
+              text={editable ? "No lines yet. Add them one by one or import them from the Excel template." : "No lines on this budget."}
+              action={editable ? <Button variant="primary" icon={Upload} onClick={() => setImportOpen(true)}>Import from Excel</Button> : undefined}
+            />
           )}
-          {tab === "documents" && <DocumentUploads collection="budgets" record={b} canAdd={can(["manage_budgets", "approve_budgets"])} canRemove={can("manage_budgets") && EDITABLE.includes(b.status)} onChange={refresh} hint="Budget submissions, council resolutions, assumptions…" />}
-          {tab === "approval" && <ApprovalTracker approval={b.expand?.approval} actions={trail.actions} />}
-        </div>
-      </Sheet>
+        </Card>
+      )}
+
+      {tab === "approvals" && <ApprovalTracker approval={approval} actions={trail.actions} />}
+
+      {tab === "documents" && (
+        <Card>
+          <CardHeader title="Documents" subtitle="Budget submissions, council resolutions and assumptions." />
+          <DocumentUploads collection="budgets" record={b} canAdd={can(["manage_budgets", "approve_budgets"])} canRemove={can("manage_budgets") && EDITABLE.includes(b.status)} onChange={refresh} hint="Budget submissions, council resolutions, assumptions…" />
+        </Card>
+      )}
+
+      {tab === "activity" && <Chatter items={toChatter(trail.actions, trail.audit)} />}
 
       <LineEditor value={editing} onChange={setEditing} reference={ref.data} busy={busy} onSave={saveLine} />
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} budget={b} reference={ref.data} onDone={() => { setImportOpen(false); refresh(); }} />
-      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-        <CancelBody onCancel={(reason) => run(() => budgetApi.budgetAction(b.id, "cancel", reason), `${b.number} cancelled`).then(() => setCancelOpen(false))} onClose={() => setCancelOpen(false)} />
-      </Dialog>
+      <ConfirmDialog
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        title={`Cancel ${b.number}?`}
+        description="Any running approval stops. The budget stays on record as cancelled."
+        confirmLabel="Cancel budget"
+        danger
+        reason={{ label: "Reason", placeholder: "Why is this budget cancelled?" }}
+        onConfirm={async (reason) => {
+          const ok = await run(() => budgetApi.budgetAction(b.id, "cancel", reason), `${b.number} cancelled`);
+          if (!ok) throw new Error("not cancelled");
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(removing)}
+        onClose={() => setRemoving(null)}
+        title={`Remove line ${removing?.code || ""}?`}
+        description={`It is taken out of ${b.number}. You can add it again while the budget is a draft.`}
+        confirmLabel="Remove"
+        danger
+        onConfirm={async () => {
+          const ok = await run(() => pocketbase.collection("budget_lines").delete(removing.id), `Line ${removing.code} removed`);
+          if (!ok) throw new Error("not removed");
+        }}
+      />
       <LineLedgerDialog line={drill} onClose={() => setDrill(null)} />
-      {b.status === "approved" && (
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={() => navigate("/dashboard/budget/revisions/new")}><Wallet size={14} /> Revise this budget</Button>
-        </div>
-      )}
-    </DocumentPage>
-  );
-}
-
-function CancelBody({ onCancel, onClose }: { onCancel: (reason: string) => void; onClose: () => void }) {
-  const [reason, setReason] = React.useState("");
-  return (
-    <DialogContent className="max-w-md bg-white">
-      <DialogHeader>
-        <DialogTitle>Cancel this budget?</DialogTitle>
-        <DialogDescription>Any running approval stops. The budget stays on record as cancelled.</DialogDescription>
-      </DialogHeader>
-      <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" className="h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-primary" />
-      <DialogFooter className="gap-2">
-        <Button variant="outline" onClick={onClose}>Keep</Button>
-        <Button variant="danger" disabled={!reason.trim()} onClick={() => onCancel(reason.trim())}>Cancel budget</Button>
-      </DialogFooter>
-    </DialogContent>
+    </Page>
   );
 }
 
@@ -255,70 +457,83 @@ function LineEditor({ value, onChange, reference, busy, onSave }: { value: any; 
   const phasing: number[] = value.phasing?.length === 12 ? value.phasing : [];
   const sum = phasing.reduce((a, v) => a + (Number(v) || 0), 0);
   return (
-    <FormDialog open onClose={() => onChange(null)} icon={ListTree} wide title={value.id ? `Edit ${value.code}` : "New budget line"} description="A line is the unit of budget control: account × department × funding source × project." submitLabel="Save line" busy={busy} onSubmit={onSave}>
-      <FormBlock icon={ListTree} title="Line">
+    <Modal
+      open
+      onClose={() => (busy ? undefined : onChange(null))}
+      size="lg"
+      title={value.id ? `Edit ${value.code}` : "New budget line"}
+      description="A line is the unit of budget control: account × department × funding source × project."
+      footer={
+        <>
+          <Button onClick={() => onChange(null)} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={onSave} loading={busy}>Save line</Button>
+        </>
+      }
+    >
+      <ModalSection title="Line">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Code" required hint="e.g. FIN-5201-MC"><input value={value.code || ""} onChange={(e) => set({ code: e.target.value.toUpperCase() })} className={cn(inputCls, "font-mono")} /></Field>
+          <Field label="Code" required htmlFor="bl-code" hint="For example FIN-5201-MC">
+            <Input id="bl-code" value={value.code || ""} onChange={(e) => set({ code: e.target.value.toUpperCase() })} className="font-mono" />
+          </Field>
           <Field label="Type" required>
-            <Segmented value={value.kind || "expense"} onChange={(k) => set({ kind: k, gl_account: "" })} options={[{ value: "expense", label: "Expense" }, { value: "capital", label: "Capital" }, { value: "revenue", label: "Revenue" }]} />
+            <Segmented ariaLabel="Type" value={value.kind || "expense"} onChange={(k) => set({ kind: k, gl_account: "" })} options={[{ value: "expense", label: "Expense" }, { value: "capital", label: "Capital" }, { value: "revenue", label: "Revenue" }]} />
           </Field>
-          <Field label="GL account" required className="sm:col-span-2">
-            <select value={value.gl_account || ""} onChange={(e) => set({ gl_account: e.target.value })} className={inputCls}>
-              <option value="">Choose…</option>
+          <Field label="GL account" required htmlFor="bl-account" className="sm:col-span-2">
+            <Select id="bl-account" value={value.gl_account || ""} onChange={(e) => set({ gl_account: e.target.value })}>
+              <option value="">Choose the account…</option>
               {accounts.map((a: any) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-            </select>
+            </Select>
           </Field>
-          <Field label="Department" required>
-            <select value={value.department || ""} onChange={(e) => set({ department: e.target.value })} className={inputCls}>
-              <option value="">Choose…</option>
+          <Field label="Department" required htmlFor="bl-department">
+            <Select id="bl-department" value={value.department || ""} onChange={(e) => set({ department: e.target.value })}>
+              <option value="">Choose the department…</option>
               {(reference?.departments || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            </Select>
           </Field>
-          <Field label="Funding source" required>
-            <select value={value.funding_source || ""} onChange={(e) => set({ funding_source: e.target.value, project: "" })} className={inputCls}>
-              <option value="">Choose…</option>
+          <Field label="Funding source" required htmlFor="bl-funding">
+            <Select id="bl-funding" value={value.funding_source || ""} onChange={(e) => set({ funding_source: e.target.value, project: "" })}>
+              <option value="">Choose the funding source…</option>
               {(reference?.funding || []).map((f: any) => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}
-            </select>
+            </Select>
           </Field>
-          <Field label="Project">
-            <select value={value.project || ""} onChange={(e) => set({ project: e.target.value })} className={inputCls}>
-              <option value="">— None —</option>
+          <Field label="Project" htmlFor="bl-project">
+            <Select id="bl-project" value={value.project || ""} onChange={(e) => set({ project: e.target.value })}>
+              <option value="">No project</option>
               {(reference?.projects || []).filter((p: any) => !value.funding_source || !p.funding_source || p.funding_source === value.funding_source).map((p: any) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-            </select>
+            </Select>
           </Field>
-          <Field label="Cost centre">
-            <select value={value.cost_centre || ""} onChange={(e) => set({ cost_centre: e.target.value })} className={inputCls}>
-              <option value="">— None —</option>
+          <Field label="Cost centre" htmlFor="bl-centre">
+            <Select id="bl-centre" value={value.cost_centre || ""} onChange={(e) => set({ cost_centre: e.target.value })}>
+              <option value="">No cost centre</option>
               {(reference?.centres || []).map((c: any) => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
-            </select>
+            </Select>
           </Field>
-          <Field label="Annual amount (RWF)" required>
-            <input type="number" min={0} step={1000} value={value.original_amount ?? ""} onChange={(e) => set({ original_amount: e.target.value })} className={cn(inputCls, "text-right tabular-nums")} />
+          <Field label="Annual amount" required htmlFor="bl-amount">
+            <MoneyInput id="bl-amount" value={value.original_amount === "" || value.original_amount === null || value.original_amount === undefined ? "" : Number(value.original_amount)} onChange={(n) => set({ original_amount: n })} />
           </Field>
         </div>
-      </FormBlock>
-      <FormBlock icon={CalendarRange} title="Monthly phasing (July → June)">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => set({ phasing: spread(amount) })} disabled={!amount}>Spread evenly</Button>
+      </ModalSection>
+      <ModalSection title="Monthly phasing" description="July to June. Left empty, the annual amount is spread evenly.">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button size="sm" onClick={() => set({ phasing: spread(amount) })} disabled={!amount}>Spread evenly</Button>
           {phasing.length === 12 && (
-            <span className={cn("text-[12.5px]", sum === amount ? "text-emerald-700" : "text-red-700")}>
-              Months total {rwf(sum)} {sum === amount ? "— matches the annual amount" : `— ${rwf(amount - sum)} to allocate`}
+            <span className={cn("text-t-small", sum === amount ? "text-ims-success" : "text-ims-danger")}>
+              Months total {fmtMoney(sum)}{sum === amount ? ", matching the annual amount." : `. ${fmtMoney(amount - sum)} still to allocate.`}
             </span>
           )}
-          {!phasing.length && <span className="text-[12.5px] text-slate-500">Left empty, the amount is spread evenly.</span>}
         </div>
         {phasing.length === 12 && (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
             {MONTHS_FY.map((m, i) => (
-              <label key={m} className="text-[12px] text-slate-600">
-                {m}
-                <input type="number" min={0} value={phasing[i]} onChange={(e) => set({ phasing: phasing.map((v, j) => (j === i ? e.target.value : v)) })} className={cn(inputCls, "mt-0.5 h-9 text-right tabular-nums")} />
-              </label>
+              <div key={m} className="min-w-0">
+                <label htmlFor={`bl-month-${i}`} className="mb-1 block text-t-small font-semibold text-ims-muted">{m}</label>
+                <Input id={`bl-month-${i}`} type="number" min={0} value={phasing[i]} onChange={(e) => set({ phasing: phasing.map((v, j) => (j === i ? e.target.value : v)) })} className="h-9 px-2 text-right tabular-nums" />
+              </div>
             ))}
           </div>
         )}
-      </FormBlock>
-    </FormDialog>
+      </ModalSection>
+    </Modal>
   );
 }
 
@@ -364,7 +579,7 @@ function ImportDialog({ open, onClose, budget, reference, onDone }: { open: bool
       });
     setRows(parsed);
     setFileName(file.name);
-    if (!parsed.length) setError("No lines found. Use the template: one line per row with a code.");
+    if (!parsed.length) setError("No lines found. Use the template: one line per row, each with a code.");
   }
 
   async function submit() {
@@ -384,44 +599,46 @@ function ImportDialog({ open, onClose, budget, reference, onDone }: { open: bool
   }
 
   const total = rows.reduce((a, r) => a + (r.kind === "revenue" ? 0 : r.amount), 0);
+  const columns: Column<any>[] = [
+    { key: "code", header: "Code", nowrap: true, cell: (r) => <DocNo value={r.code} /> },
+    { key: "kind", header: "Type", cell: (r) => KIND_LABEL[r.kind] || r.kind },
+    { key: "gl_account", header: "Account", nowrap: true, cell: (r) => r.gl_account || "—" },
+    { key: "department", header: "Department", cell: (r) => r.department || "—" },
+    { key: "funding", header: "Funding", cell: (r) => r.funding_source || "—" },
+    { key: "project", header: "Project", cell: (r) => r.project || "—" },
+    { key: "amount", header: "Amount (RWF)", numeric: true, cell: (r) => <Num value={r.amount} />, total: <Num value={total} /> },
+  ];
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col bg-white">
-        <DialogHeader>
-          <DialogTitle>Import budget lines from Excel</DialogTitle>
-          <DialogDescription>Every row is validated first; if one has a problem nothing is saved and you see which rows to fix.</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={template}><Download size={14} /> Download template</Button>
-          <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-btn border border-slate-200 bg-white px-3 text-[12.7px] font-medium text-slate-700 hover:bg-slate-50">
-            <Upload size={14} /> {fileName || "Choose the filled template…"}
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => e.target.files?.[0] && read(e.target.files[0])} />
-          </label>
-          <label className="ml-auto flex items-center gap-2 text-[12.5px] text-slate-600">
-            <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-primary" /> Replace the current lines
-          </label>
-        </div>
-        {error && <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800">{error}</p>}
-        {rows.length > 0 && (
-          <>
-            <p className="text-[12.5px] text-slate-600">{rows.length} lines read · spending total <strong>{rwf(total)}</strong></p>
-            <div className="min-h-0 flex-1 overflow-auto rounded-md border border-slate-200">
-              <table className="dnr-grid w-full text-[12px]">
-                <thead><tr><th>Code</th><th>Type</th><th>Account</th><th>Dept.</th><th>Funding</th><th>Project</th><th className="text-right">Amount</th></tr></thead>
-                <tbody>
-                  {rows.slice(0, 200).map((r, i) => (
-                    <tr key={i}><td className="font-mono">{r.code}</td><td>{r.kind}</td><td>{r.gl_account}</td><td>{r.department}</td><td>{r.funding_source}</td><td>{r.project}</td><td className="text-right tabular-nums">{rwf(r.amount)}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Close</Button>
-          <Button onClick={submit} disabled={!rows.length || busy}><FileSpreadsheet size={14} /> {busy ? "Validating…" : `Validate and import ${rows.length || ""} lines`}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={open}
+      onClose={() => (busy ? undefined : onClose())}
+      size="lg"
+      title="Import budget lines from Excel"
+      description="Every row is checked first. If one has a problem, nothing is saved and you see which rows to fix."
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>Close</Button>
+          <Button variant="primary" icon={FileSpreadsheet} onClick={submit} disabled={!rows.length} loading={busy}>{busy ? "Checking…" : rows.length ? `Check and import ${fmtNumber(rows.length)} lines` : "Check and import"}</Button>
+        </>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Button icon={Download} onClick={template}>Download template</Button>
+        <label className={cn(buttonClass({ variant: "secondary" }), "max-w-full cursor-pointer focus-within:ring-2 focus-within:ring-ims-focus focus-within:ring-offset-2")}>
+          <Upload size={16} aria-hidden /> <span className="truncate">{fileName || "Choose the filled template…"}</span>
+          <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={(e) => e.target.files?.[0] && read(e.target.files[0])} />
+        </label>
+        <Checkbox label="Replace the current lines" checked={replace} onChange={setReplace} className="items-center sm:ml-auto" />
+      </div>
+      {error && <p role="alert" className="rounded-control border border-ims-danger/30 bg-ims-danger-bg px-3 py-2 text-t-small text-ims-danger">{error}</p>}
+      {rows.length > 0 && (
+        <>
+          <p className="text-t-small text-ims-muted">{fmtNumber(rows.length)} lines read · spending total <strong className="font-semibold text-ims-text">{fmtMoney(total)}</strong>{rows.length > 200 ? " · the first 200 are shown" : ""}</p>
+          <div className="overflow-hidden rounded-control border border-ims-border">
+            <DataTable columns={columns} rows={rows.slice(0, 200)} rowKey={(_, i) => String(i)} totalLabel="Spending total" minWidth={640} caption="Lines read from the file" />
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }

@@ -5,29 +5,58 @@
  * Heads of department automatically see their own department only.
  */
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
 import { useQuery } from "react-query";
-import { BarChart3, FileText, Landmark, PieChart, Search } from "lucide-react";
+import { BarChart3, FileText, PieChart, Search, ShieldAlert } from "lucide-react";
 import { usePermissions } from "@/context/auth.context";
 import { BudgetLineUsage, KIND_LABEL, budgetApi } from "@/lib/budget";
-import { rwf } from "@/lib/ims";
+import { errorMessage } from "@/lib/procurement";
 import { exportReport } from "@/lib/exporter";
-import { Button } from "@/components/ui/button";
-import { Badge, EmptyState, ListSkeleton, MetricGroup, PageHeader, Panel } from "@/components/enterprise/ui";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ListSkeleton } from "@/components/enterprise/ui";
 import ExportMenu from "@/components/enterprise/ExportMenu";
+import { Segmented } from "@/components/portal/kit";
+import {
+  Card,
+  CardHeader,
+  Checkbox,
+  Column,
+  DataTable,
+  DocNo,
+  EmptyState,
+  FilterBar,
+  FilterSelect,
+  KpiBand,
+  Num,
+  Page,
+  PageHeader,
+  Pager,
+  fmtMoney,
+  fmtMoneyShort,
+  fmtNumber,
+} from "@/components/ims";
 import { LineLedgerDialog, UseBadge, UseBar, UseChart, UseLegend, groupUsage } from "@/components/budget/BudgetKit";
-import { cn } from "@/utils";
 
-const M = (n: number) => (Math.abs(n) >= 1e9 ? `RWF ${(n / 1e9).toFixed(2)}B` : `RWF ${(n / 1e6).toFixed(1)}M`);
+const CONTROL_LABEL: Record<string, string> = { block: "hard stop", warn: "warning only", none: "off" };
+const pctOf = (part: number, whole: number) => `${((part / (whole || 1)) * 100).toFixed(1)}% of the budget`;
 
 export default function BudgetOverview() {
-  const navigate = useNavigate();
   const { can } = usePermissions();
   const [filters, setFilters] = React.useState<Record<string, string>>({});
   const [groupBy, setGroupBy] = React.useState<"department" | "funding" | "project" | "kind">("department");
   const [search, setSearch] = React.useState("");
   const [onlyRisk, setOnlyRisk] = React.useState(false);
   const [drill, setDrill] = React.useState<BudgetLineUsage | null>(null);
+  const [page, setPage] = React.useState(1);
+  const [perPage, setPerPage] = React.useState(15);
+  const linesRef = React.useRef<HTMLDivElement>(null);
+  // Phones: narrower chart labels so the bars keep their room.
+  const [narrow, setNarrow] = React.useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches);
+  React.useEffect(() => {
+    const m = window.matchMedia("(max-width: 639px)");
+    const on = () => setNarrow(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
   const q = useQuery(["budget-usage", filters], () => budgetApi.usage(filters), { keepPreviousData: true });
   const u = q.data;
   const t = u?.thresholds || { amber: 75, red: 90 };
@@ -38,6 +67,11 @@ export default function BudgetOverview() {
   const term = search.trim().toLowerCase();
   const rows = spend.filter((i) => (!onlyRisk || i.status !== "green") && (!term || `${i.code} ${i.name} ${i.department_name} ${i.account}`.toLowerCase().includes(term)));
   const options = (key: keyof BudgetLineUsage, label: keyof BudgetLineUsage) => Array.from(new Map((u?.items || []).filter((i) => i[key]).map((i) => [i[key] as string, i[label] as string])).entries()).sort((a, b) => a[1].localeCompare(b[1]));
+
+  // Client-side pages over the filtered lines; back to page 1 when the filters change.
+  React.useEffect(() => setPage(1), [term, onlyRisk, filters]);
+  const pageRows = rows.slice((page - 1) * perPage, page * perPage);
+  const sum = (k: "budget" | "committed" | "actual" | "available") => rows.reduce((a, i) => a + i[k], 0);
 
   const doExport = (format: "xlsx" | "pdf" | "csv") =>
     exportReport({
@@ -59,83 +93,110 @@ export default function BudgetOverview() {
       ],
     });
 
-  const sel = "h-9 rounded-md border border-slate-200 bg-white px-2.5 text-[12.5px] outline-none focus:border-primary";
+  const nameOf = (key: keyof BudgetLineUsage, label: keyof BudgetLineUsage, id?: string) => options(key, label).find(([k]) => k === id)?.[1] || "…";
+  const chips = [
+    ...(filters.department ? [{ key: "department", label: `Department: ${nameOf("department", "department_name", filters.department)}`, onRemove: () => setFilters({ ...filters, department: "" }) }] : []),
+    ...(filters.funding_source ? [{ key: "funding", label: `Funding: ${nameOf("funding_source", "funding_code", filters.funding_source)}`, onRemove: () => setFilters({ ...filters, funding_source: "" }) }] : []),
+    ...(filters.project ? [{ key: "project", label: `Project: ${nameOf("project", "project_code", filters.project)}`, onRemove: () => setFilters({ ...filters, project: "" }) }] : []),
+  ];
+
+  const showRisk = () => {
+    setOnlyRisk(true);
+    linesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const columns: Column<BudgetLineUsage>[] = [
+    {
+      key: "code",
+      header: "Line",
+      clamp: true,
+      width: "260px",
+      cell: (i) => <DocNo value={i.code} className="font-semibold text-ims-text" />,
+      sub: (i) => `${i.account} · ${i.funding_code}${i.project_code ? ` · ${i.project_code}` : ""}${i.kind === "capital" ? " · capital" : ""}`,
+    },
+    { key: "department", header: "Department", width: "170px", cell: (i) => i.department_name },
+    { key: "budget", header: "Budget (RWF)", numeric: true, cell: (i) => <Num value={i.budget} />, total: <Num value={sum("budget")} /> },
+    { key: "committed", header: "Committed (RWF)", numeric: true, cell: (i) => <Num value={i.committed} />, total: <Num value={sum("committed")} /> },
+    { key: "actual", header: "Actual (RWF)", numeric: true, cell: (i) => <Num value={i.actual} />, total: <Num value={sum("actual")} /> },
+    { key: "available", header: "Available (RWF)", numeric: true, cell: (i) => <span className="font-semibold"><Num value={i.available} negativeRed /></span>, total: <Num value={sum("available")} negativeRed /> },
+    {
+      key: "use",
+      header: "Use",
+      cell: (i) => <UseBar line={i} compact />,
+      sub: (i) => (i.overrides > 0 ? <span className="inline-flex items-center gap-1 font-semibold text-ims-warning"><ShieldAlert size={13} aria-hidden /> {i.overrides} DAF override{i.overrides > 1 ? "s" : ""}</span> : null),
+    },
+  ];
+
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Budget" }]}
         title="Budget overview"
-        description={u ? `${u.fiscal_year.name} · live utilisation: available = budget − commitments − actuals${u.scope === "department" ? " · your department" : ""}` : "Live budget utilisation"}
-        breadcrumbs={[{ title: "Budget", link: "/dashboard/budget" }]}
-        actions={
-          <>
-            <ExportMenu onExport={doExport} permission={["export_budgets", "export_reports"]} disabled={!rows.length} />
-            <Button variant="outline" onClick={() => navigate("/dashboard/budget/reports")}><BarChart3 size={14} /> Reports</Button>
-            {can("manage_budgets") && <Button onClick={() => navigate("/dashboard/budget/budgets")}><FileText size={14} /> Budgets</Button>}
-          </>
-        }
+        subtitle="What is committed, spent and still available on every budget line, live."
+        meta={u ? `${u.fiscal_year.name}${u.scope === "department" ? " · your department only" : ""} · available = budget − commitments − actuals` : undefined}
+        primary={can("manage_budgets") ? { label: "Budgets", icon: FileText, to: "/dashboard/budget/budgets" } : undefined}
+        secondary={[{ label: "Reports", icon: BarChart3, to: "/dashboard/budget/reports" }]}
+        actions={<ExportMenu onExport={doExport} permission={["export_budgets", "export_reports"]} disabled={!rows.length} size="default" />}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <select value={filters.department || ""} onChange={(e) => setFilters({ ...filters, department: e.target.value })} className={sel} aria-label="Department">
-          <option value="">All departments</option>
-          {options("department", "department_name").map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select value={filters.funding_source || ""} onChange={(e) => setFilters({ ...filters, funding_source: e.target.value })} className={sel} aria-label="Funding source">
-          <option value="">All funding sources</option>
-          {options("funding_source", "funding_code").map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select value={filters.project || ""} onChange={(e) => setFilters({ ...filters, project: e.target.value })} className={sel} aria-label="Project">
-          <option value="">All projects</option>
-          {options("project", "project_code").map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        {Object.values(filters).some(Boolean) && <button type="button" onClick={() => setFilters({})} className="text-[12.5px] font-medium text-slate-500 hover:text-slate-800">Clear</button>}
-        {u && <span className="ml-auto text-[12px] text-slate-500">Budget control: <strong className="text-slate-700">{u.control === "block" ? "hard stop" : u.control === "warn" ? "warning only" : "off"}</strong></span>}
-      </div>
+      <Card padded={false}>
+        <FilterBar
+          chips={chips}
+          onClear={() => setFilters({})}
+          right={u ? <span className="text-t-small text-ims-muted">Budget control: <strong className="font-semibold text-ims-text">{CONTROL_LABEL[u.control] || u.control}</strong></span> : undefined}
+        >
+          <FilterSelect label="Department" value={filters.department || ""} onChange={(v) => setFilters({ ...filters, department: v })} options={options("department", "department_name").map(([value, label]) => ({ value, label }))} className="[&_select]:w-[220px]" />
+          <FilterSelect label="Funding source" value={filters.funding_source || ""} onChange={(v) => setFilters({ ...filters, funding_source: v })} options={options("funding_source", "funding_code").map(([value, label]) => ({ value, label }))} />
+          <FilterSelect label="Project" value={filters.project || ""} onChange={(v) => setFilters({ ...filters, project: v })} options={options("project", "project_code").map(([value, label]) => ({ value, label }))} />
+        </FilterBar>
+      </Card>
 
-      <MetricGroup
-        title="Spending budget"
-        icon={PieChart}
+      <KpiBand
         loading={q.isLoading}
-        columns={4}
-        metrics={[
-          { label: "Approved budget (revised)", value: u ? M(u.totals.budget) : "—", sub: `${spend.length} lines` },
-          { label: "Committed (open orders)", value: u ? M(u.totals.committed) : "—", sub: u ? `${((u.totals.committed / (u.totals.budget || 1)) * 100).toFixed(1)}% of budget` : "" },
-          { label: "Actual (spent)", value: u ? M(u.totals.actual) : "—", sub: u ? `${((u.totals.actual / (u.totals.budget || 1)) * 100).toFixed(1)}% of budget` : "" },
-          { label: "Available", value: u ? M(u.totals.available) : "—", tone: u && u.totals.available < 0 ? "danger" : "success", sub: u ? `${u.totals.used_pct}% used` : "" },
+        items={[
+          { label: "Approved budget (revised)", value: u ? fmtMoneyShort(u.totals.budget) : "—", sub: `${fmtNumber(spend.length)} spending lines` },
+          { label: "Committed (open orders)", value: u ? fmtMoneyShort(u.totals.committed) : "—", sub: u ? pctOf(u.totals.committed, u.totals.budget) : "" },
+          { label: "Actual (spent)", value: u ? fmtMoneyShort(u.totals.actual) : "—", sub: u ? pctOf(u.totals.actual, u.totals.budget) : "" },
+          { label: "Available", value: u ? fmtMoneyShort(u.totals.available) : "—", tone: u && u.totals.available < 0 ? "danger" : "success", sub: u ? `${u.totals.used_pct}% used` : "" },
+          { label: "Lines at risk", value: fmtNumber(risk.length), tone: risk.some((i) => i.status === "red") ? "danger" : risk.length ? "warning" : "default", sub: `${t.amber}% used or more`, onClick: risk.length ? showRisk : undefined },
         ]}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Panel
-          title="Utilisation"
-          subtitle="Actual and committed against the budget — hover a bar for the figures"
-          action={
-            <div className="flex gap-1 rounded-md bg-slate-100 p-0.5" role="radiogroup" aria-label="Group by">
-              {([["department", "Department"], ["funding", "Funding"], ["project", "Project"], ["kind", "Type"]] as const).map(([k, l]) => (
-                <button key={k} type="button" role="radio" aria-checked={groupBy === k} onClick={() => setGroupBy(k)} className={cn("h-7 rounded px-2.5 text-[12px] font-medium", groupBy === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>{l}</button>
-              ))}
-            </div>
-          }
-        >
-          {q.isLoading ? <ListSkeleton rows={6} /> : !groups.length ? <EmptyState icon={PieChart} text="No approved budget lines for these filters." /> : (
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader
+            title="Budget use"
+            subtitle="Actual and committed against the budget. Point at a bar for the figures."
+            action={
+              <Segmented
+                ariaLabel="Group by"
+                className="w-full sm:w-auto"
+                value={groupBy}
+                onChange={(v) => setGroupBy(v as typeof groupBy)}
+                options={[{ value: "department", label: "Department" }, { value: "funding", label: "Funding" }, { value: "project", label: "Project" }, { value: "kind", label: "Type" }]}
+              />
+            }
+          />
+          {q.isLoading ? <Skeleton className="h-[260px] w-full" /> : !groups.length ? <EmptyState icon={PieChart} text="No approved budget lines for these filters." /> : (
             <>
-              <UseChart rows={groups} labelWidth={groupBy === "department" ? 190 : 110} />
-              <div className="mt-3 border-t border-slate-100 pt-3"><UseLegend thresholds={t} /></div>
+              <UseChart rows={groups} labelWidth={narrow ? (groupBy === "department" ? 150 : 80) : groupBy === "department" ? 190 : 110} />
+              <div className="mt-3 border-t border-ims-divider pt-3"><UseLegend thresholds={t} /></div>
             </>
           )}
-        </Panel>
-        <div className="space-y-4">
-          <Panel title="Lines at risk" subtitle={`${t.amber}% used or more`}>
+        </Card>
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHeader title="Lines at risk" subtitle={`${t.amber}% used or more, highest first.`} link={risk.length > 8 ? { label: "Show all", onClick: showRisk } : undefined} />
             {q.isLoading ? <ListSkeleton rows={4} /> : !risk.length ? (
-              <p className="py-4 text-center text-[13px] text-slate-500">Every line is below {t.amber}%.</p>
+              <EmptyState compact icon={PieChart} text={`Every line is below ${t.amber}% used.`} />
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="-mx-2 divide-y divide-ims-divider">
                 {risk.slice(0, 8).map((i) => (
                   <li key={i.id}>
-                    <button type="button" onClick={() => setDrill(i)} className="flex w-full items-center gap-3 py-2 text-left hover:bg-slate-50">
+                    <button type="button" onClick={() => setDrill(i)} className="flex w-full items-center gap-3 rounded-control px-2 py-2.5 text-left hover:bg-ims-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus">
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-medium text-slate-900">{i.code}</span>
-                        <span className="block truncate text-[11.5px] text-slate-500">{i.department_name} · {rwf(i.available)} left</span>
+                        <span className="block truncate font-mono text-t-small font-semibold text-ims-text">{i.code}</span>
+                        <span className="block truncate text-t-small text-ims-muted">{i.department_name} · {fmtMoney(i.available)} left</span>
                       </span>
                       <UseBadge status={i.status} pct={i.used_pct} />
                     </button>
@@ -143,62 +204,54 @@ export default function BudgetOverview() {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
           {revenue.length > 0 && (
-            <Panel title={<span className="flex items-center gap-2"><Landmark size={15} className="text-slate-400" /> Revenue budget</span>} subtitle="Expected income by source">
-              <ul className="space-y-1.5 text-[13px]">
+            <Card>
+              <CardHeader title="Revenue budget" subtitle="Expected income by source." />
+              <ul className="space-y-2 text-t-body">
                 {revenue.map((r) => (
-                  <li key={r.id} className="flex justify-between gap-3">
-                    <span className="truncate text-slate-700">{r.account.replace(/^\d+\s/, "")} <span className="text-slate-400">· {r.funding_code}</span></span>
-                    <span className="shrink-0 font-medium tabular-nums text-slate-900">{M(r.budget)}</span>
+                  <li key={r.id} className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate text-ims-body">{r.account.replace(/^\d+\s/, "")} <span className="text-ims-faint">· {r.funding_code}</span></span>
+                    <span className="shrink-0 font-semibold tabular-nums text-ims-text">{fmtMoneyShort(r.budget)}</span>
                   </li>
                 ))}
               </ul>
-            </Panel>
+            </Card>
           )}
         </div>
       </div>
 
-      <Panel title="Budget lines" subtitle="Click a line for its commitments and actuals" bodyClassName="px-0 pb-0">
-        <div className="flex flex-col gap-2 border-b border-slate-100 px-4 pb-3 sm:flex-row sm:items-center">
-          <label className="relative w-full sm:w-72">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Line, account, department…" aria-label="Search lines" className="h-9 w-full rounded-md border border-slate-200 pl-9 pr-3 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </label>
-          <label className="flex items-center gap-2 text-[12.5px] text-slate-600">
-            <input type="checkbox" checked={onlyRisk} onChange={(e) => setOnlyRisk(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-primary" /> Only lines at risk
-          </label>
-          <span className="text-[12px] text-slate-500 sm:ml-auto">{rows.length} of {spend.length} lines</span>
-        </div>
-        {q.isLoading ? <div className="p-4"><ListSkeleton rows={8} /></div> : (
-          <div className="max-h-[560px] overflow-auto">
-            <table className="dnr-grid w-full min-w-[980px]">
-              <thead className="sticky top-0 z-10 bg-white">
-                <tr><th>Line</th><th>Department</th><th>Funding</th><th className="text-right">Budget</th><th className="text-right">Committed</th><th className="text-right">Actual</th><th className="text-right">Available</th><th>Utilisation</th></tr>
-              </thead>
-              <tbody>
-                {rows.map((i) => (
-                  <tr key={i.id} onClick={() => setDrill(i)} className="cursor-pointer hover:bg-slate-50">
-                    <td>
-                      <span className="block font-mono text-[12.5px] font-semibold text-slate-800">{i.code}</span>
-                      <span className="block max-w-[260px] truncate text-[12px] text-slate-500">{i.account}{i.kind === "capital" ? " · capital" : ""}</span>
-                    </td>
-                    <td className="text-[12.5px] text-slate-700">{i.department_name}</td>
-                    <td className="text-[12.5px]">{i.funding_code}{i.project_code && <span className="text-slate-400"> · {i.project_code}</span>}{i.overrides > 0 && <Badge tone="warning" className="ml-1.5">{i.overrides} override</Badge>}</td>
-                    <td className="text-right tabular-nums">{rwf(i.budget)}</td>
-                    <td className="text-right tabular-nums text-slate-600">{rwf(i.committed)}</td>
-                    <td className="text-right tabular-nums text-slate-600">{rwf(i.actual)}</td>
-                    <td className={cn("text-right font-medium tabular-nums", i.available < 0 ? "text-red-600" : "text-slate-900")}>{rwf(i.available)}</td>
-                    <td><UseBar line={i} compact /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!rows.length && <EmptyState icon={Search} text="No line matches." />}
+      <div ref={linesRef} className="scroll-mt-4">
+        <Card padded={false}>
+          <div className="px-5 pt-5">
+            <CardHeader className="mb-0" title="Budget lines" subtitle="Open a line for its commitments and actuals." />
           </div>
-        )}
-      </Panel>
+          <FilterBar
+            search={{ value: search, onChange: setSearch, placeholder: "Search line, account or department" }}
+            right={<span className="text-t-small tabular-nums text-ims-muted">{fmtNumber(rows.length)} of {fmtNumber(spend.length)} lines</span>}
+          >
+            <Checkbox label="Only lines at risk" checked={onlyRisk} onChange={setOnlyRisk} className="items-center" />
+          </FilterBar>
+          <div className="border-t border-ims-divider">
+            <DataTable
+              columns={columns}
+              rows={pageRows}
+              rowKey={(i) => i.id}
+              loading={q.isLoading}
+              error={q.isError ? new Error(errorMessage(q.error)) : undefined}
+              onRetry={() => q.refetch()}
+              fetching={q.isFetching}
+              onRowClick={(i) => setDrill(i)}
+              totalLabel={rows.length > pageRows.length ? `Total of ${fmtNumber(rows.length)} lines` : "Total"}
+              minWidth={1000}
+              caption="Budget lines"
+              empty={<EmptyState icon={Search} text={spend.length ? "No line matches. Clear the search or the risk filter." : "No approved budget lines for these filters."} />}
+              footer={rows.length > 15 ? <Pager page={page} perPage={perPage} total={rows.length} onPage={setPage} onPerPage={(n) => { setPerPage(n); setPage(1); }} /> : undefined}
+            />
+          </div>
+        </Card>
+      </div>
       <LineLedgerDialog line={drill} onClose={() => setDrill(null)} />
-    </div>
+    </Page>
   );
 }

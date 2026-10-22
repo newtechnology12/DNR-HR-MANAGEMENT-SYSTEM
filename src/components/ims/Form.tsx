@@ -278,7 +278,8 @@ export function ErrorSummary({ errors, title = "Check these fields before you su
                 onClick={(ev) => {
                   ev.preventDefault();
                   const el = document.getElementById(e.field!);
-                  el?.scrollIntoView({ block: "center", behavior: "smooth" });
+                  // "nearest" keeps a dialog panel in place; only its scrolling body moves.
+                  el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
                   (el as HTMLElement | null)?.focus?.();
                 }}
                 className="underline underline-offset-2 hover:no-underline"
