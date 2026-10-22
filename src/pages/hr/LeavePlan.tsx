@@ -2,21 +2,23 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "react-query";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
-import { CalendarRange, CheckCheck, Download, FileSpreadsheet, Info, Pencil, Save, Upload, X } from "lucide-react";
+import { CheckCheck, Download, FileSpreadsheet, Pencil, Save, Upload, X } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge, MetricGroup, PageHeader } from "@/components/enterprise/ui";
 import { errorMessage } from "@/lib/procurement";
 import { LeaveBalance, MONTHS, MONTHS_SHORT, PlanRow, leaveApi } from "@/lib/hr";
 import { cn } from "@/utils";
-import { Field, inputCls, useMe } from "@/components/portal/kit";
+import { useMe } from "@/components/portal/kit";
+import { Button, Card, Column, DataTable, Field, FilterBar, FilterSelect, Input, KpiBand, Modal, Page, PageHeader, Pill, StatusPill, fmtDate } from "@/components/ims";
 
 const thisYear = new Date().getFullYear();
 const n1 = (v: number) => (Math.round((Number(v) || 0) * 10) / 10).toString();
 type Draft = Record<string, Record<number, number>>;
+
+/** Grid cell styles (the plan grid is a spreadsheet, so it keeps its own compact table on the kit tokens). */
+const TH = "h-11 whitespace-nowrap border-b border-r border-ims-divider bg-ims-thead px-2 text-t-small font-semibold text-ims-muted";
+const TD = "border-b border-r border-ims-divider px-2 py-1.5";
 
 export default function LeavePlan() {
   const queryClient = useQueryClient();
@@ -98,7 +100,7 @@ export default function LeavePlan() {
     ]);
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-    ws["!cols"] = header.map((h, i) => ({ wch: i === 2 ? 26 : i === 1 ? 28 : i === 3 ? 26 : i === 0 ? 17 : 10 }));
+    ws["!cols"] = header.map((_h, i) => ({ wch: i === 2 ? 26 : i === 1 ? 28 : i === 3 ? 26 : i === 0 ? 17 : 10 }));
     ws["!freeze"] = { xSplit: 3, ySplit: 1 } as any;
     XLSX.utils.book_append_sheet(wb, ws, "Leave plan");
     XLSX.utils.book_append_sheet(
@@ -118,176 +120,201 @@ export default function LeavePlan() {
     XLSX.writeFile(wb, template ? `leave-plan-${year}-template.xlsx` : `leave-plan-${year}.xlsx`);
   }
 
+  const changedCount = Object.keys(draft).length;
+  const deptName = (departments.data || []).find((d: any) => d.id === department)?.name;
+
   return (
-    <div className="space-y-4 px-4 py-4 sm:px-6">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "HR & payroll" }, { label: "Leave plan" }]}
         title={`Annual leave plan ${year}`}
-        description="Every employee's entitlement, planned leave by month, and leave actually taken. Weekends and public holidays are not counted."
-        breadcrumbs={[{ title: "HR", link: "/dashboard/hr/leaves" }, { title: "Leave plan", link: "/dashboard/hr/leave-plan" }]}
-        actions={
-          editing ? (
-            <>
-              <Button size="sm" variant="outline" onClick={() => { setDraft({}); setEditing(false); }}><X size={14} /> Cancel</Button>
-              <Button size="sm" disabled={saving} onClick={save}><Save size={14} /> {saving ? "Saving…" : `Save changes${Object.keys(draft).length ? ` (${Object.keys(draft).length})` : ""}`}</Button>
-            </>
-          ) : (
-            <>
-              <Button size="sm" variant="outline" onClick={() => exportExcel(false)} disabled={!q.data}><Download size={14} /> Export</Button>
-              {(canManage || isHR) && <Button size="sm" variant="outline" onClick={() => setImporting(true)}><Upload size={14} /> Import</Button>}
-              {canManage && selected.length > 0 && <Button size="sm" variant="outline" onClick={approve}><CheckCheck size={14} /> Approve {selected.length}</Button>}
-              <Button size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> Edit plan</Button>
-            </>
-          )
+        subtitle="Each employee's entitlement, the leave planned month by month and the leave taken."
+        primary={
+          editing
+            ? { label: saving ? "Saving…" : `Save changes${changedCount ? ` (${changedCount})` : ""}`, icon: Save, onClick: save, loading: saving }
+            : { label: "Edit plan", icon: Pencil, onClick: () => setEditing(true) }
+        }
+        secondary={
+          editing
+            ? [{ label: "Cancel", icon: X, onClick: () => { setDraft({}); setEditing(false); } }]
+            : canManage && selected.length > 0
+              ? [{ label: `Approve ${selected.length} plan${selected.length === 1 ? "" : "s"}`, icon: CheckCheck, onClick: approve }]
+              : []
         }
       />
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <select className={cn(inputCls, "sm:w-32")} value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Year">
-          {[thisYear + 1, thisYear, thisYear - 1, thisYear - 2].map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select className={cn(inputCls, "sm:w-72")} value={department} onChange={(e) => setDepartment(e.target.value)} aria-label="Department">
-          <option value="">All departments</option>
-          {(departments.data || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-        <input type="search" className={cn(inputCls, "sm:w-64")} placeholder="Search staff" value={search} onChange={(e) => setSearch(e.target.value)} />
-      </div>
-
-      <MetricGroup
-        title="Summary"
-        icon={CalendarRange}
-        columns={4}
+      <KpiBand
         loading={q.isLoading}
-        metrics={[
-          { label: "Staff", value: totals.staff, sub: `${totals.approved} plans approved` },
+        items={[
+          { label: "Staff", value: totals.staff, sub: `${totals.approved} plan${totals.approved === 1 ? "" : "s"} approved` },
           { label: "Total entitlement", value: `${n1(totals.entitlement)} days`, sub: `${n1(totals.entitlement / Math.max(1, totals.staff))} per person` },
-          { label: "Planned", value: `${n1(totals.planned)} days`, sub: `${Math.round((totals.planned / Math.max(1, totals.entitlement)) * 100)}% of entitlement`, tone: totals.planned > totals.entitlement ? "danger" : "default" },
+          { label: "Planned", value: `${n1(totals.planned)} days`, sub: `${Math.round((totals.planned / Math.max(1, totals.entitlement)) * 100)}% of the entitlement`, tone: totals.planned > totals.entitlement ? "danger" : "default" },
           { label: "Taken", value: `${n1(totals.taken)} days`, sub: `${n1(totals.entitlement - totals.taken)} days remaining`, tone: "success" },
         ]}
       />
 
-      <details className="rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[12.5px] text-slate-600">
-        <summary className="flex cursor-pointer items-center gap-1.5 font-medium text-slate-800"><Info size={14} /> How the entitlement is calculated</summary>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li><span className="font-medium">Annual accrual:</span> {cfg?.accrual ?? 1.5} working days for each month of service in the year (18 days for a full year; prorated from the joining month).</li>
-          <li><span className="font-medium">Seniority:</span> +{cfg?.extra ?? 1} day for every {cfg?.every ?? 3} completed years of service{cfg?.maxSeniority ? `, up to ${cfg.maxSeniority} days` : ""}.</li>
-          <li><span className="font-medium">Carried over:</span> unused days of the previous year, up to {cfg?.maxCarry ?? 5} days (HR can override per person).</li>
-          <li><span className="font-medium">Adjustment:</span> manual correction by HR with a written reason.</li>
-          <li>Rules and public holidays are set in Settings → Leave policy, following Law N° 66/2018 regulating labour in Rwanda.</li>
-        </ul>
-      </details>
+      <Card padded={false} className="overflow-hidden">
+        <FilterBar
+          search={{ value: search, onChange: setSearch, placeholder: "Search staff or department" }}
+          chips={department ? [{ key: "department", label: `Department: ${deptName || "selected"}`, onRemove: () => setDepartment("") }] : []}
+          onClear={() => setDepartment("")}
+          right={
+            <>
+              {(canManage || isHR) && !editing && <Button size="sm" icon={Upload} onClick={() => setImporting(true)}>Import</Button>}
+              <Button size="sm" icon={Download} onClick={() => exportExcel(false)} disabled={!q.data}>Export</Button>
+            </>
+          }
+        >
+          <FilterSelect label="Year" all={false} value={String(year)} onChange={(v) => setYear(Number(v))} options={[thisYear + 1, thisYear, thisYear - 1, thisYear - 2].map((y) => ({ value: String(y), label: String(y) }))} className="[&_select]:w-[110px]" />
+          <FilterSelect label="Department" value={department} onChange={setDepartment} options={(departments.data || []).map((d: any) => ({ value: d.id, label: d.name }))} className="[&_select]:w-[220px]" />
+        </FilterBar>
 
-      {q.isLoading ? (
-        <Skeleton className="h-96 w-full" />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-card">
-          <table className="dnr-grid w-full min-w-[1400px] border-separate border-spacing-0 text-[12.5px]">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">
-                {canManage && <th className="sticky left-0 z-20 w-9 border-b border-slate-200 bg-slate-50 px-2 py-2" />}
-                <th className={cn("sticky z-20 min-w-[210px] border-b border-slate-200 bg-slate-50 px-3 py-2", canManage ? "left-9" : "left-0")}>Staff</th>
-                <th className="border-b border-slate-200 px-2 py-2 text-right" title="Completed years of service at 1 January">Yrs</th>
-                <th className="border-b border-slate-200 px-2 py-2 text-right">Carry</th>
-                <th className="border-b border-slate-200 px-2 py-2 text-right">Entitl.</th>
-                {MONTHS_SHORT.map((m, i) => (
-                  <th key={m} className={cn("w-[58px] border-b border-slate-200 px-1 py-2 text-center", month === i + 1 && "bg-primary/10 text-primaryDark")}>{m}</th>
-                ))}
-                <th className="border-b border-slate-200 px-2 py-2 text-right">Planned</th>
-                <th className="border-b border-slate-200 px-2 py-2 text-right">Taken</th>
-                <th className="border-b border-slate-200 px-2 py-2 text-right">Balance</th>
-                <th className="border-b border-slate-200 px-2 py-2">Plan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((r) => {
-                const planned = plannedOf(r);
-                const over = planned > r.entitlement + 0.01;
-                const editable = editing && canEditRow(r);
-                const changed = Boolean(draft[r.employee.id]);
-                return (
-                  <tr key={r.employee.id} className={cn("group", changed ? "bg-amber-50/60" : "hover:bg-slate-50/70")}>
-                    {canManage && (
-                      <td className="sticky left-0 z-[1] border-b border-slate-100 bg-inherit px-2 py-1.5 text-center group-hover:bg-slate-50">
-                        {r.plan && r.plan.status !== "approved" && r.employee.id !== me.data?.id && (
-                          <input type="checkbox" aria-label={`Select ${r.employee.name}`} checked={selected.includes(r.employee.id)} onChange={(e) => setSelected((s) => (e.target.checked ? [...s, r.employee.id] : s.filter((x) => x !== r.employee.id)))} />
-                        )}
-                      </td>
-                    )}
-                    <td className={cn("sticky z-[1] border-b border-slate-100 bg-white px-3 py-1.5 group-hover:bg-slate-50", canManage ? "left-9" : "left-0", changed && "bg-amber-50")}>
-                      <button type="button" className="text-left" onClick={() => setDetail(r)}>
-                        <span className="block font-medium text-slate-900 hover:text-primaryDark">{r.employee.name}</span>
-                        <span className="block text-[11.5px] text-slate-500">{r.employee.department_name}</span>
-                      </button>
-                    </td>
-                    <td className="border-b border-slate-100 px-2 py-1.5 text-right tabular-nums text-slate-600">{r.years_of_service}</td>
-                    <td className="border-b border-slate-100 px-2 py-1.5 text-right tabular-nums text-slate-600" title={r.carried_auto ? "Automatic from last year" : "Set by HR"}>{n1(r.carried_over)}</td>
-                    <td className="border-b border-slate-100 px-2 py-1.5 text-right font-semibold tabular-nums" title={`Accrual ${r.accrual} + seniority ${r.seniority_days} + carried ${r.carried_over} + adjustment ${r.adjustment}`}>{n1(r.entitlement)}</td>
-                    {Array.from({ length: 12 }, (_, i) => {
-                      const m = i + 1;
-                      const v = val(r, m);
-                      const t = Number(r.taken_months?.[m] || 0);
-                      return (
-                        <td key={m} className={cn("border-b border-slate-100 px-1 py-1 text-center tabular-nums", month === m && "bg-primary/5")}>
-                          {editable ? (
-                            <input
-                              type="number"
-                              min={0}
-                              max={31}
-                              step={0.5}
-                              inputMode="decimal"
-                              value={v || ""}
-                              placeholder="0"
-                              onChange={(e) => setCell(r, m, e.target.value)}
-                              className="h-8 w-[50px] rounded border border-slate-200 text-center text-[12.5px] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                              aria-label={`${r.employee.name} ${MONTHS[i]}`}
-                            />
-                          ) : (
-                            <span className={cn("inline-flex min-w-[28px] justify-center rounded px-1 py-0.5", v ? "bg-sky-100 font-medium text-sky-900" : "text-slate-300")}>{v ? n1(v) : "·"}</span>
-                          )}
-                          {t > 0 && <span className="block text-[10.5px] font-medium text-emerald-700" title="Approved leave taken">✓ {n1(t)}</span>}
-                        </td>
-                      );
-                    })}
-                    <td className={cn("border-b border-slate-100 px-2 py-1.5 text-right font-medium tabular-nums", over && "text-red-600")} title={over ? "More than the entitlement" : ""}>{n1(planned)}</td>
-                    <td className="border-b border-slate-100 px-2 py-1.5 text-right tabular-nums text-emerald-700">{n1(r.taken)}{r.pending ? <span className="block text-[10.5px] text-amber-700">+{n1(r.pending)} pending</span> : null}</td>
-                    <td className={cn("border-b border-slate-100 px-2 py-1.5 text-right font-semibold tabular-nums", r.balance < 0 ? "text-red-600" : "text-slate-900")}>{n1(r.balance)}</td>
-                    <td className="border-b border-slate-100 px-2 py-1.5">
-                      {!r.plan ? <span className="text-[11.5px] text-slate-400">No plan</span> : r.plan.status === "approved" ? <Badge tone="success">Approved</Badge> : <Badge tone="warning">Draft</Badge>}
+        {editing && (
+          <p className="border-t border-ims-divider bg-ims-warning-bg px-4 py-2 text-t-small text-ims-warning sm:px-5">
+            Edit mode: change any month to shift days. Rows you changed are highlighted; nothing is saved until you choose Save changes.
+          </p>
+        )}
+
+        {q.isLoading ? (
+          <div className="border-t border-ims-divider p-5"><Skeleton className="h-96 w-full" /></div>
+        ) : (
+          <div className={cn("overflow-x-auto border-t border-ims-divider", q.isFetching && "opacity-60 transition-opacity")}>
+            <table className="w-full min-w-[1400px] border-separate border-spacing-0 text-t-small text-ims-text">
+              <caption className="sr-only">Annual leave plan {year}</caption>
+              <thead className="sticky top-0 z-10">
+                <tr className="text-left">
+                  {canManage && <th scope="col" className={cn(TH, "sticky left-0 z-20 w-9 px-2")}><span className="sr-only">Select</span></th>}
+                  <th scope="col" className={cn(TH, "sticky z-20 min-w-[210px] px-3", canManage ? "left-9" : "left-0")}>Staff</th>
+                  <th scope="col" className={cn(TH, "text-right")} title="Completed years of service at 1 January">Years</th>
+                  <th scope="col" className={cn(TH, "text-right")}>Carried</th>
+                  <th scope="col" className={cn(TH, "text-right")}>Entitled</th>
+                  {MONTHS_SHORT.map((m, i) => (
+                    <th key={m} scope="col" className={cn(TH, "w-[58px] px-1 text-center", month === i + 1 && "bg-ims-info-bg text-ims-primary")}>{m}</th>
+                  ))}
+                  <th scope="col" className={cn(TH, "text-right")}>Planned</th>
+                  <th scope="col" className={cn(TH, "text-right")}>Taken</th>
+                  <th scope="col" className={cn(TH, "text-right")}>Balance</th>
+                  <th scope="col" className={cn(TH, "border-r-0")}>Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length === 0 && (
+                  <tr>
+                    <td colSpan={canManage ? 21 : 20} className="px-6 py-12 text-center text-t-body text-ims-muted">
+                      {search || department ? "Nobody matches this search. Change the search or clear the filters." : "No staff to show for this year."}
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="bg-slate-50 text-[11.5px] font-semibold text-slate-700">
-                <td colSpan={canManage ? 5 : 4} className="sticky left-0 border-t-2 border-slate-200 bg-slate-50 px-3 py-2">Planned days / people per month</td>
-                {monthLoad.map((m, i) => (
-                  <td key={i} className="border-t-2 border-slate-200 px-1 py-2 text-center tabular-nums">
-                    <div className="mx-auto mb-1 h-8 w-4 overflow-hidden rounded-sm bg-slate-200/70" title={`${n1(m.days)} days, ${m.people} people`}>
-                      <div className="w-full bg-sky-500" style={{ height: `${(m.days / maxLoad) * 100}%`, marginTop: `${100 - (m.days / maxLoad) * 100}%` }} />
-                    </div>
-                    {n1(m.days)}
-                    <span className="block text-[10.5px] font-normal text-slate-500">{m.people} ppl</span>
-                  </td>
-                ))}
-                <td className="border-t-2 border-slate-200 px-2 py-2 text-right tabular-nums">{n1(totals.planned)}</td>
-                <td className="border-t-2 border-slate-200 px-2 py-2 text-right tabular-nums">{n1(totals.taken)}</td>
-                <td className="border-t-2 border-slate-200 px-2 py-2 text-right tabular-nums">{n1(totals.entitlement - totals.taken)}</td>
-                <td className="border-t-2 border-slate-200" />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-      <p className="flex flex-wrap items-center gap-3 text-[12px] text-slate-500">
-        <span className="inline-flex items-center gap-1"><span className="inline-block h-3 w-5 rounded bg-sky-100" /> planned days</span>
-        <span className="text-emerald-700">✓ days taken (approved leave)</span>
-        <span className="inline-flex items-center gap-1"><span className="inline-block h-3 w-5 rounded bg-primary/10" /> current month</span>
-        {editing && <span className="text-amber-700">Edit mode: change any month to shift days; rows you changed are highlighted.</span>}
-      </p>
+                )}
+                {items.map((r) => {
+                  const planned = plannedOf(r);
+                  const over = planned > r.entitlement + 0.01;
+                  const editable = editing && canEditRow(r);
+                  const changed = Boolean(draft[r.employee.id]);
+                  const rowBg = changed ? "bg-ims-warning-bg" : "bg-ims-card group-hover:bg-ims-hover";
+                  return (
+                    <tr key={r.employee.id} className="group">
+                      {canManage && (
+                        <td className={cn(TD, "sticky left-0 z-[1] text-center", rowBg)}>
+                          {r.plan && r.plan.status !== "approved" && r.employee.id !== me.data?.id && (
+                            <input type="checkbox" className="h-4 w-4 cursor-pointer rounded border-ims-field accent-ims-primary" aria-label={`Select ${r.employee.name}`} checked={selected.includes(r.employee.id)} onChange={(e) => setSelected((s) => (e.target.checked ? [...s, r.employee.id] : s.filter((x) => x !== r.employee.id)))} />
+                          )}
+                        </td>
+                      )}
+                      <td className={cn(TD, "sticky z-[1] px-3", canManage ? "left-9" : "left-0", rowBg)}>
+                        <button type="button" className="block text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus" onClick={() => setDetail(r)}>
+                          <span className="block text-t-body font-semibold text-ims-text hover:text-ims-link hover:underline">{r.employee.name}</span>
+                          <span className="block text-t-small text-ims-muted">{r.employee.department_name}</span>
+                        </button>
+                      </td>
+                      <td className={cn(TD, "text-right tabular-nums text-ims-body", rowBg)}>{r.years_of_service}</td>
+                      <td className={cn(TD, "text-right tabular-nums text-ims-body", rowBg)} title={r.carried_auto ? "Automatic from last year" : "Set by HR"}>{n1(r.carried_over)}</td>
+                      <td className={cn(TD, "text-right font-semibold tabular-nums", rowBg)} title={`Accrual ${r.accrual} + seniority ${r.seniority_days} + carried ${r.carried_over} + adjustment ${r.adjustment}`}>{n1(r.entitlement)}</td>
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const m = i + 1;
+                        const v = val(r, m);
+                        const t = Number(r.taken_months?.[m] || 0);
+                        return (
+                          <td key={m} className={cn(TD, "px-1 py-1 text-center tabular-nums", month === m ? "bg-ims-info-bg/50" : rowBg)}>
+                            {editable ? (
+                              <input
+                                type="number"
+                                min={0}
+                                max={31}
+                                step={0.5}
+                                inputMode="decimal"
+                                value={v || ""}
+                                placeholder="0"
+                                onChange={(e) => setCell(r, m, e.target.value)}
+                                className="h-8 w-[50px] rounded-md border border-ims-field bg-ims-card text-center text-t-small text-ims-text placeholder:text-ims-faint focus:border-ims-focus focus:outline-none focus:ring-2 focus:ring-ims-focus/25"
+                                aria-label={`${r.employee.name} ${MONTHS[i]}`}
+                              />
+                            ) : (
+                              <span className={cn("inline-flex min-w-[28px] justify-center rounded px-1 py-0.5", v ? "bg-ims-info-bg font-semibold text-ims-info" : "text-ims-field")}>{v ? n1(v) : "·"}</span>
+                            )}
+                            {t > 0 && <span className="block text-t-hint font-semibold text-ims-success" title="Approved leave taken">✓ {n1(t)}</span>}
+                          </td>
+                        );
+                      })}
+                      <td className={cn(TD, "text-right font-semibold tabular-nums", over && "text-ims-danger", rowBg)} title={over ? "More than the entitlement" : ""}>{n1(planned)}</td>
+                      <td className={cn(TD, "text-right tabular-nums text-ims-success", rowBg)}>
+                        {n1(r.taken)}
+                        {r.pending ? <span className="block text-t-hint text-ims-warning">+{n1(r.pending)} pending</span> : null}
+                      </td>
+                      <td className={cn(TD, "text-right font-semibold tabular-nums", r.balance < 0 ? "text-ims-danger" : "text-ims-text", rowBg)}>{n1(r.balance)}</td>
+                      <td className={cn(TD, "border-r-0", rowBg)}>
+                        {!r.plan ? <span className="text-t-small text-ims-faint">No plan</span> : <StatusPill status={r.plan.status === "approved" ? "Approved" : "Draft"} />}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {items.length > 0 && (
+                <tfoot>
+                  <tr className="bg-ims-thead text-t-small font-bold text-ims-text">
+                    <td colSpan={canManage ? 5 : 4} className="sticky left-0 border-r border-t-2 border-ims-border bg-ims-thead px-3 py-2">Planned days and people per month</td>
+                    {monthLoad.map((m, i) => (
+                      <td key={i} className="border-r border-t-2 border-ims-border px-1 py-2 text-center tabular-nums">
+                        <div className="mx-auto mb-1 flex h-8 w-4 flex-col justify-end overflow-hidden rounded-sm bg-ims-divider" title={`${n1(m.days)} days, ${m.people} people`}>
+                          <div className="w-full bg-ims-link" style={{ height: `${(m.days / maxLoad) * 100}%` }} />
+                        </div>
+                        {n1(m.days)}
+                        <span className="block text-t-hint font-normal text-ims-muted">{m.people} {m.people === 1 ? "person" : "people"}</span>
+                      </td>
+                    ))}
+                    <td className="border-r border-t-2 border-ims-border px-2 py-2 text-right tabular-nums">{n1(totals.planned)}</td>
+                    <td className="border-r border-t-2 border-ims-border px-2 py-2 text-right tabular-nums">{n1(totals.taken)}</td>
+                    <td className="border-r border-t-2 border-ims-border px-2 py-2 text-right tabular-nums">{n1(totals.entitlement - totals.taken)}</td>
+                    <td className="border-t-2 border-ims-border" />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
+        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-ims-divider px-4 py-3 text-t-small text-ims-muted sm:px-5" aria-label="Legend">
+          <li className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-5 rounded bg-ims-info-bg ring-1 ring-inset ring-ims-link/30" aria-hidden /> Planned days</li>
+          <li className="text-ims-success">✓ Days taken (approved leave)</li>
+          <li className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-5 rounded bg-ims-info-bg/50 ring-1 ring-inset ring-ims-border" aria-hidden /> Current month</li>
+          <li>Select a name to see how the entitlement is made up.</li>
+        </ul>
+      </Card>
+
+      <Card as="div" className="py-3.5 sm:py-3.5">
+        <details>
+          <summary className="cursor-pointer text-t-body font-bold text-ims-text">How the entitlement is calculated</summary>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-t-small text-ims-body">
+            <li><span className="font-semibold">Annual accrual:</span> {cfg?.accrual ?? 1.5} working days for each month of service in the year (18 days for a full year; prorated from the joining month).</li>
+            <li><span className="font-semibold">Seniority:</span> +{cfg?.extra ?? 1} day for every {cfg?.every ?? 3} completed years of service{cfg?.maxSeniority ? `, up to ${cfg.maxSeniority} days` : ""}.</li>
+            <li><span className="font-semibold">Carried over:</span> unused days of the previous year, up to {cfg?.maxCarry ?? 5} days (HR can override per person).</li>
+            <li><span className="font-semibold">Adjustment:</span> manual correction by HR with a written reason.</li>
+            <li>Weekends and public holidays are not counted. Rules and public holidays are set in Settings → Leave policy, following Law N° 66/2018 regulating labour in Rwanda.</li>
+          </ul>
+        </details>
+      </Card>
 
       {detail && <BalanceDialog row={detail} year={year} isHR={isHR} onClose={() => setDetail(null)} onSaved={() => { setDetail(null); queryClient.invalidateQueries(["leave-balances"]); }} />}
       {importing && q.data && <ImportDialog year={year} items={q.data.items} onClose={() => setImporting(false)} onDone={() => { setImporting(false); queryClient.invalidateQueries(["leave-balances"]); }} onTemplate={() => exportExcel(true)} />}
-    </div>
+    </Page>
   );
 }
 
@@ -296,6 +323,7 @@ function BalanceDialog({ row: r, year, isHR, onClose, onSaved }: { row: LeaveBal
   const [adj, setAdj] = React.useState(String(r.adjustment || 0));
   const [reason, setReason] = React.useState(r.adjustment_reason || "");
   const [busy, setBusy] = React.useState(false);
+  const [reasonError, setReasonError] = React.useState("");
   const lines: [string, string, string][] = [
     ["Annual accrual", `${r.months_of_service} month${r.months_of_service === 1 ? "" : "s"} of service in ${year}`, n1(r.accrual)],
     ["Seniority", `${r.years_of_service} completed year${r.years_of_service === 1 ? "" : "s"} of service`, `+${n1(r.seniority_days)}`],
@@ -303,11 +331,11 @@ function BalanceDialog({ row: r, year, isHR, onClose, onSaved }: { row: LeaveBal
     ["Adjustment", r.adjustment_reason || "—", `${r.adjustment >= 0 ? "+" : ""}${n1(r.adjustment)}`],
   ];
   async function save() {
-    if (Number(adj) !== r.adjustment && reason.trim().length < 5) return toast.error("Give a reason for the adjustment.");
+    if (Number(adj) !== r.adjustment && reason.trim().length < 5) return setReasonError("Give a reason for the adjustment (at least 5 characters).");
     setBusy(true);
     try {
       await leaveApi.savePlans(year, [{ employee: r.employee.id, months: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 1, Number(r.months?.[i + 1] || 0)])), carried_over: carry, adjustment: adj, adjustment_reason: reason }]);
-      toast.success("Entitlement updated");
+      toast.success(`Entitlement of ${r.employee.name} updated`);
       onSaved();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -315,44 +343,59 @@ function BalanceDialog({ row: r, year, isHR, onClose, onSaved }: { row: LeaveBal
       setBusy(false);
     }
   }
+  const row = (label: React.ReactNode, value: React.ReactNode, opts: { strong?: boolean; danger?: boolean; top?: boolean } = {}) => (
+    <tr className={cn(opts.top && "border-t-2 border-ims-text")}>
+      <td className={cn("py-2 pr-3", opts.strong ? "font-bold text-ims-text" : "text-ims-body")}>{label}</td>
+      <td className={cn("py-2 text-right tabular-nums", opts.strong && "font-bold", opts.danger && "text-ims-danger")}>{value}</td>
+    </tr>
+  );
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg bg-white">
-        <DialogHeader>
-          <DialogTitle>{r.employee.name} — leave {year}</DialogTitle>
-          <DialogDescription>{r.employee.department_name}{r.employee.joined_at ? ` · joined ${r.employee.joined_at.slice(0, 10)}` : ""}</DialogDescription>
-        </DialogHeader>
-        <table className="w-full text-[13px]">
-          <tbody className="divide-y divide-slate-100">
-            {lines.map(([k, d, v]) => (
-              <tr key={k}><td className="py-2 pr-2 font-medium text-slate-800">{k}<span className="block text-[12px] font-normal text-slate-500">{d}</span></td><td className="py-2 text-right tabular-nums">{v}</td></tr>
-            ))}
-            <tr className="border-t-2 border-slate-800 font-semibold"><td className="py-2">Entitlement</td><td className="py-2 text-right tabular-nums">{n1(r.entitlement)}</td></tr>
-            <tr><td className="py-1.5 text-slate-600">Taken (approved)</td><td className="py-1.5 text-right tabular-nums">−{n1(r.taken)}</td></tr>
-            <tr><td className="py-1.5 text-slate-600">Pending requests</td><td className="py-1.5 text-right tabular-nums">−{n1(r.pending)}</td></tr>
-            <tr className="font-semibold"><td className="py-2">Available</td><td className={cn("py-2 text-right tabular-nums", r.available < 0 && "text-red-600")}>{n1(r.available)}</td></tr>
-            <tr><td className="py-1.5 text-slate-600">Planned for the year</td><td className="py-1.5 text-right tabular-nums">{n1(r.planned)}</td></tr>
-          </tbody>
-        </table>
-        {isHR && (
-          <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3">
-            <Field label="Carried over (days)" hint="Overrides the automatic value">
-              <input type="number" min={0} step={0.5} className={inputCls} value={carry} onChange={(e) => setCarry(e.target.value)} />
-            </Field>
-            <Field label="Adjustment (days)" hint="Negative to reduce">
-              <input type="number" step={0.5} className={inputCls} value={adj} onChange={(e) => setAdj(e.target.value)} />
-            </Field>
-            <Field label="Reason for the adjustment" className="col-span-2">
-              <input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Days worked during the audit week, approved by the SG" />
-            </Field>
-          </div>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
-          {isHR && <Button disabled={busy} onClick={save}>Save</Button>}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open
+      onClose={busy ? () => undefined : onClose}
+      size="md"
+      title={`${r.employee.name} · leave ${year}`}
+      description={`${r.employee.department_name}${r.employee.joined_at ? ` · joined ${fmtDate(r.employee.joined_at)}` : ""}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>Close</Button>
+          {isHR && <Button variant="primary" loading={busy} onClick={save}>Save</Button>}
+        </>
+      }
+    >
+      <table className="w-full text-t-body text-ims-text">
+        <caption className="sr-only">How the entitlement is made up</caption>
+        <tbody className="divide-y divide-ims-divider">
+          {lines.map(([k, d, v]) => (
+            <tr key={k}>
+              <td className="py-2 pr-3">
+                <span className="block font-semibold text-ims-text">{k}</span>
+                <span className="block text-t-small text-ims-muted">{d}</span>
+              </td>
+              <td className="py-2 text-right tabular-nums">{v}</td>
+            </tr>
+          ))}
+          {row("Entitlement", n1(r.entitlement), { strong: true, top: true })}
+          {row("Taken (approved)", `−${n1(r.taken)}`)}
+          {row("Pending requests", `−${n1(r.pending)}`)}
+          {row("Available", n1(r.available), { strong: true, danger: r.available < 0 })}
+          {row("Planned for the year", n1(r.planned))}
+        </tbody>
+      </table>
+      {isHR && (
+        <div className="grid grid-cols-1 gap-4 rounded-control border border-ims-border bg-ims-thead p-4 sm:grid-cols-2">
+          <Field label="Carried over (days)" htmlFor="bal-carry" hint="Overrides the automatic value">
+            <Input id="bal-carry" type="number" min={0} step={0.5} value={carry} onChange={(e) => setCarry(e.target.value)} />
+          </Field>
+          <Field label="Adjustment (days)" htmlFor="bal-adj" hint="Negative to reduce">
+            <Input id="bal-adj" type="number" step={0.5} value={adj} onChange={(e) => { setAdj(e.target.value); setReasonError(""); }} />
+          </Field>
+          <Field label="Reason for the adjustment" htmlFor="bal-reason" className="sm:col-span-2" error={reasonError} hint="Required when the adjustment changes">
+            <Input id="bal-reason" value={reason} invalid={Boolean(reasonError)} onChange={(e) => { setReason(e.target.value); setReasonError(""); }} placeholder="e.g. Days worked during the audit week, approved by the SG" />
+          </Field>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -420,79 +463,89 @@ function ImportDialog({ year, items, onClose, onDone, onTemplate }: { year: numb
 
   const matched = (rows || []).filter((r) => r.match && !r.reason);
   const problems = (rows || []).filter((r) => !r.match || r.reason);
+  const columns: Column<Parsed>[] = [
+    { key: "line", header: "Row", numeric: true, width: "60px", cell: (r) => <span className="text-ims-muted">{r.line}</span> },
+    { key: "match", header: "Matched to", nowrap: true, cell: (r) => <span className="font-semibold">{r.match!.employee.name}</span> },
+    ...MONTHS_SHORT.map<Column<Parsed>>((m, i) => ({
+      key: m,
+      header: m,
+      align: "center",
+      className: "px-1.5 tabular-nums",
+      cell: (r) => <span className={cn(Number(r.match!.months?.[i + 1] || 0) !== r.months[i + 1] && "font-bold text-ims-warning")}>{r.months[i + 1] || ""}</span>,
+    })),
+    { key: "total", header: "Total", numeric: true, cell: (r) => Object.values(r.months).reduce((a, b) => a + b, 0) },
+  ];
   return (
-    <Dialog open onOpenChange={(o) => !o && progress < 0 && onClose()}>
-      <DialogContent className="flex max-h-[92vh] max-w-3xl flex-col bg-white">
-        <DialogHeader>
-          <DialogTitle>Import leave plan {year}</DialogTitle>
-          <DialogDescription>Upload the Excel template. Each row is matched to a person by Employee ID, email or name; you see the result before anything is saved.</DialogDescription>
-        </DialogHeader>
-        {!rows ? (
-          <div className="space-y-3">
-            <button type="button" onClick={onTemplate} className="flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5 text-left hover:bg-slate-50">
-              <FileSpreadsheet size={22} className="text-emerald-700" />
-              <span><span className="block text-[13.5px] font-medium">Download the template</span><span className="text-[12px] text-slate-500">Pre-filled with every employee and their current plan</span></span>
-            </button>
-            <label className="flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center hover:border-slate-300">
-              <Upload size={22} className="text-primaryDark" />
-              <span className="text-[13.5px] font-medium">Choose the completed Excel file</span>
-              <span className="text-[12px] text-slate-500">.xlsx or .xls</span>
-              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && read(e.target.files[0])} />
-            </label>
-          </div>
+    <Modal
+      open
+      onClose={progress < 0 ? onClose : () => undefined}
+      size="xl"
+      title={`Import leave plan ${year}`}
+      description="Upload the Excel template. Each row is matched to a person by Employee ID, email or name; you see the result before anything is saved."
+      footer={
+        result ? (
+          <Button variant="primary" onClick={onDone}>Close</Button>
         ) : (
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-            <div className="flex flex-wrap gap-2 text-[12.5px]">
-              <Badge tone="neutral">{fileName}</Badge>
-              <Badge tone="success">{matched.length} matched</Badge>
-              <Badge tone="info">{matched.filter((r) => r.changes).length} with changes</Badge>
-              {problems.length > 0 && <Badge tone="danger">{problems.length} to check</Badge>}
-            </div>
-            {problems.length > 0 && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800">
-                <p className="font-medium">These rows will be skipped:</p>
-                <ul className="mt-1 list-disc pl-5">{problems.map((p) => <li key={p.line}>Row {p.line}: {p.name || p.email || p.id} — {p.reason}</li>)}</ul>
-              </div>
-            )}
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="dnr-grid w-full min-w-[760px] text-[12px]">
-                <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-2 py-1.5">Row</th><th className="px-2 py-1.5">Matched to</th>{MONTHS_SHORT.map((m) => <th key={m} className="px-1 py-1.5 text-center">{m}</th>)}<th className="px-2 py-1.5 text-right">Total</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {matched.slice(0, 200).map((r) => (
-                    <tr key={r.line} className={r.changes ? "bg-amber-50/50" : ""}>
-                      <td className="px-2 py-1 text-slate-500">{r.line}</td>
-                      <td className="whitespace-nowrap px-2 py-1">{r.match!.employee.name}</td>
-                      {Array.from({ length: 12 }, (_, i) => <td key={i} className={cn("px-1 py-1 text-center tabular-nums", Number(r.match!.months?.[i + 1] || 0) !== r.months[i + 1] && "font-semibold text-amber-800")}>{r.months[i + 1] || ""}</td>)}
-                      <td className="px-2 py-1 text-right tabular-nums">{Object.values(r.months).reduce((a, b) => a + b, 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {progress >= 0 && (
-              <div>
-                <div className="mb-1 flex justify-between text-[12.5px]"><span>{result ? "Import finished" : "Importing…"}</span><span className="tabular-nums">{progress}%</span></div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>
-              </div>
-            )}
-            {result && (
-              <div className={cn("rounded-lg px-3 py-2 text-[12.5px]", result.errors.length ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-900")}>
-                {result.saved} plan{result.saved === 1 ? "" : "s"} saved.{result.errors.length > 0 && <ul className="mt-1 list-disc pl-5">{result.errors.map((e, i) => <li key={i}>{e.name}: {e.message}</li>)}</ul>}
-              </div>
-            )}
+          <>
+            <Button variant="secondary" onClick={onClose} disabled={progress >= 0}>Cancel</Button>
+            {rows && <Button variant="primary" disabled={!matched.length || progress >= 0} onClick={apply}>Import {matched.length} plan{matched.length === 1 ? "" : "s"}</Button>}
+          </>
+        )
+      }
+    >
+      {!rows ? (
+        <div className="space-y-3">
+          <button type="button" onClick={onTemplate} className="flex w-full items-center gap-3 rounded-control border border-ims-border bg-ims-card px-3 py-2.5 text-left hover:bg-ims-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus">
+            <FileSpreadsheet size={22} className="shrink-0 text-ims-success" aria-hidden />
+            <span>
+              <span className="block text-t-body font-bold text-ims-text">Download the template</span>
+              <span className="text-t-small text-ims-muted">Pre-filled with every employee and their current plan</span>
+            </span>
+          </button>
+          <label className="flex cursor-pointer flex-col items-center gap-1 rounded-card border-2 border-dashed border-ims-field bg-ims-thead px-4 py-8 text-center hover:border-ims-faint">
+            <Upload size={22} className="text-ims-link" aria-hidden />
+            <span className="text-t-body font-bold text-ims-text">Choose the completed Excel file</span>
+            <span className="text-t-hint text-ims-muted">.xlsx or .xls</span>
+            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && read(e.target.files[0])} />
+          </label>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <Pill tone="neutral">{fileName}</Pill>
+            <Pill tone="success">{matched.length} matched</Pill>
+            <Pill tone="info">{matched.filter((r) => r.changes).length} with changes</Pill>
+            {problems.length > 0 && <Pill tone="danger">{problems.length} to check</Pill>}
           </div>
-        )}
-        <DialogFooter>
-          {result ? (
-            <Button onClick={onDone}>Close</Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={onClose} disabled={progress >= 0}>Cancel</Button>
-              {rows && <Button disabled={!matched.length || progress >= 0} onClick={apply}>Import {matched.length} plan{matched.length === 1 ? "" : "s"}</Button>}
-            </>
+          {problems.length > 0 && (
+            <div className="rounded-control border border-ims-danger/30 bg-ims-danger-bg px-3 py-2 text-t-small text-ims-danger">
+              <p className="font-bold">These rows will be skipped:</p>
+              <ul className="mt-1 list-disc pl-5">{problems.map((p) => <li key={p.line}>Row {p.line}: {p.name || p.email || p.id} — {p.reason}</li>)}</ul>
+            </div>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <div className="overflow-hidden rounded-control border border-ims-border">
+            <DataTable
+              caption="Rows to import"
+              columns={columns}
+              rows={matched.slice(0, 200)}
+              rowKey={(r) => String(r.line)}
+              minWidth={900}
+              rowClassName={(r) => (r.changes ? "bg-ims-warning-bg/50" : undefined)}
+            />
+          </div>
+          {progress >= 0 && (
+            <div>
+              <div className="mb-1 flex justify-between text-t-small text-ims-body"><span>{result ? "Import finished" : "Importing…"}</span><span className="tabular-nums">{progress}%</span></div>
+              <div className="h-2 overflow-hidden rounded-pill bg-ims-subtle" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-pill bg-ims-primary transition-all" style={{ width: `${progress}%` }} /></div>
+            </div>
+          )}
+          {result && (
+            <div className={cn("rounded-control px-3 py-2 text-t-small", result.errors.length ? "bg-ims-warning-bg text-ims-warning" : "bg-ims-success-bg text-ims-success")}>
+              {result.saved} plan{result.saved === 1 ? "" : "s"} saved.{result.errors.length > 0 && <ul className="mt-1 list-disc pl-5">{result.errors.map((e, i) => <li key={i}>{e.name}: {e.message}</li>)}</ul>}
+            </div>
+          )}
+        </>
+      )}
+    </Modal>
   );
 }

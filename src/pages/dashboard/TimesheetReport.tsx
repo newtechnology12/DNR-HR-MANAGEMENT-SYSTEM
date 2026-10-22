@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-import BreadCrumb from "@/components/breadcrumb";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClipboardList } from "lucide-react";
+import { Card, Column, DataTable, DateRangeFilter, EmptyState, FilterBar, FilterSelect, KpiBand, Num, Page, PageHeader, StatusPill, fmtDate, fmtNumber } from "@/components/ims";
 
 export function getDatePresets() {
   const today = new Date();
@@ -47,12 +45,18 @@ interface Activity {
   employee: string;
 }
 
+/** Timesheet tasks are "pending" until marked complete. */
+const ACTIVITY_WORDS = { pending: "In progress", completed: "Completed" } as const;
+/** "Current Week" → "This week" on screen. */
+const presetLabel = (label: string) => ({ "Current Week": "This week", "Current Month": "This month", "Last 7 Days": "Last 7 days", "Last 30 Days": "Last 30 days" }[label] || label);
+
 export default function TimesheetReport() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [filteredActivities, setFilteredActivities] = useState<Activity[]>([]);
   const [employeeFilter, setEmployeeFilter] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [preset, setPreset] = useState("Current Week");
   const datePresets = getDatePresets();
 
   useEffect(() => {
@@ -98,159 +102,68 @@ export default function TimesheetReport() {
     (activity) => activity.status === "pending"
   ).length;
 
-  const handlePresetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const preset = datePresets.find((p) => p.label === e.target.value);
+  const handlePresetChange = (value: string) => {
+    setPreset(value);
+    const preset = datePresets.find((p) => p.label === value);
     if (preset) {
       setStartDate(preset.start);
       setEndDate(preset.end);
     }
   };
 
+  const people = new Set(filteredActivities.map((a) => a.employee.trim().toLowerCase())).size;
+  const columns: Column<Activity>[] = [
+    { key: "employee", header: "Employee", className: "font-semibold", cell: (a) => a.employee },
+    { key: "date", header: "Date", nowrap: true, cell: (a) => fmtDate(a.date) },
+    { key: "task", header: "Task", clamp: true, cell: (a) => a.task },
+    { key: "hours", header: "Hours", numeric: true, width: "110px", cell: (a) => <Num value={a.hours} decimals />, total: <Num value={totalHours} decimals /> },
+    { key: "status", header: "Status", width: "150px", cell: (a) => <StatusPill status={ACTIVITY_WORDS[a.status as keyof typeof ACTIVITY_WORDS] || a.status} /> },
+  ];
+
   return (
-    <div className="space-y-6 px-4 py-4 sm:px-6">
-      <div className="flex flex-col items-start gap-1">
-        <h2 className="text-xl font-bold tracking-tight text-slate-900">
-          Timesheet Report
-        </h2>
-        <BreadCrumb items={[{ title: "Timesheet Report", link: "/dashboard" }]} />
-      </div>
-
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-4 pt-4">
-          <div>
-            <label htmlFor="employeeFilter" className="mb-1.5 block text-[13px] font-medium text-slate-600">
-              Employee
-            </label>
-            <input
-              type="text"
-              id="employeeFilter"
-              value={employeeFilter}
-              onChange={(e) => setEmployeeFilter(e.target.value)}
-              className="rounded-input border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              placeholder="Filter by employee"
-            />
-          </div>
-          <div>
-            <label htmlFor="datePreset" className="mb-1.5 block text-[13px] font-medium text-slate-600">
-              Date Preset
-            </label>
-            <select
-              id="datePreset"
-              onChange={handlePresetChange}
-              className="rounded-input border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              defaultValue="Current Week"
-            >
-              {datePresets.map((preset) => (
-                <option key={preset.label} value={preset.label}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="startDate" className="mb-1.5 block text-[13px] font-medium text-slate-600">
-              Start Date
-            </label>
-            <input
-              type="date"
-              id="startDate"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="rounded-input border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            />
-          </div>
-          <div>
-            <label htmlFor="endDate" className="mb-1.5 block text-[13px] font-medium text-slate-600">
-              End Date
-            </label>
-            <input
-              type="date"
-              id="endDate"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="rounded-input border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            />
-          </div>
-        </CardContent>
+    <Page>
+      <PageHeader
+        breadcrumbs={[{ label: "HR & payroll" }, { label: "Timesheet report" }]}
+        title="Timesheet report"
+        subtitle="Hours logged by staff and the state of their tasks over a period."
+      />
+      <KpiBand
+        items={[
+          { label: "Hours logged", value: fmtNumber(totalHours, true) },
+          { label: "Activities", value: fmtNumber(filteredActivities.length), sub: `${people} ${people === 1 ? "person" : "people"}` },
+          { label: "Completed tasks", value: fmtNumber(completedTasks), tone: "success" },
+          { label: "Tasks in progress", value: fmtNumber(pendingTasks), tone: pendingTasks ? "warning" : "default" },
+        ]}
+      />
+      <Card padded={false} className="overflow-hidden">
+        <FilterBar search={{ value: employeeFilter, onChange: setEmployeeFilter, placeholder: "Search employee" }}>
+          <FilterSelect
+            label="Period"
+            all={false}
+            value={preset}
+            onChange={handlePresetChange}
+            options={[...datePresets.map((p) => ({ value: p.label, label: presetLabel(p.label) })), { value: "custom", label: "Custom dates" }]}
+          />
+          <DateRangeFilter
+            label="Dates"
+            from={startDate}
+            to={endDate}
+            onChange={(from, to) => {
+              setPreset("custom");
+              setStartDate(from);
+              setEndDate(to);
+            }}
+          />
+        </FilterBar>
+        <DataTable
+          caption="Detailed activity report"
+          columns={columns}
+          rows={filteredActivities}
+          rowKey={(a, i) => `${a.employee}-${a.date}-${a.task}-${i}`}
+          minWidth={720}
+          empty={<EmptyState icon={ClipboardList} text="No activity logged for this period." />}
+        />
       </Card>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-[13.5px] font-medium text-slate-600">
-              Total Hours Logged
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-slate-900">{totalHours.toFixed(1)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-[13.5px] font-medium text-slate-600">
-              Completed Tasks
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-success">{completedTasks}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-[13.5px] font-medium text-slate-600">
-              Pending Tasks
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-warning">{pendingTasks}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Detailed Activity Report</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Task</TableHead>
-                <TableHead>Hours</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredActivities.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-32 text-center text-slate-500">
-                    No activity logged for this period.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredActivities.map((activity, index) => (
-                  <TableRow key={index}>
-                    <TableCell className="capitalize">{activity.employee}</TableCell>
-                    <TableCell>{activity.date}</TableCell>
-                    <TableCell>{activity.task}</TableCell>
-                    <TableCell>{activity.hours}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={activity.status === "completed" ? "success" : "warning"}
-                        className="capitalize"
-                      >
-                        {activity.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+    </Page>
   );
 }

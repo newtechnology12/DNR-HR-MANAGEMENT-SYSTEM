@@ -1,423 +1,74 @@
-import DataTable from "@/components/DataTable";
-import { ColumnDef, PaginationState } from "@tanstack/react-table";
-import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
-import { Checkbox } from "@/components/ui/checkbox";
-import pocketbase from "@/lib/pocketbase";
-import cleanObject from "@/utils/cleanObject";
+/**
+ * Attendance → Attendance logs. Every clock-in and clock-out of the staff, today by default, with
+ * today's figures on top. HR marks attendance by hand or uploads a file from the clock-in device.
+ */
 import { useState } from "react";
 import { useQuery } from "react-query";
-import DataTableRowActions from "@/components/datatable/DataTableRowActions";
-import { useAuth } from "@/context/auth.context";
-import { addDays, differenceInSeconds } from "date-fns";
+import { toast } from "sonner";
+import { differenceInSeconds, format, isSameDay, startOfMonth, startOfWeek } from "date-fns";
+import { Clock, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import pocketbase from "@/lib/pocketbase";
 import formatSeconds from "@/utils/formatSeconds";
-import BreadCrumb from "@/components/breadcrumb";
-import { Button } from "@/components/ui/button";
-import TableTools from "@/components/enterprise/TableTools";
-import { EXPORTS } from "@/lib/exportConfigs";
-import { PlusCircle } from "react-feather";
 import { AttendanceFormModal } from "@/components/modals/AttendanceFormModal";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
-import ConfirmModal from "@/components/modals/ConfirmModal";
-import useConfirmModal from "@/hooks/useConfirmModal";
-import { toast } from "sonner";
 import { BulkAttendanceModal } from "@/components/modals/BulkAttendanceModal";
-import { Badge } from "@/components/ui/badge";
-import StatCard from "@/components/StatCard";
-import { AlarmClock, CheckCircle2, UserX } from "lucide-react";
+import RecordTable, { RecordColumn, RecordFilter, RecordView } from "@/components/enterprise/RecordTable";
+import { ConfirmDialog, KpiBand, Page, PageHeader, Person, fmtDate, sentence, toDate } from "@/components/ims";
+import { cn } from "@/utils";
+
+/** PocketBase stores dates as "2026-10-21 22:00:00.000Z"; filters compare them as text. */
+const pbTime = (d: Date) => d.toISOString().replace("T", " ");
+const dayStart = (d: Date) => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+const dayEnd = (d: Date) => {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+};
+const time = (v?: string) => {
+  const d = toDate(v);
+  return d ? format(d, "HH:mm") : null;
+};
+
+/** Arrival: "On time" or "Late" with a dot (an attribute of the day, not a workflow status). */
+function Arrival({ value }: { value?: string }) {
+  if (!value) return <span className="text-ims-faint">—</span>;
+  const late = value === "late";
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span className={cn("h-2 w-2 shrink-0 rounded-full", late ? "bg-ims-priority-high" : "bg-ims-success")} aria-hidden />
+      <span className={late ? "font-semibold text-ims-text" : "text-ims-body"}>{late ? "Late" : value === "early" ? "On time" : sentence(value)}</span>
+    </span>
+  );
+}
+
+/** Hours between clock-in and clock-out; while the day is open, the time so far. */
+function hoursOf(r: any) {
+  const inAt = toDate(r.clockin_time);
+  if (!inAt) return { main: null, sub: null };
+  const outAt = toDate(r.clockout_time);
+  if (!outAt && (!isSameDay(inAt, new Date()) || inAt > new Date())) return { main: null, sub: "No clock-out" };
+  const text = formatSeconds(differenceInSeconds(outAt || new Date(), inAt)) || null;
+  return { main: text, sub: outAt ? null : "So far" };
+}
 
 export default function AttendaceLogs() {
-  const columns: ColumnDef<any>[] = [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          // @ts-ignore
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-          className="translate-y-[2px]"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-          className="translate-y-[2px]"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "employee",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Employee" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("employee")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "department",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Department" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("department")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true, // enable column hiding
-    },
-    {
-      accessorKey: "branch",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Branch" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize truncate">{row.getValue("branch")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "date",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Date" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize truncate">{row.getValue("date")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "clockin_time",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Clock In" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("clockin_time")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "clockout_time",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Clock Out" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("clockout_time")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "clockin_location",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Clockin Location" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("clockin_location")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "behaviour",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Behaviour" />
-      ),
-      cell: ({ row }) => {
-        const behaviour = row.getValue("behaviour") as string;
-        if (!behaviour) return <span className="text-slate-400">---</span>;
-        return (
-          <Badge
-            variant={behaviour === "late" ? "danger" : "success"}
-            className="capitalize"
-          >
-            {behaviour}
-          </Badge>
-        );
-      },
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    
-    {
-      accessorKey: "total_hours",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Total Hours" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("total_hours")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "lunch_start_time",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Lunch Start Time" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("lunch_start_time")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "lunch_end_time",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Lunch End Time" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("lunch_end_time")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "clockout_location",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Clockout Location" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("clockout_location")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "type",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Type" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("type")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "created",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created at" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      id: "actions",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Actions" />
-      ),
-      cell: ({ row }) => (
-        <DataTableRowActions
-          actions={[
-            {
-              title: "Edit Attendance",
-              onClick: (e) => {
-                editRow.edit(e.original);
-              },
-            },
-            {
-              title: "delete Attendance",
-              onClick: (e) => {
-                confirmModal.open({ meta: e });
-              },
-            },
-          ]}
-          row={row}
-        />
-      ),
-    },
-  ];
-
-  const [searchText, setsearchText] = useState("");
-
-  const [columnFilters, setColumnFilters] = useState<any>([
-    {
-      id: "created",
-      value: {
-        from: new Date().toLocaleDateString(),
-      },
-    },
-  ]);
-  const [sorting, setSorting] = useState([
-    {
-      id: "created",
-      desc: true,
-    },
-  ]);
-
-  const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 10,
-  });
-
-  const recordsQuery = useQuery({
-    queryKey: [
-      "attendance",
-      {
-        columnFilters,
-        search: searchText,
-        sort: sorting,
-        pageIndex,
-        pageSize,
-      },
-    ],
-    keepPreviousData: true,
-    queryFn: () => {
-      const searchQ = searchText ? `name~"${searchText}"` : "";
-
-      const filters = columnFilters
-        .map((e) => {
-          if (e.value["from"]) {
-            if (e.value?.to) {
-              return `${e.id} >= "${new Date(
-                e.value?.from
-              ).toISOString()}" && ${e.id} <= "${new Date(
-                e.value?.to
-              ).toISOString()}"`;
-            } else {
-              return `${e.id} >= "${new Date(
-                e.value?.from
-              ).toISOString()}" && ${e.id} <= "${new Date(
-                addDays(new Date(e.value?.from), 1)
-              ).toISOString()}"`;
-            }
-          } else {
-            return e.value
-              .map((p) => `${e.id}="${p.id || p.value || p}"`)
-              .join(" || ");
-          }
-        })
-        .join(" && ");
-
-      const sorters = sorting
-        .map((p) => `${p.desc ? "-" : "+"}${p.id}`)
-        .join(" && ");
-
-        return pocketbase
-        .collection("attendance")
-        .getList(pageIndex + 1, pageSize, {
-          ...cleanObject({
-            filter: [searchQ, filters].filter((e) => e).join("&&"),
-            sort: sorters,
-            expand: `employee.branch,employee.department`, // Correctly expand the relations
-          }),
-        })
-        .then((e) => {
-          return {
-            items: e?.items?.map((e) => {
-              return {
-                id: e.id,
-                department: e?.expand?.employee?.expand?.department?.name || "N.A", // Access department name
-                date: new Date(e.date).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
-                clockin_location: e.clockin_location,
-                lunch_start_time: e.lunch_start_time,
-                lunch_end_time: e.lunch_end_time,
-                clockout_location: e.clockout_location,
-                clockin_time: new Date(e.clockin_time).toLocaleTimeString(),
-                clockout_time: e.clockout_time
-                  ? new Date(e.clockout_time).toLocaleTimeString()
-                  : "N.A",
-                behaviour: e.behaviour,
-                employee: e?.expand?.employee?.name,
-                branch: e?.expand?.employee?.expand?.branch?.name || "N.A", // Access branch name
-                type: e.type,
-                total_hours:
-                  formatSeconds(
-                    differenceInSeconds(
-                      new Date(e.clockout_time || new Date()),
-                      new Date(e.clockin_time)
-                    )
-                  ) || "---",
-                created: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
-                updated: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
-                original: e,
-              };
-            }),
-            totalPages: e.totalPages,
-          };
-        });
-    },
-    enabled: true,
-  });
+  const [view, setView] = useState("today");
+  const [refresh, setRefresh] = useState(0);
+  const [toDelete, setToDelete] = useState<any>(null);
 
   const statsQuery = useQuery({
-    queryKey: ["attendance-stats"],
+    queryKey: ["attendance-stats", refresh],
     queryFn: async () => {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date();
       endOfDay.setHours(23, 59, 59, 999);
-      const todayFilter = `date >= "${startOfDay.toISOString()}" && date <= "${endOfDay.toISOString()}"`;
+      const todayFilter = `date >= "${pbTime(startOfDay)}" && date <= "${pbTime(endOfDay)}"`;
 
       const [totalEmployees, presentToday, lateToday] = await Promise.all([
         pocketbase
@@ -446,199 +97,139 @@ export default function AttendaceLogs() {
   const statsLoading = statsQuery.status === "loading";
 
   const newRecordModal = useModalState();
-
   const bulkImportModal = useModalState();
-
   const editRow = useEditRow();
 
-  const confirmModal = useConfirmModal();
-
-  const handleDelete = (e) => {
-    confirmModal.setIsLoading(true);
-    return pocketbase
+  const handleDelete = (e: any) =>
+    pocketbase
       .collection("attendance")
       .delete(e.id)
       .then(() => {
-        recordsQuery.refetch();
-        confirmModal.close();
-        toast.success("Attendance deleted successfully");
+        setRefresh((n) => n + 1);
+        toast.success(`Attendance of ${e.expand?.employee?.name || "the employee"} on ${fmtDate(e.date)} deleted`);
       })
-      .catch((e) => {
-        confirmModal.setIsLoading(false);
-        toast.error(e.message);
+      .catch((err) => {
+        toast.error(err.message);
+        throw err;
       });
-  };
 
+  const now = new Date();
+  const range = (from: Date) => `date >= "${pbTime(dayStart(from))}" && date <= "${pbTime(dayEnd(now))}"`;
+  const views: RecordView[] = [
+    { key: "today", label: "Today", filter: range(now) },
+    { key: "week", label: "This week", filter: range(startOfWeek(now, { weekStartsOn: 1 })) },
+    { key: "month", label: "This month", filter: range(startOfMonth(now)) },
+    { key: "all", label: "All records" },
+  ];
+
+  const filters: RecordFilter[] = [
+    { field: "behaviour", label: "Arrival", options: [{ value: "late", label: "Late" }, { value: "early", label: "On time" }] },
+    { field: "type", label: "Recorded by", options: [{ value: "biometric", label: "Biometric" }, { value: "manual", label: "Manual" }, { value: "correction", label: "Correction" }] },
+    { field: "employee.department", label: "Department", collection: "departments" },
+    { field: "employee.branch", label: "Branch", collection: "branches" },
+  ];
+
+  const columns: RecordColumn<any>[] = [
+    {
+      key: "employee",
+      header: "Employee",
+      className: "max-w-[240px]",
+      cell: (r) => <Person name={r.expand?.employee?.name} detail={r.expand?.employee?.expand?.department?.name} />,
+      csv: (r) => r.expand?.employee?.name || "",
+    },
+    { key: "department", header: "Department", exportOnly: true, cell: () => null, csv: (r) => r.expand?.employee?.expand?.department?.name || "" },
+    { key: "branch", header: "Branch", cell: (r) => r.expand?.employee?.expand?.branch?.name || <span className="text-ims-faint">—</span>, csv: (r) => r.expand?.employee?.expand?.branch?.name || "" },
+    { key: "date", header: "Date", sortField: "date", nowrap: true, format: "date", cell: (r) => fmtDate(r.date), csv: (r) => fmtDate(r.date) },
+    { key: "clockin_time", header: "Clock in", sortField: "clockin_time", nowrap: true, cell: (r) => time(r.clockin_time) || <span className="text-ims-faint">—</span>, sub: (r) => (r.type ? sentence(r.type) : null), csv: (r) => time(r.clockin_time) || "" },
+    { key: "clockout_time", header: "Clock out", sortField: "clockout_time", nowrap: true, cell: (r) => time(r.clockout_time) || <span className="text-ims-faint">—</span>, csv: (r) => time(r.clockout_time) || "" },
+    {
+      key: "hours",
+      header: "Hours",
+      align: "right",
+      cell: (r) => hoursOf(r).main || <span className="text-ims-faint">—</span>,
+      sub: (r) => hoursOf(r).sub,
+      csv: (r) => hoursOf(r).main || "",
+    },
+    { key: "behaviour", header: "Arrival", sortField: "behaviour", cell: (r) => <Arrival value={r.behaviour} />, csv: (r) => (r.behaviour === "late" ? "Late" : r.behaviour === "early" ? "On time" : r.behaviour || "") },
+    { key: "type", header: "Recorded by", exportOnly: true, cell: () => null, csv: (r) => sentence(r.type) },
+    { key: "notes", header: "Notes", exportOnly: true, cell: () => null, csv: (r) => r.notes || "" },
+  ];
+
+  const s = statsQuery.data;
   return (
-    <>
-      <div className="px-4 space-y-4">
-        <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Present Today"
-            icon={CheckCircle2}
-            tone="success"
-            loading={statsLoading}
-            value={statsQuery.data?.presentToday}
-            description="Employees clocked in today"
-          />
-          <StatCard
-            title="Absent Today"
-            icon={UserX}
-            tone="danger"
-            loading={statsLoading}
-            value={statsQuery.data?.absentToday}
-            description="Active employees not clocked in"
-          />
-          <StatCard
-            title="Late Today"
-            icon={AlarmClock}
-            tone="warning"
-            loading={statsLoading}
-            value={statsQuery.data?.lateToday}
-            description="Clocked in after start time"
-          />
-          <StatCard
-            title="Active Employees"
-            icon={CheckCircle2}
-            tone="info"
-            loading={statsLoading}
-            value={statsQuery.data?.totalEmployees}
-            description="Expected to be at work"
-          />
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-[17px] font-semibold tracking-tight">
-              Employee Attendance Logs
-            </h2>
-            <BreadCrumb
-              items={[{ title: "Attendance logs", link: "/dashboard" }]}
-            />
-          </div>
-          <div className="space-x-2">
-            <Button
-              onClick={() => {
-                bulkImportModal.open();
-              }}
-              size="sm"
-              className="hover:bg-white"
-              variant="outline"
-            >
-              <PlusCircle size={16} className="mr-2" />
-              <span>Bulk upload</span>
-            </Button>
-            <Button
-              onClick={() => {
-                newRecordModal.open();
-              }}
-              size="sm"
-            >
-              <PlusCircle size={16} className="mr-2" />
-              <span>Mark Attendance</span>
-            </Button>
-            <TableTools exportConfig={EXPORTS.attendance()} />
-          </div>
-        </div>
-        <DataTable
-          isFetching={recordsQuery.isFetching}
-          defaultColumnVisibility={{ type: false }}
-          isLoading={recordsQuery.status === "loading"}
-          data={recordsQuery?.data?.items || []}
-          columns={columns}
-          onSearch={(e) => {
-            setsearchText(e);
-          }}
-          sorting={sorting}
-          setSorting={setSorting}
-          pageCount={recordsQuery?.data?.totalPages}
-          setPagination={setPagination}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          setColumnFilters={setColumnFilters}
-          columnFilters={columnFilters}
-          facets={[
-            {
-              title: "Behaviour",
-              name: "behaviour",
-              options: [
-                { label: "Late", value: "late" },
-                { label: "Early", value: "early" },
-              ],
-            },
-            {
-              title: "Type",
-              name: "type",
-              options: [
-                { label: "auto", value: "auto" },
-                { label: "manual", value: "manual" },
-              ],
-            },
-            {
-              title: "Attendance Date",
-              type: "date",
-              name: "created",
-            },
-            {
-              title: "Employee",
-              loader: ({ search }) => {
-                return pocketbase
-                  .collection("users")
-                  .getFullList(
-                    cleanObject({
-                      filter: search ? `name~"${search}"` : "",
-                    })
-                  )
-                  .then((e) => e.map((e) => ({ label: e.name, value: e.id })));
-              },
-              name: "employee",
-              type: "async-options",
-            },
-            {
-              title: "Branch",
-              loader: ({ search }) => {
-                return pocketbase
-                  .collection("branches")
-                  .getFullList(
-                    cleanObject({
-                      filter: search ? `name~"${search}"` : "",
-                    })
-                  )
-                  .then((e) => e.map((e) => ({ label: e.name, value: e.id })));
-              },
-              name: "branch",
-              type: "async-options",
-            },
-          ]}
-        />
-      </div>
+    <Page>
+      <PageHeader
+        breadcrumbs={[{ label: "HR & payroll" }, { label: "Attendance logs" }]}
+        title="Attendance logs"
+        subtitle="Every clock-in and clock-out of the staff, with today's attendance."
+        primary={{ label: "Mark attendance", icon: Plus, onClick: () => newRecordModal.open() }}
+        secondary={[{ label: "Bulk upload", icon: Upload, onClick: () => bulkImportModal.open() }]}
+      />
+      <KpiBand
+        loading={statsLoading}
+        items={[
+          { label: "Present today", value: s?.presentToday, sub: "Clocked in today", onClick: () => setView("today") },
+          { label: "Absent today", value: s?.absentToday, sub: "Active staff not clocked in", tone: s?.absentToday ? "danger" : undefined },
+          { label: "Late today", value: s?.lateToday, sub: "Clocked in after the start time", tone: s?.lateToday ? "warning" : undefined },
+          { label: "Active employees", value: s?.totalEmployees, sub: "Expected at work" },
+        ]}
+      />
+      <RecordTable<any>
+        collection="attendance"
+        columns={columns}
+        views={views}
+        activeView={view}
+        onViewChange={setView}
+        searchFields={["employee.name", "notes"]}
+        searchPlaceholder="Search employee or notes"
+        filters={filters}
+        dateField="date"
+        dateLabel="Date"
+        expand="employee.branch,employee.department"
+        defaultSort="-created"
+        refreshKey={refresh}
+        exportName="attendance"
+        exportTitle="Attendance"
+        exportPermission={["view_attendance_logs", "access_employee_portal"]}
+        onRowClick={(r) => editRow.edit(r)}
+        rowActions={() => [
+          { label: "Edit attendance", icon: Pencil, onSelect: (row) => editRow.edit(row) },
+          { label: "Delete attendance", icon: Trash2, danger: true, onSelect: (row) => setToDelete(row) },
+        ]}
+        empty={{
+          icon: Clock,
+          title: "No attendance",
+          text: view === "today" ? "Nobody has clocked in today yet." : "No attendance recorded for this period.",
+        }}
+      />
       <AttendanceFormModal
         onComplete={() => {
-          recordsQuery.refetch();
+          setRefresh((n) => n + 1);
           newRecordModal.close();
           editRow.close();
         }}
         record={editRow.row}
         setOpen={editRow.isOpen ? editRow.setOpen : newRecordModal.setisOpen}
         open={newRecordModal.isOpen || editRow.isOpen}
-      />{" "}
+      />
       <BulkAttendanceModal
         onComplete={() => {
-          recordsQuery.refetch();
+          setRefresh((n) => n + 1);
           bulkImportModal.close();
         }}
         record={editRow.row}
         setOpen={bulkImportModal.setisOpen}
         open={bulkImportModal.isOpen}
       />
-      <ConfirmModal
-        title={"Are you sure you want to delete?"}
-        description={"This action cannot be undone. This will permanently delete the selected record."}
-        meta={confirmModal.meta}
-        onConfirm={handleDelete}
-        isLoading={confirmModal.isLoading}
-        open={confirmModal.isOpen}
-        onClose={() => confirmModal.close()}
+      <ConfirmDialog
+        open={Boolean(toDelete)}
+        onClose={() => setToDelete(null)}
+        danger
+        title="Delete this attendance record?"
+        description={toDelete ? `${toDelete.expand?.employee?.name || "Employee"} · ${fmtDate(toDelete.date)}. This cannot be undone.` : ""}
+        confirmLabel="Delete"
+        onConfirm={() => handleDelete(toDelete)}
       />
-    </>
+    </Page>
   );
 }

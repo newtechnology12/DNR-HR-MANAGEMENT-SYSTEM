@@ -1,16 +1,14 @@
 import * as React from "react";
 import { useQuery } from "react-query";
 import { toast } from "sonner";
-import { AlertCircle, CalendarDays, CalendarRange, FileText, Phone, User } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AsyncSelectField from "@/components/AsyncSelectField";
 import useSettings from "@/hooks/useSettings";
 import { leaveApi } from "@/lib/hr";
 import { errorMessage } from "@/lib/procurement";
 import { cn } from "@/utils";
-import { AutoValue, Field, FileDrop, fileUrl, displayName, inputCls, showDate, textareaCls, toFormData, toInputDate, toPbDate, useMe, workingDays } from "@/components/portal/kit";
+import { AutoValue, ChoiceCards, FileDrop, fileUrl, displayName, showDate, toFormData, toInputDate, toPbDate, useMe, workingDays } from "@/components/portal/kit";
+import { Button, DatePicker, ErrorSummary, Field, FormError, Input, Modal, ModalSection, StatusPill, Textarea } from "@/components/ims";
 
 export const LEAVE_TYPES = [
   { value: "Annual Leave", description: "Paid holiday from your yearly entitlement" },
@@ -28,6 +26,19 @@ export const leaveTypeLabel = (l: any) => (l?.type === "Other" && l?.other_type 
 
 const PHONE = /^\+?[0-9 ]{9,15}$/;
 const today = () => new Date().toISOString().slice(0, 10);
+
+/** Where each message of the error summary jumps to. */
+const FIELD_ID: Record<string, string> = {
+  employee: "leave-employee",
+  type: "leave-type",
+  other_type: "leave-other-type",
+  end: "leave-end",
+  balance: "leave-end",
+  max: "leave-end",
+  reason: "leave-reason",
+  contact: "leave-contact",
+  attachment: "leave-attachment",
+};
 
 export function LeaveFormModal({ open, setOpen, record, onComplete, employeeId }: any) {
   const me = useMe();
@@ -92,6 +103,10 @@ export function LeaveFormModal({ open, setOpen, record, onComplete, employeeId }
   };
   const invalid = Object.values(errors).some(Boolean);
   const set = (k: keyof ReturnType<typeof blank>) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setV((x) => ({ ...x, [k]: e.target.value }));
+  const err = (k: keyof typeof errors) => (tried && typeof errors[k] === "string" ? (errors[k] as string) : null);
+  const summary: FormError[] = tried
+    ? (Object.entries(errors) as [string, unknown][]).filter(([, m]) => typeof m === "string" && m).map(([k, m]) => ({ field: FIELD_ID[k], message: m as string }))
+    : [];
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -114,7 +129,7 @@ export function LeaveFormModal({ open, setOpen, record, onComplete, employeeId }
       const fd = toFormData(data, files.length ? { attachment: files } : {});
       if (record) await pocketbase.collection("leaves").update(record.id, fd);
       else await pocketbase.collection("leaves").create(fd);
-      toast.success(record ? "Leave request updated" : "Leave request sent for approval");
+      toast.success(record ? "Leave request updated" : `Leave request for ${days} day${days === 1 ? "" : "s"} sent for approval`);
       onComplete?.();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -124,141 +139,122 @@ export function LeaveFormModal({ open, setOpen, record, onComplete, employeeId }
   }
 
   const emp: any = employeeQ.data;
+  const periodError = errors.end || errors.balance || errors.max;
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-2xl flex-col gap-0 bg-white p-0 sm:h-auto sm:max-h-[94vh] sm:rounded-xl">
-        <DialogHeader className="border-b border-slate-100 px-4 py-3.5 text-left sm:px-6">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primaryDark"><CalendarDays size={19} /></span>
-            <div className="min-w-0">
-              <DialogTitle className="text-[16px]">{record ? "Edit leave request" : "Request leave"}</DialogTitle>
-              <DialogDescription className="text-[12.5px]">Your request goes to your manager for approval. <span className="text-red-600">*</span> required</DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
+    <Modal
+      open={open}
+      onClose={() => setOpen(false)}
+      size="lg"
+      title={record ? "Edit leave request" : "Request leave"}
+      description="The request goes to the line manager for approval. Fields marked * are required."
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+          <Button variant="primary" type="submit" form="leave-form" loading={saving}>
+            {record ? "Save changes" : `Send request${days ? ` (${days} day${days === 1 ? "" : "s"})` : ""}`}
+          </Button>
+        </>
+      }
+    >
+      <form id="leave-form" onSubmit={submit} noValidate className="space-y-4">
+        <ErrorSummary errors={summary} title="Check these fields before you send the request" />
 
-        <form id="leave-form" onSubmit={submit} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-5 sm:px-6">
-          {/* Employee */}
-          <section className="space-y-3">
-            <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-900"><User size={15} className="text-slate-400" /> Employee</h3>
-            {lockedEmployee ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <AutoValue label="Name" value={emp?.name || me.data?.name} />
-                <AutoValue label="Department" value={emp?.expand?.department?.name} />
-              </div>
-            ) : (
-              <Field label="Employee" required error={tried && errors.employee}>
-                <AsyncSelectField
-                  name="leave-employee"
-                  value={v.employee}
-                  placeholder="Search employee by name"
-                  onChange={(o: any) => setV((x) => ({ ...x, employee: o?.value || "" }))}
-                  loader={({ search }: any) =>
-                    pocketbase.collection("users").getList(1, 30, { filter: search ? `name ~ "${String(search).replace(/"/g, "")}"` : "", sort: "name", fields: "id,name" }).then((r) => r.items.map((u: any) => ({ label: u.name, value: u.id })))
-                  }
-                />
-              </Field>
-            )}
-          </section>
-
-          {/* Type */}
-          <section className="space-y-3">
-            <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-900"><FileText size={15} className="text-slate-400" /> Type of leave <span className="text-red-600">*</span></h3>
-            <div role="radiogroup" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {types.map((t) => {
-                const active = v.type === t.value;
-                return (
-                  <button
-                    key={t.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => setV((x) => ({ ...x, type: t.value }))}
-                    className={cn("flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left", active ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-slate-200 hover:border-slate-300")}
-                  >
-                    <span className={cn("mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border", active ? "border-primary" : "border-slate-300")}>{active && <span className="h-2 w-2 rounded-full bg-primary" />}</span>
-                    <span>
-                      <span className="block text-[13.5px] font-medium text-slate-900">{t.value}</span>
-                      <span className="block text-[12px] leading-snug text-slate-500">{t.description}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            {tried && errors.type && <p className="flex items-center gap-1 text-[12px] text-red-600"><AlertCircle size={12} /> {errors.type}</p>}
-            {needsSpecify && (
-              <Field label="Specify the type of leave" required error={tried && errors.other_type} hint="Saved with your request, e.g. civic duty, religious holiday, marriage.">
-                <input className={inputCls} value={v.other_type} onChange={set("other_type")} autoFocus placeholder="What kind of leave?" aria-invalid={Boolean(tried && errors.other_type)} />
-              </Field>
-            )}
-            {selected?.deducts_annual && v.employee && (
-              <div className="grid grid-cols-3 divide-x divide-blue-100 rounded-lg border border-blue-100 bg-blue-50/70 text-center">
-                {[
-                  ["Entitlement", balanceQ.isLoading ? "…" : balance?.entitlement ?? "—"],
-                  ["Taken this year", balanceQ.isLoading ? "…" : balance?.taken ?? "—"],
-                  ["Available", balanceQ.isLoading ? "…" : balance?.available ?? "—"],
-                ].map(([k, n]) => (
-                  <div key={k as string} className="px-2 py-2">
-                    <p className="text-[17px] font-semibold tabular-nums text-blue-900">{n}</p>
-                    <p className="text-[11.5px] text-blue-700">{k}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Period */}
-          <section className="space-y-3">
-            <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-900"><CalendarRange size={15} className="text-slate-400" /> Period</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="First day" required>
-                <input type="date" className={inputCls} value={v.start} onChange={(e) => setV((x) => ({ ...x, start: e.target.value, end: x.end < e.target.value ? e.target.value : x.end }))} />
-              </Field>
-              <Field label="Last day" required>
-                <input type="date" className={inputCls} value={v.end} min={v.start} onChange={set("end")} aria-invalid={Boolean(errors.end)} />
-              </Field>
-            </div>
-            <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg px-3 py-2.5 text-[13px]", errors.end || errors.balance || errors.max ? "bg-red-50 text-red-800" : "bg-slate-50 text-slate-700")}>
-              <span><span className="text-[18px] font-semibold tabular-nums text-slate-900">{days}</span> working day{days === 1 ? "" : "s"}</span>
-              <span className="text-slate-500">{calendarDays} calendar day{calendarDays === 1 ? "" : "s"} · {showDate(v.start, "EEE d MMM")} → {showDate(v.end, "EEE d MMM yyyy")}</span>
-              {(errors.end || errors.balance || errors.max) && <span className="basis-full text-[12px]">{errors.end || errors.balance || errors.max}</span>}
-              {holidaysIn.length > 0 && <span className="basis-full text-[12px] text-slate-500">Public holiday{holidaysIn.length > 1 ? "s" : ""} not counted: {holidaysIn.map((h) => `${h.name} (${showDate(h.date, "d MMM")})`).join(", ")}</span>}
-            </div>
-            <div className="flex items-center gap-2 text-[12.5px] text-slate-500">
-              Status after sending: <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-800 ring-1 ring-amber-200">Pending approval</span>
-            </div>
-          </section>
-
-          {/* Details */}
-          <section className="space-y-3">
-            <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-900"><Phone size={15} className="text-slate-400" /> Details and contacts</h3>
-            <Field label="Reason" required error={tried && errors.reason}>
-              <textarea className={textareaCls} rows={3} value={v.reason} onChange={set("reason")} placeholder="Briefly explain the reason for your leave" aria-invalid={Boolean(tried && errors.reason)} />
-            </Field>
+        <ModalSection title="Employee">
+          {lockedEmployee ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Phone while on leave" error={tried && errors.contact}>
-                <input type="tel" inputMode="tel" className={inputCls} value={v.contact_during_leave} onChange={set("contact_during_leave")} placeholder={emp?.phone || "+250 7XX XXX XXX"} />
-              </Field>
-              <Field label="Emergency contact" hint="Name and phone number">
-                <input className={inputCls} value={v.emergency_contact} onChange={set("emergency_contact")} placeholder="e.g. Jean Habimana, +250 788 000 000" />
-              </Field>
+              <AutoValue label="Name" value={emp?.name || me.data?.name} />
+              <AutoValue label="Department" value={emp?.expand?.department?.name} />
             </div>
-            <Field label="Supporting document" error={tried && errors.attachment} hint={selected?.requires_attachment ? `Required for more than ${selected.attachment_after_days || 0} day(s).` : "Optional (e.g. invitation, certificate)."}>
+          ) : (
+            <Field label="Employee" required htmlFor="leave-employee" error={err("employee")}>
+              <AsyncSelectField
+                name="leave-employee"
+                inputId="leave-employee"
+                value={v.employee}
+                placeholder="Search employee by name"
+                className="!min-h-[42px] !rounded-control !shadow-none"
+                onChange={(o: any) => setV((x) => ({ ...x, employee: o?.value || "" }))}
+                loader={({ search }: any) =>
+                  pocketbase.collection("users").getList(1, 30, { filter: search ? `name ~ "${String(search).replace(/"/g, "")}"` : "", sort: "name", fields: "id,name" }).then((r) => r.items.map((u: any) => ({ label: u.name, value: u.id })))
+                }
+              />
+            </Field>
+          )}
+        </ModalSection>
+
+        <ModalSection title="Leave type">
+          <Field label="What kind of leave?" required error={err("type")}>
+            <div id="leave-type" tabIndex={-1} className="outline-none">
+              <ChoiceCards value={v.type} onChange={(t) => setV((x) => ({ ...x, type: t }))} options={types.map((t) => ({ value: t.value, label: t.value, description: t.description }))} />
+            </div>
+          </Field>
+          {needsSpecify && (
+            <Field label="Specify the type of leave" required htmlFor="leave-other-type" error={err("other_type")} hint="Saved with the request, e.g. civic duty, religious holiday, marriage.">
+              <Input id="leave-other-type" value={v.other_type} onChange={set("other_type")} autoFocus placeholder="What kind of leave?" invalid={Boolean(err("other_type"))} />
+            </Field>
+          )}
+          {selected?.deducts_annual && v.employee && (
+            <dl className="grid grid-cols-3 divide-x divide-ims-divider rounded-control border border-ims-border bg-ims-thead text-center" aria-label="Annual leave balance">
+              {[
+                ["Entitlement", balanceQ.isLoading ? "…" : balance?.entitlement ?? "—"],
+                ["Taken this year", balanceQ.isLoading ? "…" : balance?.taken ?? "—"],
+                ["Available", balanceQ.isLoading ? "…" : balance?.available ?? "—"],
+              ].map(([k, n]) => (
+                <div key={k as string} className="px-2 py-2.5">
+                  <dd className="text-t-section tabular-nums text-ims-text">{n}</dd>
+                  <dt className="text-t-small text-ims-muted">{k}</dt>
+                </div>
+              ))}
+            </dl>
+          )}
+        </ModalSection>
+
+        <ModalSection title="Period">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="First day" required htmlFor="leave-start">
+              <DatePicker id="leave-start" value={v.start} onChange={(d) => setV((x) => ({ ...x, start: d, end: x.end < d ? d : x.end }))} />
+            </Field>
+            <Field label="Last day" required htmlFor="leave-end">
+              <DatePicker id="leave-end" value={v.end} min={v.start} onChange={(d) => setV((x) => ({ ...x, end: d }))} invalid={Boolean(errors.end)} />
+            </Field>
+          </div>
+          <div className={cn("flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-control px-3 py-2.5 text-t-body", periodError ? "bg-ims-danger-bg text-ims-danger" : "bg-ims-thead text-ims-body")} aria-live="polite">
+            <span>
+              <span className="text-t-section tabular-nums text-ims-text">{days}</span> working day{days === 1 ? "" : "s"}
+            </span>
+            <span className="text-t-small text-ims-muted">
+              {calendarDays} calendar day{calendarDays === 1 ? "" : "s"} · {showDate(v.start, "EEE d MMM")} – {showDate(v.end, "EEE d MMM yyyy")}
+            </span>
+            {periodError && <span className="basis-full text-t-small">{periodError}</span>}
+            {holidaysIn.length > 0 && <span className="basis-full text-t-small text-ims-muted">Public holiday{holidaysIn.length > 1 ? "s" : ""} not counted: {holidaysIn.map((h) => `${h.name} (${showDate(h.date, "d MMM")})`).join(", ")}</span>}
+          </div>
+          <p className="flex flex-wrap items-center gap-2 text-t-small text-ims-muted">
+            Status after sending: <StatusPill status="Pending approval" />
+          </p>
+        </ModalSection>
+
+        <ModalSection title="Details and contacts">
+          <Field label="Reason" required htmlFor="leave-reason" error={err("reason")}>
+            <Textarea id="leave-reason" rows={3} className="min-h-[88px]" value={v.reason} onChange={set("reason")} placeholder="Briefly explain the reason for the leave" invalid={Boolean(err("reason"))} />
+          </Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Phone while on leave" htmlFor="leave-contact" error={err("contact")}>
+              <Input id="leave-contact" type="tel" inputMode="tel" value={v.contact_during_leave} onChange={set("contact_during_leave")} placeholder={emp?.phone || "+250 7XX XXX XXX"} invalid={Boolean(err("contact"))} />
+            </Field>
+            <Field label="Emergency contact" htmlFor="leave-emergency" hint="Name and phone number">
+              <Input id="leave-emergency" value={v.emergency_contact} onChange={set("emergency_contact")} placeholder="e.g. Jean Habimana, +250 788 000 000" />
+            </Field>
+          </div>
+          <Field label="Supporting document" error={err("attachment")} hint={selected?.requires_attachment ? `Required for more than ${selected.attachment_after_days || 0} day(s).` : "Optional (e.g. invitation, certificate)."}>
+            <div id="leave-attachment" tabIndex={-1} className="outline-none">
               {record?.attachment && !files.length && (
-                <a href={fileUrl(record, record.attachment, true)} className="mb-2 block truncate text-[12.5px] text-primaryDark hover:underline">Current file: {displayName(record.attachment)}</a>
+                <a href={fileUrl(record, record.attachment, true)} className="mb-2 block truncate text-t-small font-semibold text-ims-link hover:underline">Current file: {displayName(record.attachment)}</a>
               )}
               <FileDrop files={files} onChange={setFiles} multiple={false} label={record?.attachment ? "Replace the file" : "Attach a file"} />
-            </Field>
-          </section>
-        </form>
-
-        <DialogFooter className="flex-row gap-2 border-t border-slate-100 px-4 py-3 sm:px-6">
-          <Button type="button" variant="outline" className="h-10 flex-1 sm:flex-none" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button type="submit" form="leave-form" className="h-10 flex-1 sm:flex-none" disabled={saving}>
-            {saving ? "Sending…" : record ? "Save changes" : `Send request${days ? ` (${days} day${days === 1 ? "" : "s"})` : ""}`}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            </div>
+          </Field>
+        </ModalSection>
+      </form>
+    </Modal>
   );
 }

@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
+import { CheckCircle2, ClipboardList, Plus } from "lucide-react";
+import { Button, Card, CardHeader, Column, DataTable, DatePicker, DateRangeFilter, EmptyState, Field, FilterSelect, Input, Num, Page, PageHeader, StatusPill, fmtDate } from "@/components/ims";
+
+/** Timesheet tasks are "pending" until marked complete. */
+const ACTIVITY_WORDS = { pending: "In progress", completed: "Completed" } as const;
 
 export default function EmployeeTimesheet() {
   return (
-    <div className="p-5">
+    <Page>
+      <PageHeader
+        breadcrumbs={[{ label: "HR & payroll" }, { label: "Employee timesheet" }]}
+        title="Employee timesheet"
+        subtitle="Log the tasks worked on and the hours spent on each."
+      />
       <EmployeeActivityForm />
       <EmployeeActivityList />
-    </div>
+    </Page>
   );
 }
 
@@ -45,6 +55,9 @@ export function getDatePresets() {
   ];
 }
 
+/** "Current Week" → "This week" (sentence case on screen; the stored preset labels stay as they are). */
+const presetLabel = (label: string) => ({ "Current Week": "This week", "Current Month": "This month", "Last 7 Days": "Last 7 days", "Last 30 Days": "Last 30 days" }[label] || label);
+
 interface Activity {
   date: string;
   task: string;
@@ -58,6 +71,7 @@ function EmployeeActivityList() {
   const [filteredActivities, setFilteredActivities] = useState<Activity[]>([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [preset, setPreset] = useState("Current Week");
   const datePresets = getDatePresets();
 
   useEffect(() => {
@@ -95,92 +109,57 @@ function EmployeeActivityList() {
     }
   };
 
-  const handlePresetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const preset = datePresets.find((p) => p.label === e.target.value);
+  const handlePresetChange = (value: string) => {
+    setPreset(value);
+    const preset = datePresets.find((p) => p.label === value);
     if (preset) {
       setStartDate(preset.start);
       setEndDate(preset.end);
     }
   };
 
+  const totalHours = filteredActivities.reduce((sum, a) => sum + (Number(a.hours) || 0), 0);
+  const columns: Column<Activity>[] = [
+    { key: "date", header: "Date", nowrap: true, cell: (a) => fmtDate(a.date) },
+    { key: "task", header: "Task", clamp: true, cell: (a) => a.task, sub: (a) => a.employee },
+    { key: "hours", header: "Hours", numeric: true, width: "110px", cell: (a) => <Num value={a.hours} decimals />, total: <Num value={totalHours} decimals /> },
+    { key: "status", header: "Status", width: "150px", cell: (a) => <StatusPill status={ACTIVITY_WORDS[a.status as keyof typeof ACTIVITY_WORDS] || a.status} /> },
+  ];
+
   return (
-    <div>
-      <h3 className="text-xl font-bold mb-4">Your Activities</h3>
-      <div className="mb-4 flex space-x-4">
-        <div>
-          <label htmlFor="datePreset" className="block mb-1">
-            Date Preset:
-          </label>
-          <select
-            id="datePreset"
-            onChange={handlePresetChange}
-            className="border rounded p-1"
-            defaultValue="Current Week"
-          >
-            {datePresets.map((preset) => (
-              <option key={preset.label} value={preset.label}>
-                {preset.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="startDate" className="block mb-1">
-            Start Date:
-          </label>
-          <input
-            type="date"
-            id="startDate"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="border rounded p-1"
-          />
-        </div>
-        <div>
-          <label htmlFor="endDate" className="block mb-1">
-            End Date:
-          </label>
-          <input
-            type="date"
-            id="endDate"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="border rounded p-1"
-          />
-        </div>
+    <Card padded={false} className="overflow-hidden">
+      <div className="px-5 pt-5">
+        <CardHeader title="Your activities" subtitle="Saved in this browser" className="mb-0" />
       </div>
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="border p-2">Date</th>
-            <th className="border p-2">Task</th>
-            <th className="border p-2">Hours</th>
-            <th className="border p-2">Status</th>
-            <th className="border p-2">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredActivities.map((activity, index) => (
-            <tr key={index} className="border">
-              <td className="border p-2">{activity.date}</td>
-              <td className="border p-2">{activity.task}</td>
-              <td className="border p-2">{activity.hours}</td>
-              <td className="border p-2">{activity.status}</td>
-              <td className="border p-2">
-                {activity.status === "pending" && (
-                  <button
-                    onClick={() => handleStatusChange(index)}
-                    className="px-2 py-1 rounded bg-green-500 text-white"
-                  >
-                    Mark Complete
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3.5 sm:px-5">
+        <FilterSelect
+          label="Period"
+          all={false}
+          value={preset}
+          onChange={handlePresetChange}
+          options={[...datePresets.map((p) => ({ value: p.label, label: presetLabel(p.label) })), { value: "custom", label: "Custom dates" }]}
+        />
+        <DateRangeFilter
+          label="Dates"
+          from={startDate}
+          to={endDate}
+          onChange={(from, to) => {
+            setPreset("custom");
+            setStartDate(from);
+            setEndDate(to);
+          }}
+        />
+      </div>
+      <DataTable
+        caption="Your activities"
+        columns={columns}
+        rows={filteredActivities}
+        rowKey={(a, i) => `${a.date}-${a.task}-${i}`}
+        minWidth={640}
+        rowActions={(a) => (a.status === "pending" ? [{ label: "Mark complete", icon: CheckCircle2, onSelect: (row) => handleStatusChange(activities.indexOf(row)) }] : [])}
+        empty={<EmptyState icon={ClipboardList} text="No activity logged for this period. Log one with the form above." />}
+      />
+    </Card>
   );
 }
 
@@ -190,9 +169,14 @@ function EmployeeActivityForm() {
   const [hours, setHours] = useState("");
   const [status, setStatus] = useState("pending");
   const [employee, setEmployee] = useState("");
+  const [dateError, setDateError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!date) {
+      setDateError("Choose the date of the activity.");
+      return;
+    }
     const activity = { date, task, hours: parseFloat(hours), status, employee };
 
     const activities = JSON.parse(localStorage.getItem("activities") || "[]");
@@ -209,67 +193,35 @@ function EmployeeActivityForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mb-8 p-4 bg-gray-100 rounded-lg">
-      <div className="mb-4">
-        <label htmlFor="employee" className="block mb-2">
-          Employee Name:
-        </label>
-        <input
-          type="text"
-          id="employee"
-          value={employee}
-          onChange={(e) => setEmployee(e.target.value)}
-          required
-          className="w-full p-2 border rounded"
-        />
-      </div>
-      <div className="mb-4">
-        <label htmlFor="date" className="block mb-2">
-          Date:
-        </label>
-        <input
-          type="date"
-          id="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          required
-          className="w-full p-2 border rounded"
-        />
-      </div>
-      <div className="mb-4">
-        <label htmlFor="task" className="block mb-2">
-          Task:
-        </label>
-        <input
-          type="text"
-          id="task"
-          value={task}
-          onChange={(e) => setTask(e.target.value)}
-          required
-          className="w-full p-2 border rounded"
-        />
-      </div>
-      <div className="mb-4">
-        <label htmlFor="hours" className="block mb-2">
-          Hours:
-        </label>
-        <input
-          type="number"
-          id="hours"
-          value={hours}
-          onChange={(e) => setHours(e.target.value)}
-          required
-          min="0"
-          step="0.5"
-          className="w-full p-2 border rounded"
-        />
-      </div>
-      <button
-        type="submit"
-        className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-      >
-        Log Activity
-      </button>
-    </form>
+    <Card>
+      <CardHeader title="Log an activity" subtitle="Fields marked * are required." />
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Field label="Employee name" required htmlFor="employee">
+          <Input type="text" id="employee" value={employee} onChange={(e) => setEmployee(e.target.value)} required />
+        </Field>
+        <Field label="Date" required htmlFor="date" error={dateError}>
+          <DatePicker
+            id="date"
+            value={date}
+            invalid={Boolean(dateError)}
+            onChange={(v) => {
+              setDate(v);
+              setDateError("");
+            }}
+          />
+        </Field>
+        <Field label="Task" required htmlFor="task" className="sm:col-span-2 lg:col-span-1">
+          <Input type="text" id="task" value={task} onChange={(e) => setTask(e.target.value)} required />
+        </Field>
+        <Field label="Hours" required htmlFor="hours" hint="Half hours allowed, e.g. 1.5">
+          <Input type="number" id="hours" value={hours} onChange={(e) => setHours(e.target.value)} required min="0" step="0.5" inputMode="decimal" />
+        </Field>
+        <div className="flex justify-end sm:col-span-2 lg:col-span-4">
+          <Button type="submit" variant="primary" icon={Plus}>
+            Log activity
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }

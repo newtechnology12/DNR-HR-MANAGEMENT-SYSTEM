@@ -1,14 +1,20 @@
-import { cn } from "@/utils/cn";
-import { Check, MoreHorizontal, X } from "react-feather";
-import { Fragment, useState } from "react";
+/**
+ * Attendance → Attendance report: one row per employee and one column per day of the month, showing
+ * who was present, absent, off (not a working day) or not yet (future days).
+ */
+import { ReactNode, useState } from "react";
 import { useQuery } from "react-query";
-import Avatar from "@/components/shared/Avatar";
-import Loader from "@/components/icons/Loader";
+import { format } from "date-fns";
+import { Check, X } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
-import BreadCrumb from "@/components/breadcrumb";
+import Avatar from "@/components/shared/Avatar";
 import useSettings from "@/hooks/useSettings";
 import AsyncSelectField from "@/components/AsyncSelectField";
 import cleanObject from "@/utils/cleanObject";
+import { MONTHS } from "@/lib/hr";
+import { Card, EmptyState, ErrorState, FilterSelect, Page, PageHeader } from "@/components/ims";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/utils";
 
 function daysOfWeekToNumbers(days) {
   const dayMap = {
@@ -117,6 +123,14 @@ async function fetchData(e) {
   };
 }
 
+const YEARS = [2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030];
+const LEGEND: [string, ReactNode][] = [
+  ["Present", <Check key="p" size={14} strokeWidth={3} className="text-ims-success" aria-hidden />],
+  ["Absent", <X key="a" size={14} strokeWidth={3} className="text-ims-danger" aria-hidden />],
+  ["Not a working day, or still to come", <span key="o" className="h-1.5 w-1.5 rounded-full bg-ims-field" aria-hidden />],
+];
+const CELL_LABEL: Record<string, string> = { present: "Present", absent: "Absent", off_day: "Not a working day", future: "Still to come" };
+
 export default function AttendanceReport() {
   const [year, setyear] = useState(new Date().getFullYear());
   const [month, setmonth] = useState(new Date().getMonth() + 1);
@@ -129,6 +143,7 @@ export default function AttendanceReport() {
     status,
     isFetching,
     error,
+    refetch,
   } = useQuery(
     [
       "attendance-report",
@@ -143,219 +158,134 @@ export default function AttendanceReport() {
     }
   );
 
+  const changed = Boolean(employee) || year !== new Date().getFullYear() || month !== new Date().getMonth() + 1;
+  const reset = () => {
+    setyear(new Date().getFullYear());
+    setmonth(new Date().getMonth() + 1);
+    setemployee(undefined);
+  };
+  const today = new Date();
+
   return (
-    <>
-      <div className="space-y-4 px-4 py-4 sm:px-6">
-        <div className="flex flex-col items-start gap-1">
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">
-            Employee Attendance Logs
-          </h2>
-          <BreadCrumb
-            items={[{ title: "Attendance logs", link: "/dashboard" }]}
-          />
-        </div>
-        <div className="border rounded-[4px] border-slate-200 bg-white">
-          <div>
-            <div className="py-2 px-3">
-              <div className="flex items-center gap-3">
-                <div className="w-[280px]">
-                  <AsyncSelectField
-                    placeholder="Choose employee"
-                    defaultOptions={true}
-                    onChange={(e) => {
-                      setemployee(e.value);
-                    }}
-                    value={employee}
-                    name="employees"
-                    loader={({ search }) => {
-                      return pocketbase
-                        .collection("users")
-                        .getFullList(
-                          cleanObject({
-                            filter: search ? `name~"${search}"` : "",
-                          })
-                        )
-                        .then((e) =>
-                          e.map((e) => ({ label: e.name, value: e.id }))
-                        );
-                    }}
-                  />
-                </div>
-                <select
-                  value={year}
-                  onChange={(e: any) => setyear(e.target.value)}
-                  className="px-3 border outline-none  cursor-pointer rounded-[4px] py-2 w-[250px] text-[13px] font-medium text-slate-500 border-slate-200"
-                  name=""
-                  id=""
-                >
-                  <option selected disabled value="">
-                    Choose year
-                  </option>
-                  <option value="2021">2021</option>
-                  <option value="2022">2022</option>
-                  <option value="2023">2023</option>
-                  <option value="2024">2024</option>
-                  <option value="2025">2025</option>
-                  <option value="2026">2026</option>
-                  <option value="2027">2027</option>
-                  <option value="2029">2029</option>
-                  <option value="2030">2030</option>
-                </select>
-
-                <select
-                  value={month}
-                  onChange={(e: any) => setmonth(e.target.value)}
-                  className="px-3 border cursor-pointer outline-none rounded-[4px]  py-2 w-[250px] text-[13px] font-medium text-slate-500 border-slate-200"
-                  name=""
-                  id=""
-                >
-                  <option selected disabled value="">
-                    Choose Month
-                  </option>
-                  <option value="1">January</option>
-                  <option value="2">February</option>
-                  <option value="3">March</option>
-                  <option value="4">April</option>
-                  <option value="5">May</option>
-                  <option value="6">June</option>
-                  <option value="7">July</option>
-                  <option value="8">August</option>
-                  <option value="9">September</option>
-                  <option value="10">October</option>
-                  <option value="11">November</option>
-                  <option value="12">December</option>
-                </select>
-
-                <a
-                  onClick={() => {
-                    setyear(new Date().getFullYear());
-                    setmonth(new Date().getMonth() + 1);
-                    setemployee(undefined);
-                  }}
-                  className="text-[13px] cursor-pointer flex items-center gap-2 hover:bg-slate-100 px-2 py-1 rounded-md text-slate-500 font-medium"
-                >
-                  <span>Reset</span>
-                  <X className="text-slate-500" size={14} />
-                </a>
-                {isFetching && (
-                  <Loader className="mr-2 h-4 w-4 text-primary animate-spin" />
-                )}
-              </div>
+    <Page>
+      <PageHeader
+        breadcrumbs={[{ label: "HR & payroll" }, { label: "Attendance report" }]}
+        title="Attendance report"
+        subtitle="Who was present on each working day of the month."
+      />
+      <Card padded={false} className="overflow-hidden">
+        <div className="flex flex-col gap-3 px-4 py-3.5 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-1 flex-wrap items-center gap-2">
+            <div className="w-full sm:w-[280px]">
+              <AsyncSelectField
+                placeholder="All employees"
+                aria-label="Employee"
+                defaultOptions={true}
+                className="!min-h-[40px] !rounded-control !shadow-none"
+                onChange={(e) => {
+                  setemployee(e?.value);
+                }}
+                value={employee}
+                name="employees"
+                loader={({ search }) => {
+                  return pocketbase
+                    .collection("users")
+                    .getFullList(
+                      cleanObject({
+                        filter: search ? `name~"${search}"` : "",
+                      })
+                    )
+                    .then((e) =>
+                      e.map((e) => ({ label: e.name, value: e.id }))
+                    );
+                }}
+              />
             </div>
+            <FilterSelect label="Year" all={false} value={String(year)} onChange={(v) => setyear(Number(v))} options={YEARS.map((y) => ({ value: String(y), label: String(y) }))} className="[&_select]:w-[120px]" />
+            <FilterSelect label="Month" all={false} value={String(month)} onChange={(v) => setmonth(Number(v))} options={MONTHS.map((m, i) => ({ value: String(i + 1), label: m }))} className="[&_select]:w-[160px]" />
+            {changed && (
+              <button type="button" onClick={reset} className="h-9 px-1.5 text-t-body font-bold text-ims-link hover:underline">
+                Reset
+              </button>
+            )}
           </div>
-          <div className="flex border-t overflow-hidden min-h-[200px] rounded-md">
-            {status === "loading" && (
-              <div className="w-full flex items-center justify-center h-[300px]">
-                <Loader className="mr-2 h-4 w-4 text-primary animate-spin" />
-              </div>
-            )}
-            {status === "error" && (
-              <div className="w-full flex items-center justify-center h-[300px]">
-                <span className="text-slate-500 font-medium">
-                  {error["message"] || " Failed to load data"}
-                </span>
-              </div>
-            )}
-            {status === "success" && report && (
-              <Fragment>
-                <div className="w-full no-scrollbar overflow-x-auto">
-                  <table className="w-full ">
-                    <thead>
-                      <tr>
-                        <td className="border-b font-medium text-[13px] text-slate-600 bg-slate-50 border-r px-3">
-                          Employee
-                        </td>
-                        {report.daysOfMonth.map((_, i) => {
-                          return (
-                            <td
-                              key={i}
-                              className="text-[13px] border-r border-b  bg-slate-50 border-slate-200 text-slate-500 font-medium"
-                            >
-                              <span className="w-[50px] flex h-8 items-center justify-center">
-                                {i + 1}
-                              </span>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    </thead>
-                    <tbody>
-                    {report.employees.map((employeeReport, i) => {
-                      return (
-                        <tr key={i}>
-                          <td className="border-b border-r px-3">
-                            <div className="flex items-center gap-3">
-                              <div>
-                                <Avatar
-                                  path={employeeReport.avatar}
-                                  textClass={"!text-[8px]"}
-                                  className={"h-5 w-5 !text-[10px]"}
-                                  name={employeeReport.name}
-                                />
-                              </div>
-                              <div>
-                                <h4 className="text-slate-700 capitalize  truncate leading-5 text-[12px] font-medium">
-                                  {employeeReport.name}
-                                </h4>
-                              </div>
-                            </div>
-                          </td>
-                          {employeeReport.attendances.map(
-                            (attendance, index) => {
-                              return (
-                                <td
-                                  key={index}
-                                  className="text-[13px] border-b border-t border-r text-slate-500 font-medium"
-                                >
-                                  <span
-                                    className={cn(
-                                      "w-[50px] hover:bg-slate-50 border-transparent hover:border-slate-200 border cursor-pointer flex h-[38px] items-center justify-center",
-                                      {
-                                        "pointer-events-none select-none":
-                                          !status,
-                                      }
-                                    )}
-                                  >
-                                    {attendance.status === "present" && (
-                                      <Check
-                                        className="text-green-500"
-                                        strokeWidth={3}
-                                        size={14}
-                                      />
-                                    )}
-                                    {attendance.status === "absent" && (
-                                      <X
-                                        className="text-red-500"
-                                        strokeWidth={3}
-                                        size={14}
-                                      />
-                                    )}
-                                    {(attendance.status === "off_day" ||
-                                      attendance.status === "future") && (
-                                      <MoreHorizontal
-                                        className="text-slate-300"
-                                        strokeWidth={3}
-                                        size={14}
-                                      />
-                                    )}
+          <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-t-small text-ims-muted" aria-label="Legend">
+            {LEGEND.map(([label, icon]) => (
+              <li key={label} className="inline-flex items-center gap-1.5">
+                <span className="flex h-4 w-4 items-center justify-center">{icon}</span>
+                {label}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-                                    {!status && "--"}
-                                  </span>
-                                </td>
-                              );
-                            }
-                          )}
-                        </tr>
+        <div className={cn("border-t border-ims-divider", isFetching && status === "success" && "opacity-60 transition-opacity")}>
+          {status === "loading" && (
+            <div className="space-y-2 p-5">
+              {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+            </div>
+          )}
+          {status === "error" && <ErrorState text="The attendance report could not be loaded." detail={(error as any)?.message} onRetry={() => refetch()} />}
+          {status === "success" && report && report.employees.length === 0 && <EmptyState text="No employees to show." />}
+          {status === "success" && report && report.employees.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full border-separate border-spacing-0 text-t-body text-ims-text">
+                <caption className="sr-only">Attendance for {MONTHS[month - 1]} {year}</caption>
+                <thead>
+                  <tr className="bg-ims-thead">
+                    <th scope="col" className="sticky left-0 z-10 h-11 min-w-[200px] border-b border-r border-ims-divider bg-ims-thead px-3.5 text-left text-t-small font-semibold text-ims-muted">
+                      Employee
+                    </th>
+                    {report.daysOfMonth.map((d, i) => {
+                      const isToday = areSameDay(d, today);
+                      return (
+                        <th key={i} scope="col" className={cn("h-11 w-9 min-w-[36px] border-b border-r border-ims-divider px-0 text-center text-t-small font-semibold tabular-nums", isToday ? "bg-ims-info-bg text-ims-primary" : "text-ims-muted")}>
+                          <span className="block leading-4">{i + 1}</span>
+                          <span className="block text-t-hint font-normal leading-4 text-ims-faint">{format(d, "EEEEE")}</span>
+                        </th>
                       );
                     })}
-                    </tbody>
-                  </table>
-                </div>
-              </Fragment>
-            )}
-          </div>
+                    <th scope="col" className="h-11 border-b border-ims-divider px-3 text-right text-t-small font-semibold text-ims-muted">Present</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.employees.map((employeeReport, i) => {
+                    const present = employeeReport.attendances.filter((a) => a.status === "present").length;
+                    const due = employeeReport.attendances.filter((a) => a.status === "present" || a.status === "absent").length;
+                    return (
+                      <tr key={i} className="group">
+                        <td className="sticky left-0 z-[1] h-11 border-b border-r border-ims-divider bg-ims-card px-3.5 group-hover:bg-ims-hover">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar path={employeeReport.avatar} textClass={"!text-[8px]"} className={"h-6 w-6 !text-t-hint"} name={employeeReport.name} />
+                            <span className="truncate text-t-body font-semibold text-ims-text">{employeeReport.name}</span>
+                          </div>
+                        </td>
+                        {employeeReport.attendances.map((attendance, index) => (
+                          <td
+                            key={index}
+                            title={`${employeeReport.name} · ${format(report.daysOfMonth[index], "d MMM")}: ${CELL_LABEL[attendance.status]}`}
+                            className={cn("h-11 border-b border-r border-ims-divider p-0 text-center group-hover:bg-ims-hover", attendance.status === "off_day" && "bg-ims-thead")}
+                          >
+                            <span className="flex h-full items-center justify-center">
+                              {attendance.status === "present" && <Check className="text-ims-success" strokeWidth={3} size={14} aria-label="Present" />}
+                              {attendance.status === "absent" && <X className="text-ims-danger" strokeWidth={3} size={14} aria-label="Absent" />}
+                              {(attendance.status === "off_day" || attendance.status === "future") && <span className="h-1.5 w-1.5 rounded-full bg-ims-field" aria-hidden />}
+                            </span>
+                          </td>
+                        ))}
+                        <td className="h-11 whitespace-nowrap border-b border-ims-divider px-3 text-right tabular-nums group-hover:bg-ims-hover">
+                          {present}
+                          <span className="text-ims-faint"> / {due}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </div>
-    </>
+      </Card>
+    </Page>
   );
 }
