@@ -4,10 +4,11 @@
  * (with "Contribute"), on the Department plan tab and on the department plan page.
  */
 import * as React from "react";
-import { Check, Plus } from "lucide-react";
-import { DepartmentActivity, DepartmentView, dmy, qty } from "@/lib/plans";
+import { Check, Plus, Target } from "lucide-react";
+import { DepartmentActivity, DepartmentView, qty } from "@/lib/plans";
 import { cn } from "@/utils";
-import { WCard } from "./WorkspaceKit";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button, Card, CardHeader, Column, DataTable, EmptyState, fmtDate } from "@/components/ims";
 
 export function remainingTone(progress: number) {
   return progress >= 100 ? "text-ims-success" : 100 - progress >= 50 ? "text-ims-danger" : "text-ims-warning";
@@ -18,66 +19,73 @@ export function teamText(team: number, you: boolean) {
   return `${team} ${team === 1 ? "person" : "people"}${you ? " + you" : ""}`;
 }
 
+/** Thin progress bar with the percentage on its right. */
+function ProgressCell({ value }: { value: number }) {
+  const v = Math.max(0, Math.min(100, Number(value) || 0));
+  return (
+    <span className="flex items-center gap-2.5">
+      <span className="block h-[7px] w-[72px] overflow-hidden rounded-full bg-ims-neutral-bg" aria-hidden>
+        <span className={cn("block h-full rounded-full", v >= 100 ? "bg-ims-success" : "bg-ims-link")} style={{ width: `${v}%` }} />
+      </span>
+      <b className="w-10 text-right tabular-nums">{v}%</b>
+    </span>
+  );
+}
+
 export function DepartmentActivitiesTable({ activities, linked, onContribute, contributeLabel = "Contribute" }: {
   activities: DepartmentActivity[];
   linked?: Set<string>;
   onContribute?: (a: DepartmentActivity) => void;
   contributeLabel?: string;
 }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-[13.5px]">
-        <thead>
-          <tr className="border-y border-ims-divider bg-ims-thead text-left text-[13px] text-ims-muted">
-            <th scope="col" className="px-5 py-2.5 font-bold">Department activity</th>
-            <th scope="col" className="px-3 py-2.5 text-right font-bold">Target</th>
-            <th scope="col" className="px-3 py-2.5 text-right font-bold">Achieved</th>
-            <th scope="col" className="px-3 py-2.5 font-bold">Progress</th>
-            <th scope="col" className="px-3 py-2.5 text-right font-bold">Remaining</th>
-            <th scope="col" className="px-3 py-2.5 font-bold">Team</th>
-            {onContribute && <th scope="col" className="py-2.5 pl-3 pr-5"><span className="sr-only">Action</span></th>}
-          </tr>
-        </thead>
-        <tbody>
-          {activities.map((a) => {
-            const you = Boolean(a.mine || linked?.has(a.id));
-            const done = a.progress >= 100;
-            return (
-              <tr key={a.id} className="border-b border-ims-divider last:border-b-0">
-                <td className="max-w-[230px] px-5 py-3">
-                  <span className="block font-bold leading-snug">{a.title}</span>
-                  <span className="block text-[12.5px] text-ims-muted">{a.code}{a.due ? ` · due ${dmy(a.due).slice(0, 5)}` : ""}</span>
-                </td>
-                <td className="px-3 py-3 text-right text-[13.5px]">{a.target_value !== null ? qty(a.target_value, a.unit) : a.target}</td>
-                <td className="px-3 py-3 text-right font-bold">{a.target_value !== null ? qty(a.achieved, a.unit) : "—"}</td>
-                <td className="px-3 py-3">
-                  <span className="flex items-center gap-2.5">
-                    <span className="block h-[7px] w-[72px] overflow-hidden rounded-full bg-ims-neutral-bg" aria-hidden><span className="block h-full rounded-full" style={{ width: `${a.progress}%`, background: done ? "#0F6B3A" : "#1466C0" }} /></span>
-                    <b className="w-10 text-right tabular-nums">{a.progress}%</b>
-                  </span>
-                </td>
-                <td className={cn("px-3 py-3 text-right text-[13.5px] font-bold", remainingTone(a.progress))}>
-                  {done ? "Done" : <>{100 - a.progress}%{a.remaining !== null && <> · {qty(a.remaining, a.unit)}</>}</>}
-                </td>
-                <td className="px-3 py-3 text-[13.5px] text-ims-body">{teamText(a.team, you)}</td>
-                {onContribute && (
-                  <td className="py-3 pl-3 pr-5 text-right">
-                    {you ? (
-                      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-ims-success-bg px-3 py-1.5 text-[12.5px] font-bold text-ims-success"><Check size={13} aria-hidden /> In your plan</span>
-                    ) : (
-                      <button type="button" onClick={() => onContribute(a)} disabled={done} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-ims-link bg-white px-3 py-1.5 text-[12.5px] font-bold text-ims-link hover:bg-ims-info-bg disabled:border-ims-field disabled:text-ims-faint">
-                        <Plus size={13} aria-hidden /> {contributeLabel}
-                      </button>
-                    )}
-                  </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+  const columns: Column<DepartmentActivity>[] = [
+    {
+      key: "title",
+      header: "Department activity",
+      className: "min-w-[220px]",
+      cell: (a) => <span className="font-semibold">{a.title}</span>,
+      sub: (a) => {
+        const you = Boolean(a.mine || linked?.has(a.id));
+        return `${a.code}${a.due ? ` · due ${fmtDate(a.due)}` : ""}${a.team || you ? ` · team: ${teamText(a.team, you)}` : ""}`;
+      },
+    },
+    {
+      key: "achieved",
+      header: "Achieved",
+      numeric: true,
+      cell: (a) => <b>{a.target_value !== null ? qty(a.achieved, a.unit) : "—"}</b>,
+      sub: (a) => `of ${a.target_value !== null ? qty(a.target_value, a.unit) : a.target || "—"}`,
+    },
+    { key: "progress", header: "Progress", nowrap: true, cell: (a) => <ProgressCell value={a.progress} /> },
+    {
+      key: "remaining",
+      header: "Remaining",
+      numeric: true,
+      cell: (a) => <span className={cn("font-bold", remainingTone(a.progress))}>{a.progress >= 100 ? "None" : a.remaining !== null ? qty(a.remaining, a.unit) : `${100 - a.progress}%`}</span>,
+      sub: (a) => (a.progress >= 100 ? null : `${100 - a.progress}% left`),
+    },
+    ...(onContribute
+      ? [
+          {
+            key: "action",
+            header: <span className="sr-only">Action</span>,
+            align: "right" as const,
+            nowrap: true,
+            cell: (a: DepartmentActivity) =>
+              a.mine || linked?.has(a.id) ? (
+                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-control bg-ims-success-bg px-3 py-1.5 text-t-small font-bold text-ims-success">
+                  <Check size={13} aria-hidden /> In your plan
+                </span>
+              ) : (
+                <Button size="sm" icon={Plus} onClick={() => onContribute(a)} disabled={a.progress >= 100} aria-label={`${contributeLabel}: ${a.title}`}>
+                  {contributeLabel}
+                </Button>
+              ),
+          },
+        ]
+      : []),
+  ];
+  return <DataTable columns={columns} rows={activities} rowKey={(a) => a.id} minWidth={onContribute ? 700 : 600} caption="Department activities" />;
 }
 
 export function DepartmentActivitiesCard({ view, loading, linked, onContribute, empty, action }: {
@@ -88,27 +96,42 @@ export function DepartmentActivitiesCard({ view, loading, linked, onContribute, 
   empty?: string;
   action?: React.ReactNode;
 }) {
-  if (loading) return <WCard><div className="h-28 animate-pulse rounded-lg bg-ims-subtle" /></WCard>;
+  if (loading) {
+    return (
+      <Card>
+        <Skeleton className="h-28 w-full" />
+      </Card>
+    );
+  }
   if (!view) return null;
+  const hasPlan = Boolean(view.plan && view.activities.length);
   return (
-    <WCard flush className="overflow-hidden">
-      <div className="flex flex-wrap items-end justify-between gap-3 px-5 pb-3 pt-[18px]">
-        <div className="min-w-0">
-          <h2 className="text-[17px] font-extrabold">Department activities · {view.period.label}</h2>
-          <p className="text-[13px] text-ims-muted">
-            {view.department.name}{view.plan ? ` · ${view.plan.number}` : ""} · what is left to achieve.{onContribute ? " Contribute to add it to your plan." : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {view.plan && <span className="text-[13px] text-ims-muted">Department overall: <b className="text-ims-text">{view.overall}% achieved</b> · {100 - view.overall}% remaining</span>}
-          {action}
-        </div>
+    <Card padded={false} className="overflow-hidden">
+      <div className="px-[18px] pt-[18px] sm:px-5 sm:pt-5">
+        <CardHeader
+          title={`Department activities · ${view.period.label}`}
+          subtitle={`${view.department.name}${view.plan ? ` · ${view.plan.number}` : ""} · what is left to achieve.${onContribute ? " Contribute to add an activity to your plan." : ""}`}
+          action={
+            (view.plan || action) && (
+              <div className="flex flex-wrap items-center gap-3">
+                {view.plan && (
+                  <span className="text-t-small text-ims-muted">
+                    Department overall <b className="text-ims-text">{view.overall}% achieved</b> · {100 - view.overall}% remaining
+                  </span>
+                )}
+                {action}
+              </div>
+            )
+          }
+        />
       </div>
-      {!view.plan || !view.activities.length ? (
-        <p className="border-t border-ims-divider px-5 py-6 text-[13.5px] text-ims-muted">{empty || `No department plan shared for ${view.period.label} yet. The head of department prepares it.`}</p>
+      {hasPlan ? (
+        <div className="border-t border-ims-divider">
+          <DepartmentActivitiesTable activities={view.activities} linked={linked} onContribute={onContribute} />
+        </div>
       ) : (
-        <DepartmentActivitiesTable activities={view.activities} linked={linked} onContribute={onContribute} />
+        <EmptyState compact icon={Target} className="border-t border-ims-divider" text={empty || `No department plan shared for ${view.period.label} yet. The head of department prepares it.`} />
       )}
-    </WCard>
+    </Card>
   );
 }

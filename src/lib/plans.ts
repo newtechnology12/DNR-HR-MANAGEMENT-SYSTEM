@@ -5,6 +5,7 @@
  * pocketbase/pb_hooks/lib/workspace.js.
  */
 import pocketbase from "@/lib/pocketbase";
+import { color } from "@/design/tokens";
 
 /** The periods people plan for themselves. */
 export type PlanType = "weekly" | "monthly" | "quarterly" | "annual";
@@ -43,24 +44,30 @@ export const CONTRIBUTES: PlanKind[] = ["monthly", "task"];
 export const UNITS = ["People", "Percent (%)", "Number", "Districts", "Sessions", "Reports", "Documents", "Chapters", "Meetings", "Visits", "Days", "RWF"];
 export const EVIDENCE = ["Attendance list", "Report", "Minutes", "Photos", "Training materials", "Publication", "Field visit report", "Financial report", "Signed document", "Other"];
 
-export type Tone = "neutral" | "pending" | "approved" | "rejected" | "info";
+/** Workspace pill tones (see Pill in components/workspace/WorkspaceKit): each glossary word has its own. */
+export type Tone = "neutral" | "pending" | "approved" | "rejected" | "info" | "returned" | "completed";
+/** `label` is always a word of the status glossary (Draft, Pending approval, Approved, In progress, Completed,
+ * Closed, Returned, Rejected, Cancelled); `note` is the detail shown under it. */
+export type PlanStatusMeta = { label: string; tone: Tone; note?: string };
 
-export const PLAN_STATUS: Record<string, { label: string; tone: Tone }> = {
-  draft: { label: "Draft", tone: "neutral" },
-  submitted: { label: "Waiting for approval", tone: "pending" },
-  returned: { label: "Returned", tone: "rejected" },
-  approved: { label: "Approved · in progress", tone: "info" },
-  reported: { label: "Report to assess", tone: "pending" },
-  assessed: { label: "Assessed", tone: "approved" },
+export const PLAN_STATUS: Record<string, PlanStatusMeta> = {
+  draft: { label: "Draft", tone: "neutral", note: "Not sent yet" },
+  submitted: { label: "Pending approval", tone: "pending", note: "Plan to approve" },
+  returned: { label: "Returned", tone: "returned", note: "Correct and send again" },
+  approved: { label: "In progress", tone: "info", note: "Approved · work under way" },
+  reported: { label: "Pending approval", tone: "pending", note: "Report to assess" },
+  assessed: { label: "Completed", tone: "completed", note: "Assessed" },
 };
 
-export const ITEM_STATUS: Record<string, { label: string; tone: Tone }> = {
-  not_started: { label: "Not started", tone: "neutral" },
+export const ITEM_STATUS: Record<string, PlanStatusMeta> = {
+  not_started: { label: "Draft", tone: "neutral", note: "Not started" },
   in_progress: { label: "In progress", tone: "info" },
-  done: { label: "Done", tone: "approved" },
-  postponed: { label: "Postponed", tone: "pending" },
-  dropped: { label: "Dropped", tone: "rejected" },
+  done: { label: "Completed", tone: "completed" },
+  postponed: { label: "Draft", tone: "neutral", note: "Postponed" },
+  dropped: { label: "Cancelled", tone: "rejected" },
 };
+/** "Draft · Not started", "In progress", "Completed" — for status choices in a dropdown. */
+export const statusChoice = (m?: PlanStatusMeta) => (m ? (m.note ? `${m.label} · ${m.note}` : m.label) : "");
 
 export const SEVERITY: Record<string, { label: string; tone: Tone }> = {
   high: { label: "High", tone: "rejected" },
@@ -182,12 +189,13 @@ export const shiftPeriod = (type: PlanType, start: string, dir: 1 | -1) => {
 
 // ------------------------------------------------------------------ health
 export type Health = "not_started" | "on_track" | "at_risk" | "off_track" | "completed";
-export const HEALTH: Record<Health, { label: string; tone: Tone; bar: string; text: string }> = {
-  not_started: { label: "Not started", tone: "neutral", bar: "#C5CDD9", text: "text-[#5B6577]" },
-  on_track: { label: "On track", tone: "approved", bar: "#1466C0", text: "text-[#0F6B3A]" },
-  at_risk: { label: "At risk", tone: "pending", bar: "#E8A33A", text: "text-[#8A5A00]" },
-  off_track: { label: "Off track", tone: "rejected", bar: "#C0392B", text: "text-[#B42318]" },
-  completed: { label: "Completed", tone: "info", bar: "#0F6B3A", text: "text-[#0B3A6F]" },
+/** Health is not a status: pages show it as a coloured dot + text (`dot`), and `bar` colours progress bars. */
+export const HEALTH: Record<Health, { label: string; tone: Tone; bar: string; text: string; dot: string }> = {
+  not_started: { label: "Not started", tone: "neutral", bar: color["priority-low"], text: "text-ims-muted", dot: "bg-ims-priority-low" },
+  on_track: { label: "On track", tone: "approved", bar: color.link, text: "text-ims-success", dot: "bg-ims-link" },
+  at_risk: { label: "At risk", tone: "pending", bar: color["priority-high"], text: "text-ims-warning", dot: "bg-ims-priority-high" },
+  off_track: { label: "Off track", tone: "rejected", bar: color.danger, text: "text-ims-danger", dot: "bg-ims-danger" },
+  completed: { label: "Completed", tone: "completed", bar: color.success, text: "text-ims-primary", dot: "bg-ims-success" },
 };
 export const HEALTH_NOTE = "Health compares achievement with time passed in the period · On track ≥ expected − 10 pts · At risk ≥ expected − 25 pts · Off track below";
 
@@ -215,9 +223,9 @@ export function healthOf(plan: { status: string; progress: number; period_start:
   return gap <= 10 ? "on_track" : gap <= 25 ? "at_risk" : "off_track";
 }
 
-/** Status as shown: an approved plan whose period has not begun is "Not started". */
-export function statusOf(plan: { status: string; period_start: string }, now = new Date()): { label: string; tone: Tone } {
-  if (plan.status === "approved" && utcDay(now) < utcDay(plan.period_start)) return { label: "Not started", tone: "neutral" };
+/** Status as shown: an approved plan whose period has not begun is "Approved · Not started yet". */
+export function statusOf(plan: { status: string; period_start: string }, now = new Date()): PlanStatusMeta {
+  if (plan.status === "approved" && utcDay(now) < utcDay(plan.period_start)) return { label: "Approved", tone: "approved", note: "Not started yet" };
   return PLAN_STATUS[plan.status] || { label: plan.status, tone: "neutral" };
 }
 

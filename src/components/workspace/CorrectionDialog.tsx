@@ -6,11 +6,11 @@ import * as React from "react";
 import { useQueryClient } from "react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { CalendarCheck2, FileText } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { errorMessage } from "@/lib/procurement";
-import { Field, FileDrop, FormBlock, FormDialog, inputCls, textareaCls } from "@/components/portal/kit";
-import { cn } from "@/utils";
+import { FileDrop } from "@/components/portal/kit";
+import { Button, Checkbox, Field, Modal, ModalSection, Select, Textarea } from "@/components/ims";
 import type { CalDay } from "./WorkspaceKit";
 
 export const CORRECTION_REASONS: Record<string, string> = {
@@ -76,36 +76,58 @@ export default function CorrectionDialog({ open, onClose, days, uid }: { open: b
   });
 
   return (
-    <FormDialog open={open} onClose={onClose} icon={CalendarCheck2} title="Ask HR to correct my attendance" description="For working days you were on duty but did not clock in. HR checks and adds them to your attendance log." submitLabel={busy ? "Sending…" : `Send to HR (${picked.size} day${picked.size === 1 ? "" : "s"})`} busy={busy} onSubmit={submit}>
-      <FormBlock icon={CalendarCheck2} title="Days without a clock-in">
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title="Ask HR to correct my attendance"
+      description="For working days you were on duty but did not clock in. HR checks them and adds them to your attendance log."
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={submit} loading={busy}>Send to HR ({picked.size} day{picked.size === 1 ? "" : "s"})</Button>
+        </>
+      }
+    >
+      <ModalSection title="Days without a clock-in" description="Days within the last 90 days only. Days on approved leave or public holidays are not needed.">
         {days.length ? (
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days to correct">
-            {days.map((d) => (
-              <button key={d.key} type="button" aria-pressed={picked.has(d.key)} onClick={() => toggle(d.key)}
-                className={cn("rounded-lg border px-2.5 py-1.5 text-[12.5px] font-semibold", picked.has(d.key) ? "border-ims-link bg-ims-info-bg text-ims-primary" : "border-ims-field bg-white text-ims-muted hover:bg-ims-thead")}>
-                {format(d.date, "EEE d MMM")}
-              </button>
-            ))}
-          </div>
-        ) : <p className="text-[13px] text-ims-muted">No working day without a clock-in in the last 30 days.</p>}
-        {tried && errors.days && <p className="text-[12px] text-red-600">{errors.days}</p>}
-        <p className="text-[12px] text-ims-muted">Days within the last 90 days only. Days on approved leave or public holidays are not needed.</p>
-      </FormBlock>
-      <FormBlock icon={FileText} title="Why">
-        <div className="grid gap-4">
-          <Field label="Reason" required htmlFor="cr-reason">
-            <select id="cr-reason" className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)}>
-              {Object.entries(CORRECTION_REASONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-          </Field>
-          <Field label="Explanation" required error={tried && errors.explanation} htmlFor="cr-expl">
-            <textarea id="cr-expl" className={cn(textareaCls, "min-h-[80px]")} value={explanation} onChange={(e) => setExplanation(e.target.value)} placeholder="e.g. Mission to Gicumbi district for the councillors' training (mission order signed by my head of department)." />
-          </Field>
-          <Field label="Supporting document" hint="Mission order, invitation or training certificate (optional)">
-            <FileDrop files={files} onChange={setFiles} max={5} />
-          </Field>
-        </div>
-      </FormBlock>
-    </FormDialog>
+          <fieldset>
+            <legend className="sr-only">Days to correct</legend>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
+              {days.map((d) => (
+                <Checkbox key={d.key} id={`cr-day-${d.key}`} label={format(d.date, "EEE d MMM yyyy")} checked={picked.has(d.key)} onChange={() => toggle(d.key)} />
+              ))}
+            </div>
+          </fieldset>
+        ) : (
+          <p className="text-t-body text-ims-muted">No working day without a clock-in in the last 30 days.</p>
+        )}
+        {tried && errors.days && (
+          <p className="flex items-start gap-1 text-t-hint text-ims-danger" role="alert">
+            <AlertCircle size={13} className="mt-px shrink-0" aria-hidden /> {errors.days}
+          </p>
+        )}
+      </ModalSection>
+      <ModalSection title="Why">
+        <Field label="Reason" required htmlFor="cr-reason">
+          <Select id="cr-reason" value={reason} onChange={(e) => setReason(e.target.value)}>
+            {Object.entries(CORRECTION_REASONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </Select>
+        </Field>
+        <Field label="Explanation" required error={tried && errors.explanation} htmlFor="cr-expl" hint="Where you were and why you could not clock in.">
+          <Textarea
+            id="cr-expl"
+            className="min-h-[80px]"
+            value={explanation}
+            invalid={Boolean(tried && errors.explanation)}
+            onChange={(e) => setExplanation(e.target.value)}
+            placeholder="e.g. Mission to Gicumbi district for the councillors' training (mission order signed by my head of department)."
+          />
+        </Field>
+        <Field label="Supporting document" hint="Mission order, invitation or training certificate (optional)">
+          <FileDrop files={files} onChange={setFiles} max={5} />
+        </Field>
+      </ModalSection>
+    </Modal>
   );
 }

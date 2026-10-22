@@ -23,7 +23,7 @@ import { LeaveFormModal } from "@/components/modals/LeaveFormModal";
 import ExpenseRequestDialog from "@/components/expenses/ExpenseRequestDialog";
 import { PayslipDialog, payrollOf } from "@/pages/hr/payroll/Payslip";
 import {
-  AttendanceCalendar, AttendanceNotice, ClockCard, LeaveBalance, Pill, RequestTable, RequestTabs, ReqTab, WCard, WHead, WLink, btnNavyOutline, btnOutline, btnPrimary,
+  AttendanceCalendar, AttendanceNotice, ClockCard, LeaveBalance, RequestTable, RequestTabs, ReqTab, WCard, WHead, WLink, btnNavyOutline, btnOutline, btnPrimary,
   buildCalendar, fetchLatestPayslip, fetchMyAttendance, fetchMyRequests, money, tabOf, usePayHidden, toDate,
 } from "@/components/workspace/WorkspaceKit";
 import CorrectionDialog from "@/components/workspace/CorrectionDialog";
@@ -205,7 +205,7 @@ function WeekPlanCard({ data, loading, onChanged }: { data?: { week: { start: st
         <button type="button" onClick={() => navigate(`/dashboard/my/plans/${week.id}`)} className="w-full min-w-0 rounded-control border border-ims-border p-3.5 text-left hover:bg-ims-hover">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-t-body font-bold">{week.focus || week.title}</span>
-            <Pill tone={PLAN_STATUS[week.status]?.tone}>{PLAN_STATUS[week.status]?.label}</Pill>
+            <StatusPill status={PLAN_STATUS[week.status]?.label || week.status} sub={PLAN_STATUS[week.status]?.note} />
           </div>
           <div className="mt-2.5 flex items-center gap-3">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-ims-neutral-bg"><div className="h-full rounded-full bg-ims-link" style={{ width: `${week.progress}%` }} /></div>

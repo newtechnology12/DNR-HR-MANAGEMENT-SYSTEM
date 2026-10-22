@@ -1,11 +1,12 @@
 import type { Tone } from "@/lib/procurement";
 
-export const PLAN_STATUS: Record<string, { label: string; tone: Tone }> = {
-  not_started: { label: "Not started", tone: "neutral" },
+/** Action plan statuses in the status glossary; the detail is the note under the pill. */
+export const PLAN_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  not_started: { label: "Draft", tone: "neutral", note: "Not started" },
   in_progress: { label: "In progress", tone: "info" },
   completed: { label: "Completed", tone: "success" },
-  on_hold: { label: "On hold", tone: "warning" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  on_hold: { label: "In progress", tone: "info", note: "On hold" },
+  cancelled: { label: "Cancelled", tone: "danger" },
 };
 export const PLAN_PRIORITY: Record<string, { label: string; tone: Tone }> = {
   low: { label: "Low", tone: "neutral" },
@@ -18,11 +19,14 @@ export const PLAN_TYPES = [
   { value: "monthly", label: "Monthly" },
 ];
 
-export const REPORT_STATUS: Record<string, { label: string; tone: Tone }> = {
-  submitted: { label: "Awaiting review", tone: "warning" },
-  info_requested: { label: "Information requested", tone: "violet" },
-  reviewed: { label: "Reviewed", tone: "success" },
+/** Work report statuses in the status glossary. */
+export const REPORT_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  submitted: { label: "Pending approval", tone: "warning", note: "Awaiting review" },
+  info_requested: { label: "Returned", tone: "violet", note: "Information requested" },
+  reviewed: { label: "Completed", tone: "success", note: "Reviewed" },
 };
+/** "Pending approval · Awaiting review" — for status choices in a filter. */
+export const statusText = (m?: { label: string; note?: string }) => (m ? (m.note ? `${m.label} · ${m.note}` : m.label) : "");
 export const REPORT_TYPES = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },

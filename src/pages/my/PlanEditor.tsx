@@ -1,27 +1,53 @@
 /**
- * New plan, edit a draft, or assign work (supervisors). Three steps — what is planned, the period and the
- * plan it carries out, then the activities with what that level needs (indicator, unit, target, weight, due
- * date, evidence, cost) — with the department's activities to contribute to, a live plan check and a summary
- * beside the form. A new plan is kept on this device while it is being filled, so nothing is lost.
+ * New plan, edit a draft, or assign work (supervisors). Three numbered steps — what is planned, the period
+ * and the plan it carries out, then the activities with what that level needs (indicator, unit, target,
+ * weight, due date, evidence, cost) — with the department's activities to contribute to, and a live plan
+ * check and summary beside the form. A new plan is kept on this device while it is being filled, so
+ * nothing is lost.
  */
 import * as React from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, Info, ListPlus, Plus, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ClipboardList, CornerUpLeft, Info, ListPlus, Plus, RotateCcw, X } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useAuth } from "@/context/auth.context";
 import { errorMessage } from "@/lib/procurement";
 import {
-  CONTRIBUTES, DepartmentActivity, EVIDENCE, NEEDS, PRIORITY, Period, PlanItem, PlanKind, TYPE_INFO, UNITS, WEEKDAYS, WHO, blankItem, dayOf, dmy, plansApi, qty,
+  CONTRIBUTES, DepartmentActivity, EVIDENCE, NEEDS, PRIORITY, Period, PlanItem, PlanKind, TYPE_INFO, UNITS, WEEKDAYS, WHO, blankItem, dayOf, plansApi, qty,
 } from "@/lib/plans";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WCard, btnOutline, btnPrimary } from "@/components/workspace/WorkspaceKit";
+import { ChoiceCards } from "@/components/portal/kit";
 import { DepartmentActivitiesCard } from "@/components/workspace/DepartmentActivities";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  Checkbox,
+  DatePicker,
+  EmptyState,
+  ErrorSummary,
+  Field,
+  FormActions,
+  FormBody,
+  FormError,
+  FormSection,
+  Input,
+  Modal,
+  MoneyInput,
+  Page,
+  PageHeader,
+  Select,
+  SummaryPanel,
+  fmtDate,
+  fmtDateTime,
+  fmtMoney,
+} from "@/components/ims";
 import { cn } from "@/utils";
 
 const today = () => format(new Date(), "yyyy-MM-dd");
+const LIST = "/dashboard/my/plans";
 const FOCUS_MAX = 120;
 const OWN_KINDS: PlanKind[] = ["weekly", "monthly", "quarterly", "annual", "department"];
 const ASSIGN_KINDS: PlanKind[] = ["task", "weekly", "monthly", "quarterly", "annual"];
@@ -35,6 +61,8 @@ const GUIDE: Record<PlanKind, string> = {
   task: "Give the task its dates and its deliverables. It starts approved; the staff member records progress and reports to you.",
 };
 const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** Item fields in the order they appear in the form (for the error summary). */
+const ITEM_FIELDS: (keyof PlanItem)[] = ["title", "due", "output", "objective", "indicator", "target", "weight"];
 
 /** "19–23 Oct 2026", "26 Oct – 6 Nov 2026". */
 function rangeLabel(a: string, b: string) {
@@ -45,32 +73,32 @@ function rangeLabel(a: string, b: string) {
   return da === db ? `${da} ${SHORT_MONTHS[ma - 1]} ${ya}` : `${da}–${db} ${SHORT_MONTHS[ma - 1]} ${ya}`;
 }
 
-const inputCls = (bad?: boolean) =>
-  cn("h-11 w-full rounded-[9px] border bg-white px-3 text-[14px] text-[#14213D] outline-none placeholder:text-[#8A94A6] focus:ring-2 focus:ring-[#1466C0]/15 disabled:cursor-not-allowed disabled:bg-[#F4F6F9]",
-    bad ? "border-[#D92D20] focus:border-[#D92D20]" : "border-[#DDE3EC] focus:border-[#1466C0]");
-
-function F({ label, required, hint, error, className, htmlFor, children }: { label: React.ReactNode; required?: boolean; hint?: React.ReactNode; error?: string; className?: string; htmlFor?: string; children: React.ReactNode }) {
+/** A line of guidance or warning inside the form. */
+function Notice({ tone, icon: Icon, children, role }: { tone: "info" | "warning" | "orange"; icon: typeof Info; children: React.ReactNode; role?: string }) {
+  const cls = { info: "border-ims-info/20 bg-ims-info-bg text-ims-info", warning: "border-ims-warning/30 bg-ims-warning-bg text-ims-warning", orange: "border-ims-orange/30 bg-ims-orange-bg text-ims-orange" }[tone];
   return (
-    <div className={cn("min-w-0", className)}>
-      <label htmlFor={htmlFor} className="mb-1.5 block text-[13.5px] font-bold text-[#14213D]">{label}{required && <span className="text-[#D92D20]"> *</span>}</label>
-      {children}
-      {error ? <p className="mt-1 text-[12.5px] font-semibold text-[#B42318]">{error}</p> : hint ? <p className="mt-1 text-[12.5px] leading-snug text-[#5B6577]">{hint}</p> : null}
+    <div role={role} className={cn("flex items-start gap-2 rounded-control border px-3 py-2.5 text-t-body", cls)}>
+      <Icon size={16} className="mt-0.5 shrink-0" aria-hidden />
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
 
-function Section({ n, title, subtitle, right, children, flush }: { n?: number; title: string; subtitle?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode; flush?: boolean }) {
+/** Day / quarter toggles: several can be on. */
+function Toggle({ on, onClick, children, label }: { on: boolean; onClick: () => void; children: React.ReactNode; label?: string }) {
   return (
-    <WCard flush={flush} className={flush ? "overflow-hidden" : undefined}>
-      <div className={cn("flex flex-wrap items-center justify-between gap-3", flush ? "px-5 py-4" : "mb-4")}>
-        <div className="min-w-0">
-          <h2 className="text-[17px] font-extrabold">{n ? `${n} · ` : ""}{title}</h2>
-          {subtitle && <p className="text-[13px] text-[#5B6577]">{subtitle}</p>}
-        </div>
-        {right}
-      </div>
+    <button
+      type="button"
+      aria-pressed={on}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        "h-control min-w-0 flex-1 rounded-control border text-t-small font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus",
+        on ? "border-ims-link bg-ims-info-bg text-ims-primary" : "border-ims-field bg-ims-card text-ims-muted hover:bg-ims-hover"
+      )}
+    >
       {children}
-    </WCard>
+    </button>
   );
 }
 
@@ -279,7 +307,7 @@ export default function PlanEditor() {
     if (empty(it) && items.length > 1) return e;
     if (it.title.trim().length < 3) e.title = `Describe the ${noun.toLowerCase()} (at least 3 characters).`;
     if (need.due && !it.due) e.due = "Give the due date.";
-    if (it.due && period && (it.due < period.start || it.due > period.end)) e.due = `Between ${dmy(period.start)} and ${dmy(period.end)}.`;
+    if (it.due && period && (it.due < period.start || it.due > period.end)) e.due = `Between ${fmtDate(period.start)} and ${fmtDate(period.end)}.`;
     if (need.output && !it.output.trim()) e.output = "Say what it will produce.";
     if (need.objective && !it.objective) e.objective = "Choose the strategic objective.";
     if (need.measure && !it.indicator.trim()) e.indicator = "Say how it is measured.";
@@ -337,14 +365,27 @@ export default function PlanEditor() {
       setBusy("");
     }
   }
-
-  if (editing && existing.isLoading) return <main className="mx-auto w-full max-w-[1320px] px-4 py-6 sm:px-8"><Skeleton className="h-[480px] w-full" /></main>;
+  const back = assignMode ? `${LIST}?tab=team` : LIST;
+  if (editing && existing.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-[480px] w-full" />
+      </Page>
+    );
+  }
   const existingPlan: any = existing.data;
   if (editing && existingPlan && !["draft", "returned"].includes(existingPlan.status)) {
     return (
-      <main className="mx-auto w-full max-w-[1320px] px-4 py-6 sm:px-8">
-        <WCard><p className="text-[14px]">{existingPlan.number} is {existingPlan.status}: it can no longer be edited. <Link className="font-bold text-[#1466C0]" to={`/dashboard/my/plans/${existingPlan.id}`}>Open it</Link> to record progress.</p></WCard>
-      </main>
+      <Page>
+        <Card>
+          <EmptyState
+            icon={ClipboardList}
+            text={`${existingPlan.number} has been sent, so it can no longer be edited. Open it to record progress.`}
+            action={<ButtonLink to={`${LIST}/${existingPlan.id}`} variant="primary">Open {existingPlan.number}</ButtonLink>}
+          />
+        </Card>
+      </Page>
     );
   }
 
@@ -355,325 +396,347 @@ export default function PlanEditor() {
     const a = it.department_activity ? daOf(it.department_activity) : undefined;
     return a ? `${a.title}: ${a.progress}% achieved${a.remaining !== null ? ` · ${qty(a.remaining, a.unit)} still to do` : ""}. Your result will count towards it.` : "";
   };
+  const pageTitle = assignMode ? "Assign work" : editing ? `Edit ${existingPlan?.number || "plan"}` : "New plan";
+
+  // what to fix, with links to each field (shown after the first save or send)
+  const summaryErrors: FormError[] = [
+    ...(topErrors.staff ? [{ field: "pl-staff", message: topErrors.staff }] : []),
+    ...(topErrors.title ? [{ field: "pl-title", message: topErrors.title }] : []),
+    ...(topErrors.dates ? [{ field: "pl-start", message: topErrors.dates }] : []),
+    ...(topErrors.period ? [{ field: "pl-period", message: topErrors.period }] : []),
+    ...(clash ? [{ field: "pl-period", message: `There is already a ${info.label.toLowerCase()} for ${period?.label} (${clash.number}). Choose another period.` }] : []),
+    ...itemErrors.flatMap((e, i) => ITEM_FIELDS.filter((k) => e[k]).map((k) => ({ field: `it-${i}-${k}`, message: `${noun} ${i + 1}: ${e[k]}` }))),
+    ...(need.weights && !weightsOk && live.length ? [{ field: "it-0-weight", message: `The weights add up to ${weightTotal}%; they must add up to 100%.` }] : []),
+  ];
+
+  const levelCheck =
+    kind === "annual" ? { label: "Top of the cycle: your quarterly plans carry it out", done: true }
+    : kind === "department" ? { label: "Department level: staff contribute from their monthly plans", done: true }
+    : kind === "task" ? { label: staffId ? `For ${staffName || "the staff member"} · starts approved` : "Choose the person", done: Boolean(staffId) }
+    : { label: parentPlan ? "Linked to a higher plan" : parents.length ? "Choose the plan it carries out" : "No approved higher plan for this period", done: Boolean(parentPlan) };
 
   return (
-    <main className="mx-auto w-full max-w-[1320px] px-4 pb-14 pt-[22px] text-[#14213D] sm:px-8 sm:pt-[26px]">
-      <div className="mb-[18px] flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <Link to={assignMode ? "/dashboard/my/plans?tab=team" : "/dashboard/my/plans"} className="inline-flex items-center gap-1 text-[13px] font-bold text-[#1466C0] hover:underline"><ArrowLeft size={13} aria-hidden /> My plans & reports</Link>
-          <h1 className="mt-1 text-[28px] font-extrabold tracking-[-0.01em]">{assignMode ? "Assign work" : editing ? `Edit ${existingPlan?.number || "plan"}` : "New plan"}</h1>
-          <p className="text-[13.5px] text-[#5B6577]">{assignMode ? "Give a member of your team a task with its own dates, or set one of their plans. It starts approved." : "Plan from the top down. Your supervisor approves it before you start."}</p>
-        </div>
-        {!editing && (
-          <p className="text-[12.5px] text-[#5B6577]" aria-live="polite">
-            {restoredAt ? <>Draft restored · saved {format(restoredAt, "d MMM HH:mm")} · <button type="button" onClick={discard} className="font-bold text-[#1466C0] hover:underline">Discard</button></> : savedAt ? `Draft saved automatically · ${format(savedAt, "HH:mm")}` : "Your entries are kept on this device until you save"}
-          </p>
-        )}
-      </div>
+    <Page>
+      <PageHeader
+        breadcrumbs={[{ label: "My workspace", to: "/dashboard/my" }, { label: assignMode ? "My team's plans" : "My plans & reports", to: back }, { label: pageTitle }]}
+        title={pageTitle}
+        subtitle={assignMode ? "Give a member of your team a task with its own dates, or set one of their plans. It starts approved." : "Plan from the top down. Your supervisor approves the plan before you start."}
+      />
 
-      <div className="grid items-start gap-[18px] lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="flex min-w-0 flex-col gap-[18px]">
-          {/* 1 · what */}
-          <Section n={1} title={assignMode ? "What are you assigning?" : "What are you planning?"}>
-            {assignMode && (
-              <F label="Assign to" required error={shown(topErrors.staff)} className="mb-4 max-w-md" htmlFor="pl-staff">
-                <select id="pl-staff" className={inputCls(Boolean(shown(topErrors.staff)))} value={staffId} onChange={(e) => { setStaffId(e.target.value); setParent(""); }}>
-                  <option value="">Choose a member of your team…</option>
-                  {(team.data || []).map((m) => <option key={m.id} value={m.id}>{m.name}{m.designation ? ` — ${m.designation}` : ""}{m.department ? ` (${m.department})` : ""}</option>)}
-                </select>
-              </F>
-            )}
-            <div role="radiogroup" aria-label="Kind of plan" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {kinds.map((k) => {
-                const locked = (k === "department" && !ctx.data?.is_head) || (editing && k !== kind);
-                const on = kind === k;
-                return (
-                  <button key={k} type="button" role="radio" aria-checked={on} disabled={locked} onClick={() => { setKind(k); setPeriodStart(""); setParent(""); periodTouched.current = false; }}
-                    className={cn("flex flex-col items-start gap-1.5 rounded-xl border px-4 py-3.5 text-left transition-colors", on ? "border-[#1466C0] bg-[#EAF2FC] ring-1 ring-[#1466C0]" : "border-[#E3E8EF] bg-white hover:bg-[#F8FAFD]", locked && "cursor-not-allowed opacity-60 hover:bg-white")}>
-                    <span className="flex items-start gap-2 text-[15px] font-extrabold leading-snug">
-                      <span className={cn("mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2", on ? "border-[#1466C0]" : "border-[#B8C2D1]")}>{on && <span className="h-2 w-2 rounded-full bg-[#1466C0]" />}</span>
-                      {TYPE_INFO[k].label}
-                    </span>
-                    <span className="text-[13px] leading-snug text-[#5B6577]">{TYPE_INFO[k].hint}</span>
-                    <span className={cn("mt-auto pt-1 text-[12px] font-bold", k === "department" ? "text-[#6B2FA3]" : "text-[#36435A]")}>Who: {assignMode ? (k === "task" ? "You assign it" : "You set it") : WHO[k]}</span>
-                  </button>
-                );
-              })}
+      {!editing && restoredAt && (
+        <Notice tone="info" icon={RotateCcw} role="status">
+          <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>Draft restored from this device · saved {fmtDateTime(restoredAt)}.</span>
+            <Button size="sm" onClick={discard}>Discard it</Button>
+          </span>
+        </Notice>
+      )}
+      {editing && existingPlan?.status === "returned" && (
+        <Notice tone="orange" icon={CornerUpLeft} role="status">
+          Your supervisor returned this plan{existingPlan.review_comment ? `: “${existingPlan.review_comment}”` : ""}. Correct it and send it again.
+        </Notice>
+      )}
+
+      <ErrorSummary errors={tried ? summaryErrors : []} title="Check these fields before you send" />
+
+      <FormBody
+        aside={
+          <SummaryPanel
+            title="Plan check"
+            rows={[
+              ["Plan", info.label],
+              ["Period", period?.label || "—"],
+              [info.items, String(live.length)],
+              ...(showDept && das.length ? [["Linked to department", `${linkedCount} of ${live.length}`] as [string, React.ReactNode]] : []),
+              ...(kind !== "weekly" && kind !== "annual" ? [["Estimated cost", fmtMoney(cost)] as [string, React.ReactNode]] : []),
+            ]}
+            checklist={[
+              { label: clash ? `Period already planned (${clash.number})` : period ? `Period: ${period.label}` : "Choose the period", done: Boolean(period) && !clash },
+              levelCheck,
+              {
+                label: !live.length ? `Add at least one ${noun.toLowerCase()}` : `${live.length} ${live.length === 1 ? noun.toLowerCase() : info.items.toLowerCase()}${need.measure ? (measured === live.length ? ", each with indicator and target" : ` · ${live.length - measured} without indicator or target`) : ""}`,
+                done: live.length > 0 && (!need.measure || measured === live.length),
+              },
+              ...(need.weights ? [{ label: `Weights total ${weightTotal}%${weightTotal < 100 ? ` · ${100 - weightTotal}% still to assign` : weightTotal > 100 ? ` · ${weightTotal - 100}% too much` : ""}`, done: weightTotal === 100 }] : []),
+              { label: fieldsToFix ? `${fieldsToFix} field${fieldsToFix === 1 ? "" : "s"} to fix${tried ? ", shown in red" : ""}` : "Required fields filled", done: fieldsToFix === 0 },
+              ...(showDept && das.length > 0 ? [{ label: `${linkedCount} linked to department activities`, done: linkedCount > 0 }] : []),
+            ]}
+          >
+            <div className="mt-4 border-t border-ims-divider pt-4">
+              <p className="mb-2 text-t-small font-bold text-ims-muted">{assignMode ? "Assigned to" : "Approval route"}</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {route.map((r, k) => (
+                  <React.Fragment key={k}>
+                    {k > 0 && <span className="text-ims-faint" aria-hidden>→</span>}
+                    <span className="rounded-control border border-ims-field bg-ims-thead px-2 py-0.5 text-t-small font-bold text-ims-text">{r}</span>
+                  </React.Fragment>
+                ))}
+                {!assignMode && !supervisor && ctx.data && <span className="text-t-small text-ims-muted">approved when you send it</span>}
+              </div>
             </div>
-          </Section>
-
-          {/* 2 · when and aligned with what */}
-          <Section n={2} title="Period and alignment">
-            {kind === "task" ? (
-              <div className="grid gap-4 md:grid-cols-12">
-                <F label="Task" required error={shown(topErrors.title)} className="md:col-span-6" htmlFor="pl-title">
-                  <input id="pl-title" className={inputCls(Boolean(shown(topErrors.title)))} value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Support Gakenke district budget hearings" />
-                </F>
-                <F label="Starts" required className="md:col-span-3" htmlFor="pl-start" error={shown(topErrors.dates)}>
-                  <input id="pl-start" type="date" className={inputCls(Boolean(shown(topErrors.dates)))} value={taskStart} onChange={(e) => setTaskStart(e.target.value)} />
-                </F>
-                <F label="Ends" required className="md:col-span-3" htmlFor="pl-end" hint={period ? period.label : undefined}>
-                  <input id="pl-end" type="date" className={inputCls(Boolean(shown(topErrors.dates)))} value={taskEnd} min={taskStart} onChange={(e) => setTaskEnd(e.target.value)} />
-                </F>
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-3">
-                <F label={PERIOD_LABEL[kind]} required htmlFor="pl-period" error={shown(topErrors.period)} hint={period ? `${dmy(period.start)} – ${dmy(period.end)}` : undefined}>
-                  <select id="pl-period" className={inputCls(Boolean(shown(topErrors.period)))} value={periodStart} onChange={(e) => { periodTouched.current = true; setPeriodStart(e.target.value); }}>
-                    {!periods.data && <option value="">Loading…</option>}
-                    {(periods.data || []).map((p) => {
-                      const has = all.some((x) => x.id !== planId && sameKind(x) && dayOf(x.period_start) === p.start);
-                      return <option key={p.start} value={p.start}>{p.label}{p.current ? " (current)" : ""}{has ? " — planned" : ""}</option>;
-                    })}
-                    {period && !(periods.data || []).some((p) => p.start === period.start) && <option value={period.start}>{period.label}</option>}
-                  </select>
-                </F>
-                {kind !== "annual" ? (
-                  <F label="Contributes to" required={info.parent.length > 0 && parents.length > 0 && kind !== "department"} htmlFor="pl-parent"
-                    hint={parents.length ? "The approved plan for a longer period that this one carries out." : `No approved ${info.parent.map((k) => TYPE_INFO[k].short.toLowerCase()).join(" or ")} plan covers this period yet.`}>
-                    <select id="pl-parent" className={inputCls()} value={parent} onChange={(e) => setParent(e.target.value)}>
-                      <option value="">{parents.length ? "Not linked" : "—"}</option>
-                      {parents.map((p) => <option key={p.id} value={p.id}>{TYPE_INFO[p.plan_type as PlanKind].label} · {p.period_label.split(" · ")[0]} ({p.status === "approved" ? "approved" : p.status})</option>)}
-                    </select>
-                  </F>
-                ) : (
-                  <F label="Contributes to" hint="The top of your cycle: your quarterly plans carry it out.">
-                    <input className={inputCls()} value={ctx.data?.department ? `${ctx.data.department.name} objectives` : "RALGA strategic objectives"} disabled readOnly />
-                  </F>
-                )}
-                <F label="Main focus of the period" htmlFor="pl-focus" hint={`${focus.length} / ${FOCUS_MAX} characters`}>
-                  <input id="pl-focus" className={inputCls()} value={focus} maxLength={FOCUS_MAX} onChange={(e) => setFocus(e.target.value)} placeholder={kind === "annual" ? "e.g. Councillors' leadership and district PFM" : "e.g. Gakenke training and the budgeting guide"} />
-                </F>
-              </div>
-            )}
-            {assignMode && (
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <F label="Where it comes from" htmlFor="pl-source" hint="Optional — e.g. the strategic plan or a request from the Secretary General.">
-                  <input id="pl-source" className={inputCls()} value={source} maxLength={200} onChange={(e) => setSource(e.target.value)} placeholder="e.g. RALGA Strategic Plan · Capacity Building" />
-                </F>
-                <F label="Instructions" htmlFor="pl-instr" hint="What the person should know before starting.">
-                  <input id="pl-instr" className={inputCls()} value={instructions} maxLength={1000} onChange={(e) => setInstructions(e.target.value)} placeholder="e.g. Coordinate with the district planner; report by Friday 6 Nov" />
-                </F>
-              </div>
-            )}
-            <p className="mt-4 flex items-start gap-2 rounded-lg bg-[#F1F5FB] px-3 py-2.5 text-[13px] text-[#36435A]"><Info size={15} className="mt-px shrink-0 text-[#1466C0]" aria-hidden /> {GUIDE[kind]}</p>
-            {clash && (
-              <p role="alert" className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-lg border border-[#F5DFA3] bg-[#FFF8E6] px-3 py-2 text-[13px] text-[#5B4A1C]">
-                <AlertTriangle size={14} className="shrink-0 text-[#9A6300]" aria-hidden />
-                There is already a {info.label.toLowerCase()} for {period?.label} ({clash.number}).
-                <Link to={`/dashboard/my/plans/${clash.id}`} className="font-bold text-[#1466C0] hover:underline">Open it</Link> or choose another period.
-              </p>
-            )}
-          </Section>
-
-          {/* department activities to contribute to */}
-          {showDept && (
-            <DepartmentActivitiesCard view={dept.data} loading={dept.isLoading} linked={linked} onContribute={kind === "department" ? undefined : contribute}
-              empty={`No department plan shared for ${period?.label} yet — your head of department prepares it. You can still plan your own activities.`} />
+          </SummaryPanel>
+        }
+      >
+        {/* 1 · what */}
+        <FormSection title={assignMode ? "What are you assigning?" : "What are you planning?"} description={assignMode ? "The person, then a task or one of their plans." : "Each level carries out the one above it."}>
+          {assignMode && (
+            <Field label="Assign to" required error={shown(topErrors.staff)} className="max-w-md" htmlFor="pl-staff">
+              <Select id="pl-staff" invalid={Boolean(shown(topErrors.staff))} value={staffId} onChange={(e) => { setStaffId(e.target.value); setParent(""); }}>
+                <option value="">Choose a member of your team</option>
+                {(team.data || []).map((m) => <option key={m.id} value={m.id}>{m.name}{m.designation ? ` — ${m.designation}` : ""}{m.department ? ` (${m.department})` : ""}</option>)}
+              </Select>
+            </Field>
           )}
+          <ChoiceCards<PlanKind>
+            value={kind}
+            columns={3}
+            onChange={(k) => { setKind(k); setPeriodStart(""); setParent(""); periodTouched.current = false; }}
+            options={kinds.map((k) => ({
+              value: k,
+              label: TYPE_INFO[k].label,
+              description: `${TYPE_INFO[k].hint} Who: ${assignMode ? (k === "task" ? "you assign it" : "you set it") : WHO[k].toLowerCase()}.`,
+              disabled: (k === "department" && !ctx.data?.is_head) || (editing && k !== kind),
+            }))}
+          />
+        </FormSection>
 
-          {/* 3 · activities */}
-          <Section n={3} title={info.items} subtitle={`${live.length} ${live.length === 1 ? noun.toLowerCase() : info.items.toLowerCase()}`} flush
-            right={
-              <div className="flex flex-wrap items-center gap-4">
-                {need.weights && (
-                  <div className="w-[210px]">
-                    <div className="flex items-center justify-between text-[13px]"><span className="font-bold">Total weight</span><b className={weightTotal === 100 ? "text-[#0F6B3A]" : "text-[#8A5A00]"}>{weightTotal}% of 100%</b></div>
-                    <div className="mt-1 h-[7px] overflow-hidden rounded-full bg-[#EEF1F5]"><div className="h-full rounded-full" style={{ width: `${Math.min(100, weightTotal)}%`, background: weightTotal === 100 ? "#0F6B3A" : weightTotal > 100 ? "#B42318" : "#9A6300" }} /></div>
-                  </div>
-                )}
-                {kind === "weekly" && parentPlan && (parentPlan.items || []).length > 0 && (
-                  <AddFromParent items={parentPlan.items} label={TYPE_INFO[parentPlan.plan_type as PlanKind].label} onAdd={(src) => setItems((xs) => [...xs.filter((x) => !empty(x)), ...src.map((s) => ({ ...blankItem(), title: s.title, output: s.output || "", objective: s.objective || "", priority: s.priority || "medium" }))])} />
-                )}
-                <button type="button" onClick={() => setItems((xs) => [...xs, blankItem()])} className="inline-flex h-10 items-center gap-1.5 rounded-[9px] border border-[#0B3A6F] bg-white px-4 text-[13.5px] font-bold text-[#0B3A6F] hover:bg-[#EAF2FC]"><Plus size={15} aria-hidden /> Add {noun.toLowerCase()}</button>
-              </div>
-            }>
-            <ol>
-              {items.map((it, i) => {
-                const e = itemErrors[i];
-                const a = it.department_activity ? daOf(it.department_activity) : undefined;
-                return (
-                  <li key={i} className="border-t border-[#EDF0F5] px-5 py-5">
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="text-[14px] font-extrabold text-[#0B3A6F]">{noun} {i + 1}</span>
-                      {(a || it.department_activity) && <span className="rounded-full bg-[#F1EAFB] px-2 py-0.5 text-[12px] font-bold text-[#6B2FA3]">Contributes to {a?.code || "a department activity"}</span>}
-                      {kind === "department" && it.code && <span className="rounded-full bg-[#F1EAFB] px-2 py-0.5 text-[12px] font-bold text-[#6B2FA3]">{it.code}</span>}
-                      <span className="ml-auto flex gap-0.5">
-                        <IconBtn label="Move up" disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={15} /></IconBtn>
-                        <IconBtn label="Move down" disabled={i === items.length - 1} onClick={() => move(i, 1)}><ArrowDown size={15} /></IconBtn>
-                        <IconBtn label="Remove" danger disabled={items.length === 1} onClick={() => setItems((xs) => xs.filter((_, j) => j !== i))}><X size={16} /></IconBtn>
-                      </span>
-                    </div>
-
-                    <div className="grid gap-x-4 gap-y-4 md:grid-cols-12">
-                      <F label={noun} required className="md:col-span-8" error={shown(e.title)} htmlFor={`it-${i}-title`}>
-                        <input id={`it-${i}-title`} className={inputCls(Boolean(shown(e.title)))} value={it.title} maxLength={200} onChange={(ev) => set(i, { title: ev.target.value })}
-                          placeholder={kind === "annual" ? "e.g. Train newly elected councillors on their roles" : kind === "quarterly" ? "e.g. Induction training for councillors of 4 districts" : kind === "task" ? "e.g. Draft the hearing agenda with the district" : "e.g. Train Gakenke district finance staff"} />
-                      </F>
-                      {kind === "weekly" ? (
-                        <F label="Days" className="md:col-span-4">
-                          <div className="flex gap-1">
-                            {WEEKDAYS.map(([k, l]) => (
-                              <button key={k} type="button" aria-pressed={it.days.includes(k)} onClick={() => set(i, { days: it.days.includes(k) ? it.days.filter((d) => d !== k) : [...it.days, k] })}
-                                className={cn("h-11 flex-1 rounded-[9px] border text-[12.5px] font-bold", it.days.includes(k) ? "border-[#1466C0] bg-[#EAF2FC] text-[#0B3A6F]" : "border-[#DDE3EC] text-[#5B6577] hover:bg-[#F8FAFC]")}>{l}</button>
-                            ))}
-                          </div>
-                        </F>
-                      ) : kind === "annual" ? (
-                        <F label="Quarters" className="md:col-span-4">
-                          <div className="flex gap-1">
-                            {[1, 2, 3, 4].map((q) => (
-                              <button key={q} type="button" aria-pressed={it.quarters.includes(q)} onClick={() => set(i, { quarters: it.quarters.includes(q) ? it.quarters.filter((x) => x !== q) : [...it.quarters, q].sort() })}
-                                className={cn("h-11 flex-1 rounded-[9px] border text-[12.5px] font-bold", it.quarters.includes(q) ? "border-[#1466C0] bg-[#EAF2FC] text-[#0B3A6F]" : "border-[#DDE3EC] text-[#5B6577] hover:bg-[#F8FAFC]")}>Q{q}</button>
-                            ))}
-                          </div>
-                        </F>
-                      ) : (
-                        <F label="Due date" required={need.due} className="md:col-span-4" error={shown(e.due)} hint={period ? `Between ${dmy(period.start)} and ${dmy(period.end)}` : undefined} htmlFor={`it-${i}-due`}>
-                          <input id={`it-${i}-due`} type="date" className={inputCls(Boolean(shown(e.due)))} value={it.due} min={period?.start} max={period?.end} onChange={(ev) => set(i, { due: ev.target.value })} />
-                        </F>
-                      )}
-
-                      <F label={kind === "annual" ? "Key result" : "Expected output"} required={need.output} className="md:col-span-5" error={shown(e.output)} htmlFor={`it-${i}-output`}>
-                        <input id={`it-${i}-output`} className={inputCls(Boolean(shown(e.output)))} value={it.output} maxLength={500} onChange={(ev) => set(i, { output: ev.target.value })} placeholder="What will exist when it is done" />
-                      </F>
-                      <F label="Priority" className="md:col-span-3" htmlFor={`it-${i}-priority`}>
-                        <select id={`it-${i}-priority`} className={inputCls()} value={it.priority} onChange={(ev) => set(i, { priority: ev.target.value })}>
-                          {Object.entries(PRIORITY).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                        </select>
-                      </F>
-                      <F label="Strategic objective" required={need.objective} className="md:col-span-4" error={shown(e.objective)} htmlFor={`it-${i}-objective`}>
-                        <select id={`it-${i}-objective`} className={inputCls(Boolean(shown(e.objective)))} value={it.objective} onChange={(ev) => set(i, { objective: ev.target.value })}>
-                          <option value="">Choose…</option>
-                          {((objectives.data || []) as any[]).map((o) => <option key={o.id} value={o.id}>{o.code} · {o.name}</option>)}
-                        </select>
-                      </F>
-
-                      {kind !== "weekly" && (
-                        <div className="grid gap-4 rounded-xl bg-[#F4F6F9] p-4 md:col-span-12 md:grid-cols-12">
-                          <F label="Indicator" required={need.measure} className={kind === "annual" || kind === "quarterly" ? "md:col-span-4" : "md:col-span-5"} error={shown(e.indicator)} htmlFor={`it-${i}-indicator`}>
-                            <input id={`it-${i}-indicator`} className={inputCls(Boolean(shown(e.indicator)))} value={it.indicator} maxLength={300} onChange={(ev) => set(i, { indicator: ev.target.value })} placeholder="e.g. Number of finance staff trained" />
-                          </F>
-                          <F label="Unit" className={kind === "annual" || kind === "quarterly" ? "md:col-span-2" : "md:col-span-3"} htmlFor={`it-${i}-unit`}>
-                            <select id={`it-${i}-unit`} className={inputCls()} value={it.unit} onChange={(ev) => set(i, { unit: ev.target.value })} disabled={Boolean(a)}>
-                              <option value="">—</option>
-                              {UNITS.concat(it.unit && !UNITS.includes(it.unit) ? [it.unit] : []).map((u) => <option key={u} value={u}>{u}</option>)}
-                            </select>
-                          </F>
-                          {(kind === "annual" || kind === "quarterly") && (
-                            <F label="Baseline" className="md:col-span-2" htmlFor={`it-${i}-baseline`}><input id={`it-${i}-baseline`} className={inputCls()} value={it.baseline} maxLength={100} onChange={(ev) => set(i, { baseline: ev.target.value })} placeholder="Today" /></F>
-                          )}
-                          <F label="Target" required={need.measure} className="md:col-span-2" error={shown(e.target)} htmlFor={`it-${i}-target`}>
-                            <input id={`it-${i}-target`} className={inputCls(Boolean(shown(e.target)))} value={it.target} maxLength={100} onChange={(ev) => set(i, { target: ev.target.value })} placeholder="e.g. 24" />
-                          </F>
-                          {need.weights ? (
-                            <F label="Weight %" required className="md:col-span-2" error={shown(e.weight)} htmlFor={`it-${i}-weight`}>
-                              <input id={`it-${i}-weight`} type="number" min={0} max={100} className={cn(inputCls(Boolean(shown(e.weight))), "text-right")} value={it.weight || ""} onChange={(ev) => set(i, { weight: Math.max(0, Math.min(100, Math.round(Number(ev.target.value) || 0))) })} />
-                            </F>
-                          ) : <div className="md:col-span-2" />}
-                        </div>
-                      )}
-
-                      {CONTRIBUTES.includes(kind) && das.length > 0 && (
-                        <F label="Department activity it contributes to" className="md:col-span-6" hint={a ? <span className="font-semibold text-[#6B2FA3]">{linkedHint(it)}</span> : undefined} htmlFor={`it-${i}-da`}>
-                          <select id={`it-${i}-da`} className={inputCls()} value={it.department_activity} onChange={(ev) => linkActivity(i, ev.target.value)}>
-                            <option value="">Not linked</option>
-                            {das.map((d) => <option key={d.id} value={d.id}>{d.code} · {d.title} — {100 - d.progress}% remaining</option>)}
-                          </select>
-                        </F>
-                      )}
-                      {kind !== "weekly" && (
-                        <F label="Evidence (means of verification)" className={CONTRIBUTES.includes(kind) && das.length > 0 ? "md:col-span-3" : "md:col-span-6"} htmlFor={`it-${i}-evidence`}>
-                          <select id={`it-${i}-evidence`} className={inputCls()} value={it.verification} onChange={(ev) => set(i, { verification: ev.target.value })}>
-                            <option value="">Choose…</option>
-                            {EVIDENCE.concat(it.verification && !EVIDENCE.includes(it.verification) ? [it.verification] : []).map((v) => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                        </F>
-                      )}
-                      {kind !== "weekly" && kind !== "annual" && (
-                        <F label="Estimated cost (RWF)" className={CONTRIBUTES.includes(kind) && das.length > 0 ? "md:col-span-3" : "md:col-span-6"} htmlFor={`it-${i}-cost`}>
-                          <input id={`it-${i}-cost`} type="number" min={0} inputMode="numeric" className={cn(inputCls(), "tabular-nums")} value={it.cost || ""} onChange={(ev) => set(i, { cost: Math.max(0, Math.round(Number(ev.target.value) || 0)) })} placeholder="0 if no cost" />
-                        </F>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-            {tried && !weightsOk && <p className="border-t border-[#EDF0F5] px-5 py-3 text-[13px] font-semibold text-[#B42318]">The weights add up to {weightTotal}%; they must add up to 100%.</p>}
-          </Section>
-        </div>
-
-        {/* plan check, summary, actions */}
-        <aside className="flex flex-col gap-[14px] lg:sticky lg:top-4">
-          <WCard>
-            <h2 className="mb-2.5 text-[16px] font-extrabold">Plan check</h2>
-            <ul className="flex flex-col gap-2.5">
-              <Check1 ok={Boolean(period) && !clash} title={clash ? "Period already planned" : period ? "Period chosen" : "Choose the period"} sub={clash ? `${clash.number} covers it` : period?.label || "Week, month, quarter or year"} />
-              {kind === "annual" ? <Check1 ok title="Top of the cycle" sub="Your quarterly plans carry it out" />
-                : kind === "department" ? <Check1 ok title="Department level" sub="Staff contribute from their monthly plans" />
-                  : kind === "task" ? <Check1 ok={Boolean(staffId)} title={staffId ? `For ${staffName || "the staff member"}` : "Choose the person"} sub="Starts approved" />
-                    : <Check1 ok={Boolean(parentPlan)} title={parentPlan ? "Linked to a higher plan" : "Not linked to a higher plan"} sub={parentPlan ? "Aligned" : parents.length ? "Choose the plan it carries out" : "No approved higher plan for this period"} />}
-              <Check1 ok={live.length > 0 && (!need.measure || measured === live.length)} title={`${live.length} ${live.length === 1 ? noun.toLowerCase() : info.items.toLowerCase()}`} sub={!live.length ? `Add at least one ${noun.toLowerCase()}` : need.measure ? (measured === live.length ? "Each with indicator and target" : `${live.length - measured} without indicator or target`) : "Listed"} />
-              {need.weights && <Check1 ok={weightTotal === 100} title={`Weights total ${weightTotal}%`} sub={weightTotal < 100 ? `${100 - weightTotal}% still to assign` : weightTotal > 100 ? `${weightTotal - 100}% too much` : "Balanced"} />}
-              <Check1 ok={fieldsToFix === 0} title={fieldsToFix ? `${fieldsToFix} field${fieldsToFix === 1 ? "" : "s"} to fix` : "Required fields filled"} sub={fieldsToFix ? (tried ? "Shown in red in the form" : "Shown in red after you press Send") : "Ready to send"} />
-              {showDept && das.length > 0 && <Check1 ok={linkedCount > 0} title={`${linkedCount} linked to department activities`} sub={linkedCount ? "Counts towards department progress" : "Contribute to a department activity"} />}
-            </ul>
-          </WCard>
-
-          <WCard>
-            <h2 className="mb-2.5 text-[16px] font-extrabold">Summary</h2>
-            <dl className="flex flex-col gap-2 text-[13.5px]">
-              {[
-                ["Plan", info.label],
-                ["Period", period?.label || "—"],
-                [info.items, String(live.length)],
-                ...(showDept && das.length ? [["Linked to department", `${linkedCount} of ${live.length}`]] : []),
-                ...(kind !== "weekly" && kind !== "annual" ? [["Estimated cost", `RWF ${cost.toLocaleString("en-US")}`]] : []),
-              ].map(([k, v]) => (
-                <div key={k} className="flex items-baseline justify-between gap-3"><dt className="text-[#5B6577]">{k}</dt><dd className="text-right font-bold">{v}</dd></div>
-              ))}
-            </dl>
-            <p className="mb-1.5 mt-3.5 text-[12.5px] font-bold text-[#5B6577]">{assignMode ? "Assigned to" : "Approval route"}</p>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {route.map((r, k) => (
-                <React.Fragment key={k}>
-                  {k > 0 && <span className="text-[#8A94A6]" aria-hidden>→</span>}
-                  <span className="rounded-md border border-[#DDE3EC] bg-[#F8FAFC] px-2 py-0.5 text-[12.5px] font-bold">{r}</span>
-                </React.Fragment>
-              ))}
-              {!assignMode && !supervisor && ctx.data && <span className="text-[12.5px] text-[#5B6577]">approved when you send it</span>}
+        {/* 2 · when and aligned with what */}
+        <FormSection title="Period and alignment" description={kind === "task" ? "The task's own dates." : "The period, and the approved plan this one carries out."}>
+          {kind === "task" ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Task" required error={shown(topErrors.title)} className="sm:col-span-2" htmlFor="pl-title">
+                <Input id="pl-title" invalid={Boolean(shown(topErrors.title))} value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Support Gakenke district budget hearings" />
+              </Field>
+              <Field label="Starts" required htmlFor="pl-start" error={shown(topErrors.dates)}>
+                <DatePicker id="pl-start" invalid={Boolean(shown(topErrors.dates))} value={taskStart} onChange={setTaskStart} />
+              </Field>
+              <Field label="Ends" required htmlFor="pl-end" hint={period ? period.label : undefined}>
+                <DatePicker id="pl-end" invalid={Boolean(shown(topErrors.dates))} value={taskEnd} min={taskStart || undefined} onChange={setTaskEnd} />
+              </Field>
             </div>
-          </WCard>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label={PERIOD_LABEL[kind]} required htmlFor="pl-period" error={shown(topErrors.period)} hint={period ? `${fmtDate(period.start)} – ${fmtDate(period.end)}` : undefined}>
+                <Select id="pl-period" invalid={Boolean(shown(topErrors.period)) || Boolean(clash)} value={periodStart} onChange={(e) => { periodTouched.current = true; setPeriodStart(e.target.value); }}>
+                  {!periods.data && <option value="">Loading…</option>}
+                  {(periods.data || []).map((p) => {
+                    const has = all.some((x) => x.id !== planId && sameKind(x) && dayOf(x.period_start) === p.start);
+                    return <option key={p.start} value={p.start}>{p.label}{p.current ? " (current)" : ""}{has ? " — planned" : ""}</option>;
+                  })}
+                  {period && !(periods.data || []).some((p) => p.start === period.start) && <option value={period.start}>{period.label}</option>}
+                </Select>
+              </Field>
+              {kind !== "annual" ? (
+                <Field
+                  label="Contributes to"
+                  required={info.parent.length > 0 && parents.length > 0 && kind !== "department"}
+                  htmlFor="pl-parent"
+                  hint={parents.length ? "The approved plan for a longer period that this one carries out." : `No approved ${info.parent.map((k) => TYPE_INFO[k].short.toLowerCase()).join(" or ")} plan covers this period yet.`}
+                >
+                  <Select id="pl-parent" value={parent} onChange={(e) => setParent(e.target.value)}>
+                    <option value="">{parents.length ? "Not linked" : "—"}</option>
+                    {parents.map((p) => <option key={p.id} value={p.id}>{TYPE_INFO[p.plan_type as PlanKind].label} · {p.period_label.split(" · ")[0]} ({p.status === "approved" ? "approved" : p.status})</option>)}
+                  </Select>
+                </Field>
+              ) : (
+                <Field label="Contributes to" htmlFor="pl-parent" hint="The top of your cycle: your quarterly plans carry it out.">
+                  <Input id="pl-parent" value={ctx.data?.department ? `${ctx.data.department.name} objectives` : "RALGA strategic objectives"} disabled readOnly />
+                </Field>
+              )}
+              <Field label="Main focus of the period" htmlFor="pl-focus" hint={`${focus.length} of ${FOCUS_MAX} characters`}>
+                <Input id="pl-focus" value={focus} maxLength={FOCUS_MAX} onChange={(e) => setFocus(e.target.value)} placeholder={kind === "annual" ? "e.g. Councillors' leadership and district PFM" : "e.g. Gakenke training and the budgeting guide"} />
+              </Field>
+            </div>
+          )}
+          {assignMode && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Where it comes from" htmlFor="pl-source" hint="Optional, e.g. the strategic plan or a request from the Secretary General.">
+                <Input id="pl-source" value={source} maxLength={200} onChange={(e) => setSource(e.target.value)} placeholder="e.g. RALGA Strategic Plan · Capacity Building" />
+              </Field>
+              <Field label="Instructions" htmlFor="pl-instr" hint="What the person should know before starting.">
+                <Input id="pl-instr" value={instructions} maxLength={1000} onChange={(e) => setInstructions(e.target.value)} placeholder="e.g. Coordinate with the district planner; report by Friday 6 Nov" />
+              </Field>
+            </div>
+          )}
+          <Notice tone="info" icon={Info}>{GUIDE[kind]}</Notice>
+          {clash && (
+            <Notice tone="warning" icon={AlertTriangle} role="alert">
+              There is already a {info.label.toLowerCase()} for {period?.label} ({clash.number}).{" "}
+              <Link to={`${LIST}/${clash.id}`} className="font-bold text-ims-link hover:underline">Open it</Link> or choose another period.
+            </Notice>
+          )}
+        </FormSection>
 
-          <button type="button" disabled={Boolean(busy) || Boolean(clash)} onClick={() => save(true)} className={cn(btnPrimary, "h-12 w-full text-[14.5px]")}>{busy === "send" ? (assignMode ? "Assigning…" : "Sending…") : sendLabel}</button>
-          {!assignMode && <button type="button" disabled={Boolean(busy) || Boolean(clash)} onClick={() => save(false)} className={cn(btnOutline, "h-11 w-full")}>{busy === "draft" ? "Saving…" : "Save draft"}</button>}
-          <button type="button" onClick={() => navigate(-1)} className="h-9 text-[13.5px] font-bold text-[#5B6577] hover:text-[#14213D]">Cancel</button>
-        </aside>
-      </div>
-    </main>
-  );
-}
+        {/* department activities to contribute to */}
+        {showDept && (
+          <DepartmentActivitiesCard
+            view={dept.data}
+            loading={dept.isLoading}
+            linked={linked}
+            onContribute={kind === "department" ? undefined : contribute}
+            empty={`No department plan shared for ${period?.label} yet — your head of department prepares it. You can still plan your own activities.`}
+          />
+        )}
 
-function Check1({ ok, title, sub }: { ok: boolean; title: string; sub?: string }) {
-  return (
-    <li className="flex items-start gap-2.5">
-      <span className={cn("mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold", ok ? "bg-[#E4F4EA] text-[#0F6B3A]" : "bg-[#FEF3D6] text-[#8A5A00]")} aria-hidden>{ok ? <Check size={12} strokeWidth={3} /> : "!"}</span>
-      <span className="min-w-0">
-        <span className="block text-[13.5px] font-bold leading-snug">{title}</span>
-        {sub && <span className="block text-[12.5px] leading-snug text-[#5B6577]">{sub}</span>}
-        <span className="sr-only">{ok ? "done" : "to do"}</span>
-      </span>
-    </li>
-  );
-}
+        {/* 3 · activities */}
+        <FormSection title={info.items} description={`${live.length} ${live.length === 1 ? noun.toLowerCase() : info.items.toLowerCase()} · ${need.weights ? "weights add up to 100%" : "in the order you will do them"}`}>
+          <ol className="divide-y divide-ims-divider rounded-control border border-ims-border">
+            {items.map((it, i) => {
+              const e = itemErrors[i];
+              const a = it.department_activity ? daOf(it.department_activity) : undefined;
+              const id = (k: string) => `it-${i}-${k}`;
+              const measureWide = kind === "annual" || kind === "quarterly";
+              return (
+                <li key={i} className="px-3 py-4 sm:px-4">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className="text-t-body font-extrabold text-ims-primary">{noun} {i + 1}</span>
+                    {(a || it.department_activity) && <span className="rounded-pill bg-ims-orange-bg px-2 py-0.5 text-t-hint font-bold text-ims-orange">Contributes to {a?.code || "a department activity"}</span>}
+                    {kind === "department" && it.code && <span className="rounded-pill bg-ims-orange-bg px-2 py-0.5 text-t-hint font-bold text-ims-orange">{it.code}</span>}
+                    <span className="ml-auto flex gap-0.5">
+                      <Button size="icon-sm" variant="ghost" icon={ArrowUp} aria-label={`Move ${noun.toLowerCase()} ${i + 1} up`} disabled={i === 0} onClick={() => move(i, -1)} />
+                      <Button size="icon-sm" variant="ghost" icon={ArrowDown} aria-label={`Move ${noun.toLowerCase()} ${i + 1} down`} disabled={i === items.length - 1} onClick={() => move(i, 1)} />
+                      <Button size="icon-sm" variant="ghost" icon={X} aria-label={`Remove ${noun.toLowerCase()} ${i + 1}`} className="text-ims-danger hover:bg-ims-danger-bg hover:text-ims-danger" disabled={items.length === 1} onClick={() => setItems((xs) => xs.filter((_, j) => j !== i))} />
+                    </span>
+                  </div>
 
-function IconBtn({ label, disabled, onClick, children, danger }: { label: string; disabled?: boolean; onClick: () => void; children: React.ReactNode; danger?: boolean }) {
-  return (
-    <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick}
-      className={cn("flex h-8 w-8 items-center justify-center rounded-lg hover:bg-[#F1F4F9] disabled:opacity-30", danger ? "text-[#D92D20]" : "text-[#5B6577] hover:text-[#14213D]")}>
-      {children}
-    </button>
+                  <div className="grid gap-4 md:grid-cols-12">
+                    <Field label={noun} required className="md:col-span-8" error={shown(e.title)} htmlFor={id("title")}>
+                      <Input
+                        id={id("title")}
+                        invalid={Boolean(shown(e.title))}
+                        value={it.title}
+                        maxLength={200}
+                        onChange={(ev) => set(i, { title: ev.target.value })}
+                        placeholder={kind === "annual" ? "e.g. Train newly elected councillors on their roles" : kind === "quarterly" ? "e.g. Induction training for councillors of 4 districts" : kind === "task" ? "e.g. Draft the hearing agenda with the district" : "e.g. Train Gakenke district finance staff"}
+                      />
+                    </Field>
+                    {kind === "weekly" ? (
+                      <Field label="Days" className="md:col-span-4">
+                        <div className="flex gap-1" role="group" aria-label={`Days of ${noun.toLowerCase()} ${i + 1}`}>
+                          {WEEKDAYS.map(([k, l]) => (
+                            <Toggle key={k} on={it.days.includes(k)} onClick={() => set(i, { days: it.days.includes(k) ? it.days.filter((d) => d !== k) : [...it.days, k] })}>{l}</Toggle>
+                          ))}
+                        </div>
+                      </Field>
+                    ) : kind === "annual" ? (
+                      <Field label="Quarters" className="md:col-span-4">
+                        <div className="flex gap-1" role="group" aria-label={`Quarters of ${noun.toLowerCase()} ${i + 1}`}>
+                          {[1, 2, 3, 4].map((qn) => (
+                            <Toggle key={qn} on={it.quarters.includes(qn)} onClick={() => set(i, { quarters: it.quarters.includes(qn) ? it.quarters.filter((x) => x !== qn) : [...it.quarters, qn].sort() })}>Q{qn}</Toggle>
+                          ))}
+                        </div>
+                      </Field>
+                    ) : (
+                      <Field label="Due date" required={need.due} className="md:col-span-4" error={shown(e.due)} hint={period ? `Between ${fmtDate(period.start)} and ${fmtDate(period.end)}` : undefined} htmlFor={id("due")}>
+                        <DatePicker id={id("due")} invalid={Boolean(shown(e.due))} value={it.due} min={period?.start} max={period?.end} onChange={(v) => set(i, { due: v })} />
+                      </Field>
+                    )}
+
+                    <Field label={kind === "annual" ? "Key result" : "Expected output"} required={need.output} className="md:col-span-5" error={shown(e.output)} htmlFor={id("output")}>
+                      <Input id={id("output")} invalid={Boolean(shown(e.output))} value={it.output} maxLength={500} onChange={(ev) => set(i, { output: ev.target.value })} placeholder="What will exist when it is done" />
+                    </Field>
+                    <Field label="Priority" className="md:col-span-3" htmlFor={id("priority")}>
+                      <Select id={id("priority")} value={it.priority} onChange={(ev) => set(i, { priority: ev.target.value })}>
+                        {Object.entries(PRIORITY).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                      </Select>
+                    </Field>
+                    <Field label="Strategic objective" required={need.objective} className="md:col-span-4" error={shown(e.objective)} htmlFor={id("objective")}>
+                      <Select id={id("objective")} invalid={Boolean(shown(e.objective))} value={it.objective} onChange={(ev) => set(i, { objective: ev.target.value })}>
+                        <option value="">Choose an objective</option>
+                        {((objectives.data || []) as any[]).map((o) => <option key={o.id} value={o.id}>{o.code} · {o.name}</option>)}
+                      </Select>
+                    </Field>
+
+                    {kind !== "weekly" && (
+                      <div className="grid gap-4 rounded-control bg-ims-subtle p-4 md:col-span-12 md:grid-cols-12">
+                        <Field label="Indicator" required={need.measure} className={measureWide ? "md:col-span-4" : "md:col-span-5"} error={shown(e.indicator)} htmlFor={id("indicator")}>
+                          <Input id={id("indicator")} invalid={Boolean(shown(e.indicator))} value={it.indicator} maxLength={300} onChange={(ev) => set(i, { indicator: ev.target.value })} placeholder="e.g. Number of finance staff trained" />
+                        </Field>
+                        <Field label="Unit" className={measureWide ? "md:col-span-2" : "md:col-span-3"} htmlFor={id("unit")} hint={a ? "From the department activity" : undefined}>
+                          <Select id={id("unit")} value={it.unit} onChange={(ev) => set(i, { unit: ev.target.value })} disabled={Boolean(a)}>
+                            <option value="">—</option>
+                            {UNITS.concat(it.unit && !UNITS.includes(it.unit) ? [it.unit] : []).map((u) => <option key={u} value={u}>{u}</option>)}
+                          </Select>
+                        </Field>
+                        {measureWide && (
+                          <Field label="Baseline" className="md:col-span-2" htmlFor={id("baseline")}>
+                            <Input id={id("baseline")} value={it.baseline} maxLength={100} onChange={(ev) => set(i, { baseline: ev.target.value })} placeholder="Today" />
+                          </Field>
+                        )}
+                        <Field label="Target" required={need.measure} className="md:col-span-2" error={shown(e.target)} htmlFor={id("target")}>
+                          <Input id={id("target")} invalid={Boolean(shown(e.target))} value={it.target} maxLength={100} onChange={(ev) => set(i, { target: ev.target.value })} placeholder="e.g. 24" />
+                        </Field>
+                        {need.weights ? (
+                          <Field label="Weight (%)" required className="md:col-span-2" error={shown(e.weight)} htmlFor={id("weight")}>
+                            <Input id={id("weight")} type="number" min={0} max={100} inputMode="numeric" className="text-right tabular-nums" invalid={Boolean(shown(e.weight))} value={it.weight || ""} onChange={(ev) => set(i, { weight: Math.max(0, Math.min(100, Math.round(Number(ev.target.value) || 0))) })} />
+                          </Field>
+                        ) : <div className="hidden md:col-span-2 md:block" />}
+                      </div>
+                    )}
+
+                    {CONTRIBUTES.includes(kind) && das.length > 0 && (
+                      <Field label="Department activity it contributes to" className="md:col-span-12" hint={a ? linkedHint(it) : undefined} htmlFor={id("da")}>
+                        <Select id={id("da")} value={it.department_activity} onChange={(ev) => linkActivity(i, ev.target.value)}>
+                          <option value="">Not linked</option>
+                          {das.map((d) => <option key={d.id} value={d.id}>{d.code} · {d.title} — {100 - d.progress}% remaining</option>)}
+                        </Select>
+                      </Field>
+                    )}
+                    {kind !== "weekly" && (
+                      <Field label="Evidence (means of verification)" className="md:col-span-6" htmlFor={id("evidence")}>
+                        <Select id={id("evidence")} value={it.verification} onChange={(ev) => set(i, { verification: ev.target.value })}>
+                          <option value="">Choose the evidence</option>
+                          {EVIDENCE.concat(it.verification && !EVIDENCE.includes(it.verification) ? [it.verification] : []).map((v) => <option key={v} value={v}>{v}</option>)}
+                        </Select>
+                      </Field>
+                    )}
+                    {kind !== "weekly" && kind !== "annual" && (
+                      <Field label="Estimated cost" className="md:col-span-6" htmlFor={id("cost")} hint="0 if there is no cost">
+                        <MoneyInput id={id("cost")} value={it.cost || ""} onChange={(v) => set(i, { cost: v === "" ? 0 : Math.max(0, Math.round(v)) })} />
+                      </Field>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap gap-2">
+              <Button icon={Plus} onClick={() => setItems((xs) => [...xs, blankItem()])}>Add {noun.toLowerCase()}</Button>
+              {kind === "weekly" && parentPlan && (parentPlan.items || []).length > 0 && (
+                <AddFromParent
+                  items={parentPlan.items}
+                  label={TYPE_INFO[parentPlan.plan_type as PlanKind].label}
+                  onAdd={(src) => setItems((xs) => [...xs.filter((x) => !empty(x)), ...src.map((s) => ({ ...blankItem(), title: s.title, output: s.output || "", objective: s.objective || "", priority: s.priority || "medium" }))])}
+                />
+              )}
+            </div>
+            {need.weights && (
+              <div className="w-full sm:w-[230px]">
+                <div className="flex items-center justify-between text-t-small">
+                  <span className="font-bold text-ims-text">Total weight</span>
+                  <b className={weightTotal === 100 ? "text-ims-success" : weightTotal > 100 ? "text-ims-danger" : "text-ims-warning"}>{weightTotal}% of 100%</b>
+                </div>
+                <div className="mt-1 h-[7px] overflow-hidden rounded-full bg-ims-neutral-bg" aria-hidden>
+                  <div className={cn("h-full rounded-full", weightTotal === 100 ? "bg-ims-success" : weightTotal > 100 ? "bg-ims-danger" : "bg-ims-priority-high")} style={{ width: `${Math.min(100, weightTotal)}%` }} />
+                </div>
+              </div>
+            )}
+          </div>
+          {tried && !weightsOk && <p className="text-t-hint text-ims-danger" role="alert">The weights add up to {weightTotal}%; they must add up to 100%.</p>}
+        </FormSection>
+      </FormBody>
+
+      <FormActions
+        submitLabel={sendLabel}
+        onSubmit={() => save(true)}
+        onSaveDraft={assignMode ? undefined : () => save(false)}
+        onCancel={() => navigate(-1)}
+        busy={busy === "send" ? "submit" : busy === "draft" ? "draft" : null}
+        disabled={Boolean(clash)}
+        note={editing ? "Save a draft to finish later, or send it for approval." : savedAt ? `Kept on this device at ${format(savedAt, "HH:mm")}. Save it to keep it in the system.` : "Your entries are kept on this device until you save."}
+      />
+    </Page>
   );
 }
 
@@ -682,28 +745,40 @@ function AddFromParent({ items, label, onAdd }: { items: any[]; label: string; o
   const [picked, setPicked] = React.useState<Set<string>>(new Set());
   const live = items.filter((i) => i.status !== "done" && i.status !== "dropped");
   return (
-    <div className="relative">
-      <button type="button" className={btnOutline} onClick={() => setOpen((o) => !o)}><ListPlus size={15} aria-hidden /> From {label.toLowerCase()}</button>
-      {open && (
-        <div className="absolute right-0 z-20 mt-1 w-[360px] max-w-[85vw] rounded-xl border border-[#E3E8EF] bg-white p-3 shadow-lg">
-          <p className="mb-2 text-[12.5px] text-[#5B6577]">Open items of your {label.toLowerCase()}</p>
-          <ul className="max-h-64 space-y-1 overflow-auto">
+    <>
+      <Button icon={ListPlus} onClick={() => setOpen(true)}>From {label.toLowerCase()}</Button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        size="sm"
+        title={`Add from your ${label.toLowerCase()}`}
+        description="The open activities of the plan this week carries out."
+        footer={
+          <>
+            <Button onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="primary" disabled={!picked.size} onClick={() => { onAdd(live.filter((i) => picked.has(i.id))); setPicked(new Set()); setOpen(false); }}>
+              Add {picked.size || ""}
+            </Button>
+          </>
+        }
+      >
+        {live.length ? (
+          <ul className="space-y-2.5">
             {live.map((i) => (
               <li key={i.id}>
-                <label className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-[13px] hover:bg-[#F8FAFC]">
-                  <input type="checkbox" className="mt-0.5" checked={picked.has(i.id)} onChange={() => setPicked((s) => { const n = new Set(s); if (n.has(i.id)) n.delete(i.id); else n.add(i.id); return n; })} />
-                  <span>{i.title}</span>
-                </label>
+                <Checkbox
+                  id={`from-${i.id}`}
+                  label={i.title}
+                  checked={picked.has(i.id)}
+                  onChange={() => setPicked((s) => { const n = new Set(s); if (n.has(i.id)) n.delete(i.id); else n.add(i.id); return n; })}
+                />
               </li>
             ))}
-            {!live.length && <li className="px-2 py-1.5 text-[13px] text-[#5B6577]">Everything is done there.</li>}
           </ul>
-          <div className="mt-2 flex justify-end gap-2">
-            <button type="button" className="h-9 rounded-lg px-3 text-[13px] font-semibold text-[#5B6577] hover:bg-[#F1F4F9]" onClick={() => setOpen(false)}>Close</button>
-            <button type="button" disabled={!picked.size} className="h-9 rounded-lg bg-[#0B3A6F] px-3 text-[13px] font-bold text-white disabled:opacity-50" onClick={() => { onAdd(live.filter((i) => picked.has(i.id))); setPicked(new Set()); setOpen(false); }}>Add {picked.size || ""}</button>
-          </div>
-        </div>
-      )}
-    </div>
+        ) : (
+          <p className="text-t-body text-ims-muted">Everything in that plan is completed.</p>
+        )}
+      </Modal>
+    </>
   );
 }
