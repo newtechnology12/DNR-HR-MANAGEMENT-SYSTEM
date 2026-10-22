@@ -253,7 +253,7 @@ const ProfileInformation = ({ employee }: { employee: any }) => {
 
   return (
     <div className="h-full">
-      <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-5">
+      <div className="mb-5 flex items-center gap-3 border-b border-ims-divider pb-5">
         <div className="group relative overflow-hidden rounded-full">
           <input
             type="file"
@@ -272,20 +272,20 @@ const ProfileInformation = ({ employee }: { employee: any }) => {
             <button
               type="button"
               onClick={() => uploadRef.current?.click()}
-              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-white"
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-ims-card"
               aria-label="Change profile photo"
             >
               {uploading ? (
                 <Loader className="h-4 w-4 animate-spin text-primary" />
               ) : (
-                <Camera size={14} className="text-slate-600" />
+                <Camera size={14} className="text-ims-body" />
               )}
             </button>
           </div>
           <Avatar className="h-14 w-14 border" path={employee.photo} name={employee.names || "U"} />
         </div>
         <div>
-          <h4 className="text-base font-semibold capitalize text-slate-900">{employee.names}</h4>
+          <h4 className="text-base font-semibold capitalize text-ims-text">{employee.names}</h4>
           <p className="mt-0.5 text-xs font-medium capitalize text-primary">
             {employee?.designation || employee?.role?.name || "Employee"}
           </p>
@@ -295,14 +295,14 @@ const ProfileInformation = ({ employee }: { employee: any }) => {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {fieldGroups.map((group) => (
           <div key={group.title}>
-            <h5 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <h5 className="mb-3 text-t-small font-semibold text-ims-faint">
               {group.title}
             </h5>
             <div className="space-y-3">
               {group.fields.map((field) => (
                 <div key={field.key}>
-                  <p className="text-[11px] font-medium text-slate-400">{field.key}</p>
-                  <p className="truncate text-[13px] font-semibold capitalize text-slate-800">
+                  <p className="text-t-hint font-medium text-ims-faint">{field.key}</p>
+                  <p className="truncate text-t-small font-semibold capitalize text-ims-text">
                     {field.value}
                   </p>
                 </div>
@@ -420,7 +420,7 @@ const EmployeePortal = () => {
       toast.success("Clock-in successful");
       await attendanceQuery.refetch();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to clock in. Please try again.");
+      toast.error(error?.message || "Failed to clock in. Try again.");
     } finally {
       setLoadingStates((prev) => ({ ...prev, clockin: false }));
     }
@@ -428,7 +428,7 @@ const EmployeePortal = () => {
 
   const handleClockOut = async () => {
     if (isOnLunchBreak) {
-      toast.error("Please end lunch break before clocking out");
+      toast.error("End lunch break before clocking out");
       return;
     }
 
@@ -451,7 +451,7 @@ const EmployeePortal = () => {
       toast.success("Clock-out successful");
       attendanceQuery.refetch();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to clock out. Please try again.");
+      toast.error(error?.message || "Failed to clock out. Try again.");
     } finally {
       setLoadingStates((prev) => ({ ...prev, clockout: false }));
     }
@@ -521,7 +521,7 @@ const EmployeePortal = () => {
   return (
     <div className="space-y-6 px-4 py-4 sm:px-6">
       <div className="flex flex-col items-start gap-1">
-        <h2 className="text-xl font-bold tracking-tight text-slate-900">
+        <h2 className="text-xl font-bold tracking-tight text-ims-text">
           {getGreeting()}, {employee.names}
         </h2>
         <BreadCrumb items={[{ title: "Employee Portal", link: "/dashboard" }]} />
@@ -548,9 +548,9 @@ const EmployeePortal = () => {
             </Card>
           ) : (
             <Card className="flex h-full flex-col p-4">
-              <div className="flex flex-col items-center border-b border-slate-100 pb-4">
-                <h3 className="text-sm font-semibold text-slate-500">Today&apos;s Attendance</h3>
-                <div className="my-2 text-3xl font-bold tabular-nums tracking-tight text-slate-900">
+              <div className="flex flex-col items-center border-b border-ims-divider pb-4">
+                <h3 className="text-sm font-semibold text-ims-muted">Today&apos;s Attendance</h3>
+                <div className="my-2 text-3xl font-bold tabular-nums tracking-tight text-ims-text">
                   {attendanceQuery.data && !attendanceQuery.data.clockout_time ? (
                     <CountDown
                       offset={differenceInSeconds(
@@ -571,7 +571,7 @@ const EmployeePortal = () => {
                     "00:00:00"
                   )}
                 </div>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-ims-muted">
                   {new Date().toLocaleDateString("en-US", {
                     weekday: "short",
                     year: "numeric",
@@ -585,11 +585,11 @@ const EmployeePortal = () => {
 
               <div className="flex-1 space-y-3 py-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-success/5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ims-border bg-success/5">
                     <LogIn size={15} className="text-success" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-800">
+                    <p className="text-sm font-semibold text-ims-text">
                       {attendanceQuery.data
                         ? new Date(attendanceQuery.data.clockin_time).toLocaleTimeString("en-US", {
                             hour: "numeric",
@@ -598,18 +598,18 @@ const EmployeePortal = () => {
                           })
                         : format12HourTime(settings?.work_start_time)}
                     </p>
-                    <span className="truncate text-xs text-slate-500">
+                    <span className="truncate text-xs text-ims-muted">
                       {attendanceQuery.data?.clockin_location || "Not clocked in yet"}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-danger/5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ims-border bg-danger/5">
                     <LogOut size={15} className="text-danger" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-800">
+                    <p className="text-sm font-semibold text-ims-text">
                       {attendanceQuery.data?.clockout_time
                         ? new Date(attendanceQuery.data.clockout_time).toLocaleTimeString("en-US", {
                             hour: "numeric",
@@ -618,7 +618,7 @@ const EmployeePortal = () => {
                           })
                         : format12HourTime(settings?.work_end_time)}
                     </p>
-                    <span className="truncate text-xs text-slate-500">
+                    <span className="truncate text-xs text-ims-muted">
                       {attendanceQuery.data?.clockout_location || "Not clocked out yet"}
                     </span>
                   </div>
@@ -658,7 +658,7 @@ const EmployeePortal = () => {
                   {isOnLunchBreak ? "End Lunch Break" : "Start Lunch Break"}
                 </Button>
 
-                <div className="pt-1 text-center text-xs text-slate-500">
+                <div className="pt-1 text-center text-xs text-ims-muted">
                   <div>
                     Working hours: {calculateTimeDifference(settings?.work_start_time, settings?.work_end_time)}
                   </div>
@@ -694,14 +694,14 @@ const EmployeePortal = () => {
       </div>
 
       <Card>
-        <div className="scrollbar-none flex overflow-x-auto border-b border-slate-100">
+        <div className="scrollbar-none flex overflow-x-auto border-b border-ims-divider">
           {tabs.map((tab) => (
             <button
               type="button"
               key={tab}
               className={cn(
                 "relative shrink-0 whitespace-nowrap px-5 py-3 text-sm font-medium transition-colors",
-                activeTab === tab ? "text-primary" : "text-slate-500 hover:text-slate-900"
+                activeTab === tab ? "text-primary" : "text-ims-muted hover:text-ims-text"
               )}
               onClick={() => setActiveTab(tab)}
             >

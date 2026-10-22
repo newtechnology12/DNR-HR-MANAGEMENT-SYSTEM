@@ -24,10 +24,10 @@ const LeaveCell = ({ value, onChange, isEditable, hasError }) => (
     disabled={!isEditable}
     className={`w-full h-9 px-1 text-sm border-0 focus:ring-2 focus:ring-primary/40 focus:outline-none text-center transition-colors
       ${isEditable
-        ? 'bg-white hover:bg-blue-50/50 focus:bg-white'
-        : 'bg-slate-50/70 text-slate-500 cursor-not-allowed'
+        ? 'bg-ims-card hover:bg-ims-info-bg focus:bg-ims-card'
+        : 'bg-ims-thead/70 text-ims-muted cursor-not-allowed'
       }
-      ${hasError ? 'bg-red-50 text-red-600' : ''}
+      ${hasError ? 'bg-ims-danger-bg text-ims-danger' : ''}
     `}
   />
 );
@@ -208,26 +208,26 @@ export default function ExcelStyleLeavePlan() {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-3 text-sm text-slate-500">Loading leave plan data...</span>
+        <span className="ml-3 text-sm text-ims-muted">Loading leave plan data...</span>
       </div>
     );
   }
 
   return (
     <div className="px-4 sm:px-6 py-4 max-w-[98vw] mx-auto">
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+      <div className="rounded-control border border-ims-border bg-ims-card shadow-sm overflow-hidden">
+        <div className="border-b border-ims-border bg-gradient-to-r from-slate-50 to-white">
           <div className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-start gap-4">
-                <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <div className="h-12 w-12 rounded-control bg-primary/10 flex items-center justify-center flex-shrink-0">
                   <Building className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
+                  <h1 className="text-xl sm:text-2xl font-bold text-ims-text">
                     DNR PARTNERS CPA
                   </h1>
-                  <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
+                  <p className="text-sm text-ims-muted mt-1 flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
                     Annual Staff Leave Plan {currentYear}
                   </p>
@@ -235,7 +235,7 @@ export default function ExcelStyleLeavePlan() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" size="sm" onClick={handleExportExcel} className="gap-2">
-                  <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                  <FileSpreadsheet className="h-4 w-4 text-ims-success" />
                   Export Excel
                 </Button>
                 <Button
@@ -269,31 +269,31 @@ export default function ExcelStyleLeavePlan() {
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="sticky left-0 z-20 bg-slate-100 border-r border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[200px]">
+                <th className="sticky left-0 z-20 bg-ims-subtle border-r border-b border-ims-border px-4 py-3 text-left text-xs font-semibold text-ims-body min-w-[200px]">
                   <div className="flex items-center gap-2">
                     <Users className="h-3.5 w-3.5" />
                     Staff Name
                   </div>
                 </th>
-                <th className="bg-slate-100 border-r border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[140px]">
+                <th className="bg-ims-subtle border-r border-b border-ims-border px-3 py-3 text-left text-xs font-semibold text-ims-body min-w-[140px]">
                   Department
                 </th>
-                <th className="bg-slate-100 border-r border-b border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[100px]">
+                <th className="bg-ims-subtle border-r border-b border-ims-border px-3 py-3 text-center text-xs font-semibold text-ims-body min-w-[100px]">
                   Opening
                   <br />Balance
                 </th>
-                <th className="bg-slate-100 border-r border-b border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[90px]">
+                <th className="bg-ims-subtle border-r border-b border-ims-border px-3 py-3 text-center text-xs font-semibold text-ims-body min-w-[90px]">
                   Total
                   <br />Leave Days
                 </th>
                 {MONTHS.map(month => (
-                  <th key={month} className="bg-slate-100 border-r border-b border-slate-200 px-2 py-3 text-center text-xs font-semibold text-primary uppercase tracking-wider min-w-[100px]">
+                  <th key={month} className="bg-ims-subtle border-r border-b border-ims-border px-2 py-3 text-center text-xs font-semibold text-primary min-w-[100px]">
                     {MONTH_LABELS[month]}
                     <br />
-                    <span className="text-[10px] font-normal text-slate-400">{currentYear}</span>
+                    <span className="text-t-hint font-normal text-ims-faint">{currentYear}</span>
                   </th>
                 ))}
-                <th className="bg-slate-100 border-b border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[80px]">
+                <th className="bg-ims-subtle border-b border-ims-border px-3 py-3 text-center text-xs font-semibold text-ims-body min-w-[80px]">
                   Balance
                 </th>
               </tr>
@@ -302,22 +302,22 @@ export default function ExcelStyleLeavePlan() {
               {staffData.map((staff, index) => (
                 <tr
                   key={staff.id}
-                  className={`transition-colors hover:bg-blue-50/40 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
+                  className={`transition-colors hover:bg-ims-info-bg ${index % 2 === 0 ? 'bg-ims-card' : 'bg-ims-thead/40'}`}
                 >
-                  <td className="sticky left-0 z-10 bg-inherit border-r border-b border-slate-100 px-4 py-2.5">
-                    <span className="text-sm font-medium text-slate-800">{staff.name}</span>
+                  <td className="sticky left-0 z-10 bg-inherit border-r border-b border-ims-divider px-4 py-2.5">
+                    <span className="text-sm font-medium text-ims-text">{staff.name}</span>
                   </td>
-                  <td className="border-r border-b border-slate-100 px-3 py-2.5">
-                    <span className="text-sm text-slate-600">{departmentMap[staff.departmentId] || "N/A"}</span>
+                  <td className="border-r border-b border-ims-divider px-3 py-2.5">
+                    <span className="text-sm text-ims-body">{departmentMap[staff.departmentId] || "N/A"}</span>
                   </td>
-                  <td className="border-r border-b border-slate-100 px-3 py-2.5 text-center">
-                    <span className="text-sm font-semibold text-slate-700">{staff.openingBalance}</span>
+                  <td className="border-r border-b border-ims-divider px-3 py-2.5 text-center">
+                    <span className="text-sm font-semibold text-ims-body">{staff.openingBalance}</span>
                   </td>
-                  <td className="border-r border-b border-slate-100 px-3 py-2.5 text-center">
-                    <span className="text-sm font-semibold text-slate-700">{staff.totalLeaveDays}</span>
+                  <td className="border-r border-b border-ims-divider px-3 py-2.5 text-center">
+                    <span className="text-sm font-semibold text-ims-body">{staff.totalLeaveDays}</span>
                   </td>
                   {MONTHS.map(month => (
-                    <td key={month} className="border-r border-b border-slate-100 p-0">
+                    <td key={month} className="border-r border-b border-ims-divider p-0">
                       <LeaveCell
                         value={staff[month]}
                         onChange={(value) => handleCellChange(staff.id, month, value)}
@@ -326,8 +326,8 @@ export default function ExcelStyleLeavePlan() {
                       />
                     </td>
                   ))}
-                  <td className="border-b border-slate-100 px-3 py-2.5 text-center">
-                    <span className={`text-sm font-bold ${staff.balance < 3 ? 'text-red-600' : staff.balance < 6 ? 'text-amber-600' : 'text-green-600'}`}>
+                  <td className="border-b border-ims-divider px-3 py-2.5 text-center">
+                    <span className={`text-sm font-bold ${staff.balance < 3 ? 'text-ims-danger' : staff.balance < 6 ? 'text-ims-warning' : 'text-ims-success'}`}>
                       {staff.balance}
                     </span>
                   </td>
@@ -335,27 +335,27 @@ export default function ExcelStyleLeavePlan() {
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-slate-100/80">
-                <td className="sticky left-0 z-10 bg-slate-100/80 border-r border-t border-slate-200 px-4 py-3">
-                  <span className="text-sm font-bold text-slate-800">TOTAL</span>
-                  <span className="text-xs text-slate-500 ml-2">({staffData.length} employees)</span>
+              <tr className="bg-ims-subtle/80">
+                <td className="sticky left-0 z-10 bg-ims-subtle/80 border-r border-t border-ims-border px-4 py-3">
+                  <span className="text-sm font-bold text-ims-text">TOTAL</span>
+                  <span className="text-xs text-ims-muted ml-2">({staffData.length} employees)</span>
                 </td>
-                <td className="border-r border-t border-slate-200 px-3 py-3 text-center text-sm font-bold text-slate-700">
+                <td className="border-r border-t border-ims-border px-3 py-3 text-center text-sm font-bold text-ims-body">
                   -
                 </td>
-                <td className="border-r border-t border-slate-200 px-3 py-3 text-center text-sm font-bold text-slate-700">
+                <td className="border-r border-t border-ims-border px-3 py-3 text-center text-sm font-bold text-ims-body">
                   {totalOpeningBalance}
                 </td>
-                <td className="border-r border-t border-slate-200 px-3 py-3 text-center text-sm font-bold text-slate-700">
+                <td className="border-r border-t border-ims-border px-3 py-3 text-center text-sm font-bold text-ims-body">
                   {totalLeaveDays}
                 </td>
                 {MONTHS.map(month => (
-                  <td key={month} className="border-r border-t border-slate-200 px-2 py-3 text-center text-sm font-bold text-primary">
+                  <td key={month} className="border-r border-t border-ims-border px-2 py-3 text-center text-sm font-bold text-primary">
                     {staffData.reduce((s, st) => s + (Number(st[month]) || 0), 0)}
                   </td>
                 ))}
-                <td className="border-t border-slate-200 px-3 py-3 text-center">
-                  <span className={`text-sm font-bold ${totalBalance < 10 ? 'text-red-600' : totalBalance < 30 ? 'text-amber-600' : 'text-green-600'}`}>
+                <td className="border-t border-ims-border px-3 py-3 text-center">
+                  <span className={`text-sm font-bold ${totalBalance < 10 ? 'text-ims-danger' : totalBalance < 30 ? 'text-ims-warning' : 'text-ims-success'}`}>
                     {totalBalance}
                   </span>
                 </td>
@@ -364,18 +364,18 @@ export default function ExcelStyleLeavePlan() {
           </table>
         </div>
 
-        <div className="border-t border-slate-200 bg-amber-50/50">
+        <div className="border-t border-ims-border bg-ims-warning-bg">
           <div className="p-4 sm:p-5">
             <div className="flex items-start gap-3">
-              <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <AlertCircle className="h-4 w-4 text-amber-600" />
+              <div className="h-8 w-8 rounded-full bg-ims-warning-bg flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertCircle className="h-4 w-4 text-ims-warning" />
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-slate-800 mb-2">Important Notes</h4>
-                <ul className="space-y-1.5 text-sm text-slate-600">
+                <h4 className="text-sm font-semibold text-ims-text mb-2">Important Notes</h4>
+                <ul className="space-y-1.5 text-sm text-ims-body">
                   <li className="flex items-start gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
-                    Each staff member has a total of <strong className="text-slate-800">{annualLeaveDays}</strong> leave days per year.
+                    Each staff member has a total of <strong className="text-ims-text">{annualLeaveDays}</strong> leave days per year.
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
@@ -383,7 +383,7 @@ export default function ExcelStyleLeavePlan() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
-                    The leave year runs from <strong className="text-slate-800">April 1st</strong> to <strong className="text-slate-800">December 31st</strong>.
+                    The leave year runs from <strong className="text-ims-text">April 1st</strong> to <strong className="text-ims-text">December 31st</strong>.
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />

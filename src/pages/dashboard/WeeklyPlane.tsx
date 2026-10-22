@@ -203,7 +203,7 @@ export default function WeeklyPlans({ ...otherProps }) {
       onError: (error) => {
         console.error("Error adding task report:", error)
         toast.error("Error", {
-          description: "Failed to add task report. Please try again.",
+          description: "Failed to add task report. Try again.",
         })
       },
     }
@@ -353,7 +353,7 @@ export default function WeeklyPlans({ ...otherProps }) {
                     {selectedPlan.taskReports.map((report, index) => (
                       <li key={report.id} className="border p-2 rounded">
                         <p><strong>Report {index + 1}:</strong> {report.description}</p>
-                        <a href={pocketbase.files.getUrl(report, report.report)} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                        <a href={pocketbase.files.getUrl(report, report.report)} target="_blank" rel="noopener noreferrer" className="text-ims-link hover:underline">
                           View Report
                         </a>
                       </li>

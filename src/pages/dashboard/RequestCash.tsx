@@ -218,7 +218,7 @@ export default function RequestCash() {
       cell: ({ row }) => {
         const value = row.getValue("status");
         return (
-          <div className={`capitalize ${value === 'Waiting to be approved' ? 'text-red-500' : ''}`}>
+          <div className={`capitalize ${value === 'Waiting to be approved' ? 'text-ims-danger' : ''}`}>
             {typeof value === 'string' ? value : 'N/A'}
           </div>
         );
@@ -461,7 +461,7 @@ export default function RequestCash() {
   };
 
   const approveRequest = (record) => {
-    const reason = prompt("Please enter the reason for approval:");
+    const reason = prompt("Enter the reason for approval:");
     if (reason) {
       pocketbase
         .collection("cashRequests")
@@ -477,7 +477,7 @@ export default function RequestCash() {
   };
 
   const rejectRequest = (record) => {
-    const reason = prompt("Please enter the reason for rejection:");
+    const reason = prompt("Enter the reason for rejection:");
     if (reason) {
       pocketbase
         .collection("cashRequests")
