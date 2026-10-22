@@ -6,25 +6,61 @@ import * as React from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "react-query";
 import { toast } from "sonner";
-import { CheckCircle2, ClipboardCheck, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, ClipboardCheck, FileSpreadsheet, FileText, Sheet } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
-import { COUNT_RESULTS, assetsApi, money } from "@/lib/assets";
-import { imsApi, showDay } from "@/lib/ims";
+import { COUNT_RESULTS, assetsApi } from "@/lib/assets";
+import type { Tone } from "@/lib/procurement";
+import { imsApi } from "@/lib/ims";
 import { errorMessage } from "@/lib/procurement";
 import { exportReport, ExportFormat } from "@/lib/exporter";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState, ListSkeleton, StatusBadge } from "@/components/enterprise/ui";
-import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, toChatter } from "@/components/enterprise/DocumentLayout";
-import ExportMenu from "@/components/enterprise/ExportMenu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Activity } from "@/components/enterprise/Approval";
 import DocumentUploads from "@/components/enterprise/Attachments";
-import { ReasonDialog } from "@/components/treasury/TreasuryKit";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  DetailHeader,
+  Details,
+  EmptyState,
+  Field,
+  FilterBar,
+  FilterSelect,
+  Input,
+  KpiBand,
+  MenuItem,
+  Modal,
+  MoreMenu,
+  Num,
+  PILL_TONE,
+  Page,
+  Pill,
+  PillTone,
+  Tabs,
+  fmtDate,
+  fmtMoney,
+  fmtNumber,
+  statusText,
+} from "@/components/ims";
 import { cn } from "@/utils";
 
-const th = "whitespace-nowrap px-2.5 py-2";
-const td = "whitespace-nowrap px-2.5 py-1.5 text-right tabular-nums";
-const RESULT_BUTTONS: [string, string, string][] = [["found", "Found", "border-emerald-300 bg-emerald-50 text-emerald-800"], ["found_elsewhere", "Elsewhere", "border-blue-300 bg-blue-50 text-blue-800"], ["damaged", "Damaged", "border-amber-300 bg-amber-50 text-amber-800"], ["missing", "Missing", "border-red-300 bg-red-50 text-red-800"]];
+const LIST = "/dashboard/assets/counts";
+const EXPORT_PERMISSION = ["export_assets", "view_fixed_assets", "manage_fixed_assets"];
+/** A count is a document: counting is "In progress", then "Completed" (or "Cancelled"). */
+const COUNT_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  open: { label: "In progress", tone: "info", note: "Counting" },
+  completed: { label: "Completed", tone: "success", note: "Register updated" },
+  cancelled: { label: "Cancelled", tone: "danger" },
+};
+/** Count results are tags, not statuses: each keeps its colour. */
+const RESULT_TONE: Record<string, PillTone> = { neutral: "neutral", success: "success", info: "info", warning: "warning", danger: "danger", violet: "orange" };
+const toneOf = (result?: string) => RESULT_TONE[COUNT_RESULTS[result || ""]?.tone || "neutral"];
+const RESULT_BUTTONS: [string, string][] = [["found", "Found"], ["found_elsewhere", "Elsewhere"], ["damaged", "Damaged"], ["missing", "Missing"]];
 
 export default function AssetCountDetail() {
   const { countId } = useParams();
@@ -43,8 +79,25 @@ export default function AssetCountDetail() {
     return { v, lines };
   });
   const history = useQuery(["audit", "asset_verifications", countId], () => imsApi.audit({ collection: "asset_verifications", record: countId, perPage: 40 }), { enabled: Boolean(countId) });
-  if (q.isLoading) return <div className="p-6"><ListSkeleton rows={6} /></div>;
-  if (!q.data) return <div className="p-6"><EmptyState icon={ClipboardCheck} title="Count not found" text="It may not exist, or your role cannot see it." /></div>;
+  if (q.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-24 w-full rounded-card" />
+        <Skeleton className="h-64 w-full rounded-card" />
+      </Page>
+    );
+  }
+  if (!q.data) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState icon={ClipboardCheck} text="This count is not available. It may not exist, or your role cannot see it." action={<ButtonLink to={LIST}>Back to asset counts</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
   const { v, lines } = q.data;
   const open = v.status === "open";
   const counter = open && can("manage_fixed_assets");
@@ -70,7 +123,7 @@ export default function AssetCountDetail() {
     setBusy("complete");
     try {
       await assetsApi.count(v.id, "complete");
-      toast.success("Count completed — the register is updated and reconciled with the GL");
+      toast.success(`${v.number} completed. The register is updated and reconciled with the general ledger.`);
       q.refetch();
       history.refetch();
       setTab("result");
@@ -81,134 +134,261 @@ export default function AssetCountDetail() {
     }
   };
   const doExport = (format: ExportFormat) => exportReport({
-    title: `Asset count sheet — ${v.title}`, subtitle: `${v.number} · ${showDay(v.as_of)}`, rows: lines, format, what: `asset_count:${v.number}`, orientation: "landscape", fileName: v.number,
+    title: `Asset count sheet — ${v.title}`, subtitle: `${v.number} · ${fmtDate(v.as_of)}`, rows: lines, format, what: `asset_count:${v.number}`, orientation: "landscape", fileName: v.number,
     columns: [
       { header: "Tag", value: (l: any) => l.expand?.asset?.code || "", width: 14 }, { header: "Asset", value: (l: any) => l.expand?.asset?.name || "", width: 32 },
       { header: "Should be at", value: (l: any) => l.expected_location, width: 26 }, { header: "Held by", value: (l: any) => l.expand?.expected_custodian?.name || "", width: 20 },
       { header: "Result", value: (l: any) => COUNT_RESULTS[l.result]?.label || l.result, width: 12 }, { header: "Found at", value: (l: any) => l.found_location, width: 20 }, { header: "Notes", value: (l: any) => l.notes, width: 24 },
     ],
   });
+  const runExport = async (format: ExportFormat) => {
+    try {
+      await doExport(format);
+    } catch (e: any) {
+      toast.error(e?.message || "The count sheet could not be prepared. Try again.");
+    }
+  };
   const rec = (v.reconciliation || []) as any[];
   const s = v.summary || {};
+  const canExport = can(EXPORT_PERMISSION);
+  const more: MenuItem[] = [
+    { label: "Count sheet in Excel", icon: FileSpreadsheet, onSelect: () => runExport("xlsx"), hidden: !canExport },
+    { label: "Count sheet as PDF", icon: FileText, onSelect: () => runExport("pdf"), hidden: !canExport },
+    { label: "Count sheet as CSV", icon: Sheet, onSelect: () => runExport("csv"), hidden: !canExport },
+    { label: "Cancel count", icon: Ban, danger: true, onSelect: () => setCancelling(true), hidden: !counter },
+  ];
+  const showResult = (k: string) => {
+    setTab("sheet");
+    setFilter(k);
+  };
+
+  const sheetColumns: Column<any>[] = [
+    {
+      key: "asset",
+      header: "Asset",
+      clamp: true,
+      cell: (l) => <Link to={`/dashboard/assets/register/${l.asset}`} className="font-semibold text-ims-text hover:text-ims-link hover:underline">{l.expand?.asset?.name}</Link>,
+      sub: (l) => <span className="whitespace-nowrap font-mono">{l.expand?.asset?.code}</span>,
+    },
+    { key: "where", header: "Should be at", className: "max-w-[240px]", cell: (l) => l.expected_location || <span className="text-ims-faint">—</span>, sub: (l) => l.expand?.expected_department?.name },
+    { key: "holder", header: "Held by", className: "max-w-[180px]", cell: (l) => (l.expand?.expected_custodian?.name ? <span className="block truncate">{l.expand.expected_custodian.name}</span> : <span className="text-ims-faint">—</span>) },
+    {
+      key: "result",
+      header: "Result",
+      cell: (l) => <Pill tone={toneOf(l.result)}>{COUNT_RESULTS[l.result]?.label || l.result}</Pill>,
+      sub: (l) =>
+        l.found_location || l.notes ? (
+          <span className="block max-w-[220px]">
+            {l.found_location && <span className="block">At {l.found_location}</span>}
+            {l.notes && <span className="block truncate" title={l.notes}>{l.notes}</span>}
+          </span>
+        ) : null,
+    },
+    ...(counter
+      ? [
+          {
+            key: "record",
+            header: "Record",
+            cell: (l: any) => (
+              <div className="flex flex-wrap gap-1" role="group" aria-label={`Count result for ${l.expand?.asset?.code}`}>
+                {RESULT_BUTTONS.map(([k, label]) => {
+                  const on = l.result === k;
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      aria-pressed={on}
+                      disabled={busy === l.id}
+                      onClick={() => record(l, k)}
+                      className={cn(
+                        "h-[30px] rounded-control border px-2.5 text-t-small font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ims-focus disabled:opacity-50",
+                        on ? cn(PILL_TONE[toneOf(k)], "border-transparent") : "border-ims-field bg-ims-card text-ims-body hover:bg-ims-subtle"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            ),
+          } as Column<any>,
+        ]
+      : []),
+  ];
+
+  const diff = (n: number) => <span className={cn("font-semibold", n ? "text-ims-danger" : "text-ims-success")}><Num value={n} /></span>;
+  const sum = (k: string) => rec.reduce((t, r) => t + (Number(r[k]) || 0), 0);
+  const recColumns: Column<any>[] = [
+    { key: "category", header: "Category", cell: (r) => <span className="font-semibold">{r.category}</span>, sub: (r) => <span className="font-mono">{r.asset_account}/{r.accumulated_account}</span> },
+    { key: "register_cost", header: "Cost in register (RWF)", numeric: true, cell: (r) => <Num value={r.register_cost} />, total: <Num value={sum("register_cost")} /> },
+    { key: "gl_cost", header: "Cost in GL (RWF)", numeric: true, cell: (r) => <Num value={r.gl_cost} />, total: <Num value={sum("gl_cost")} /> },
+    { key: "cost_difference", header: "Difference (RWF)", numeric: true, cell: (r) => diff(r.cost_difference), total: diff(sum("cost_difference")) },
+    { key: "register_accumulated", header: "Depreciation in register (RWF)", numeric: true, cell: (r) => <Num value={r.register_accumulated} />, total: <Num value={sum("register_accumulated")} /> },
+    { key: "gl_accumulated", header: "Depreciation in GL (RWF)", numeric: true, cell: (r) => <Num value={r.gl_accumulated} />, total: <Num value={sum("gl_accumulated")} /> },
+    { key: "accumulated_difference", header: "Difference (RWF)", numeric: true, cell: (r) => diff(r.accumulated_difference), total: diff(sum("accumulated_difference")) },
+  ];
+
+  const scope = [v.expand?.department?.name, v.location].filter(Boolean).join(" · ") || "Whole register";
   return (
-    <DocumentPage chatter={<Chatter items={toChatter([], (history.data?.items || []) as any[])} />}>
-      <ControlBar
-        breadcrumbs={[{ title: "Fixed assets", link: "/dashboard/assets" }, { title: "Asset counts", link: "/dashboard/assets/counts" }, { title: v.number }]}
-        steps={[{ key: "open", label: "Counting" }, { key: "completed", label: "Completed" }]}
-        current={v.status === "completed" ? "completed" : "open"}
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to asset counts", to: LIST }}
+        number={v.number}
+        type="Asset count"
+        status={COUNT_STATUS[v.status]?.label || v.status}
+        statusNote={COUNT_STATUS[v.status]?.note}
+        title={v.title}
+        facts={[scope, { label: "Count date", value: fmtDate(v.as_of) }, v.expand?.started_by?.name ? { label: "Started by", value: v.expand.started_by.name } : null]}
         actions={
           <>
-            {counter && <Button size="sm" onClick={complete} disabled={Boolean(busy) || Boolean(counts.pending)}><CheckCircle2 size={14} /> Complete the count</Button>}
-            <ExportMenu label="Count sheet" permission={["export_assets", "view_fixed_assets", "manage_fixed_assets"]} onExport={doExport} />
-            {counter && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setCancelling(true)}><XCircle size={14} /> Cancel</Button>}
+            <MoreMenu items={more} />
+            {counter && (
+              <Button variant="primary" icon={CheckCircle2} onClick={complete} loading={busy === "complete"} disabled={Boolean(busy) || Boolean(counts.pending)}>
+                Complete the count
+              </Button>
+            )}
           </>
         }
       />
-      <Sheet ribbon={v.status === "completed" ? { label: "Completed", tone: "success" } : v.status === "cancelled" ? { label: "Cancelled", tone: "neutral" } : undefined}>
-        <SheetTitle kicker="Asset count" title={v.title} badges={<StatusBadge status={v.status} map={{ open: { label: "Counting", tone: "warning" }, completed: { label: "Completed", tone: "success" }, cancelled: { label: "Cancelled", tone: "neutral" } }} />} />
-        <div className="mb-5 grid grid-cols-2 gap-3 rounded-lg border border-slate-100 bg-slate-50/70 px-4 py-3 sm:grid-cols-5">
-          {[["Assets", lines.length, ""], ["Found", (counts.found || 0) + (counts.found_elsewhere || 0), "text-emerald-700"], ["Damaged", counts.damaged || 0, "text-amber-700"], ["Missing", counts.missing || 0, "text-red-700"], ["Not counted", counts.pending || 0, counts.pending ? "text-slate-900" : "text-slate-400"]].map(([l, n, c]) => (
-            <div key={String(l)}><p className="text-[11.5px] text-slate-500">{l}</p><p className={cn("text-[20px] font-semibold tabular-nums", String(c))}>{n}</p></div>
-          ))}
-        </div>
-        <FieldGrid
-          left={[{ label: "Scope", value: [v.expand?.department?.name, v.location].filter(Boolean).join(" · ") || "Whole register" }, { label: "Count date", value: showDay(v.as_of) }, { label: "Notes", value: v.notes }]}
-          right={[{ label: "Started by", value: v.expand?.started_by?.name, hint: showDay(v.created) }, { label: "Completed", value: v.completed_at ? `${showDay(v.completed_at)} by ${v.expand?.completed_by?.name || "—"}` : "" }]}
-        />
-        <Notebook tabs={[{ key: "sheet", label: "Count sheet", count: lines.length }, ...(v.status === "completed" ? [{ key: "result", label: "Result and reconciliation" }] : []), { key: "documents", label: "Documents", count: (v.attachments || []).length }]} active={tab} onChange={setTab} />
-        <div className="pt-4">
-          {tab === "sheet" && (
-            <>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <input type="search" className="h-9 w-full rounded-md border border-slate-200 px-3 text-[13px] sm:w-72" placeholder="Tag, asset or location" value={search} onChange={(e) => setSearch(e.target.value)} />
-                {["all", "pending", "found", "found_elsewhere", "damaged", "missing"].map((k) => (
-                  <button key={k} type="button" onClick={() => setFilter(k)} className={cn("h-8 rounded-full border px-3 text-[12px] font-medium", filter === k ? "border-primary bg-primary text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>
-                    {k === "all" ? "All" : COUNT_RESULTS[k].label} {k === "all" ? lines.length : counts[k] || 0}
-                  </button>
-                ))}
-              </div>
-              <div className="overflow-x-auto rounded-md border border-slate-200">
-                <table className="dnr-grid w-full min-w-[900px] text-[12.5px]">
-                  <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Asset</th><th className={th}>Should be at</th><th className={th}>Held by</th><th className={th}>Result</th>{counter && <th className={th}>Record</th>}</tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {shown.map((l) => (
-                      <tr key={l.id}>
-                        <td className="px-2.5 py-1.5"><Link to={`/dashboard/assets/register/${l.asset}`} className="hover:underline"><span className="block font-mono text-[11.5px] text-slate-500">{l.expand?.asset?.code}</span><span className="block font-medium text-slate-900">{l.expand?.asset?.name}</span></Link></td>
-                        <td className="px-2.5 py-1.5">{l.expected_location || "—"}<span className="block text-[11.5px] text-slate-500">{l.expand?.expected_department?.name}</span></td>
-                        <td className="px-2.5 py-1.5">{l.expand?.expected_custodian?.name || "—"}</td>
-                        <td className="px-2.5 py-1.5"><StatusBadge status={l.result} map={COUNT_RESULTS} />{l.found_location && <span className="block text-[11.5px] text-slate-500">at {l.found_location}</span>}{l.notes && <span className="block max-w-[220px] truncate text-[11.5px] text-slate-500" title={l.notes}>{l.notes}</span>}</td>
-                        {counter && (
-                          <td className="px-2.5 py-1.5">
-                            <div className="flex flex-wrap gap-1">
-                              {RESULT_BUTTONS.map(([k, label, cls]) => (
-                                <button key={k} type="button" disabled={busy === l.id} onClick={() => record(l, k)} className={cn("h-7 rounded border px-2 text-[11.5px] font-medium transition-opacity disabled:opacity-50", l.result === k ? cls : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>{label}</button>
-                              ))}
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-          {tab === "result" && v.status === "completed" && (
-            <div className="space-y-4">
-              <p className="text-[13px] text-slate-700">{s.total} assets counted: {(s.found || 0) + (s.found_elsewhere || 0)} found ({s.found_elsewhere || 0} at another location, now updated), <b className={cn(s.missing && "text-red-700")}>{s.missing} missing</b> (cost RWF {money(s.missing_cost)}, book value RWF {money(s.missing_nbv)} — now marked lost; prepare a write-off), {s.damaged} damaged (book value RWF {money(s.damaged_nbv)}).</p>
-              <div className="overflow-x-auto rounded-md border border-slate-200">
-                <table className="dnr-grid w-full min-w-[860px] text-[12.5px]">
-                  <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Category</th><th className={cn(th, "text-right")}>Cost: register</th><th className={cn(th, "text-right")}>GL</th><th className={cn(th, "text-right")}>Difference</th><th className={cn(th, "text-right")}>Depreciation: register</th><th className={cn(th, "text-right")}>GL</th><th className={cn(th, "text-right")}>Difference</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {rec.map((r) => (
-                      <tr key={r.category}>
-                        <td className="px-2.5 py-1.5">{r.category} <span className="font-mono text-[11px] text-slate-400">{r.asset_account}/{r.accumulated_account}</span></td>
-                        <td className={td}>{money(r.register_cost)}</td><td className={td}>{money(r.gl_cost)}</td><td className={cn(td, r.cost_difference ? "font-semibold text-red-700" : "text-emerald-700")}>{money(r.cost_difference)}</td>
-                        <td className={td}>{money(r.register_accumulated)}</td><td className={td}>{money(r.gl_accumulated)}</td><td className={cn(td, r.accumulated_difference ? "font-semibold text-red-700" : "text-emerald-700")}>{money(r.accumulated_difference)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="px-3 py-2 text-[12px] text-slate-500">Register against the general ledger on the count date. Any difference must be explained before the period is closed.</p>
-              </div>
-            </div>
-          )}
-          {tab === "documents" && <DocumentUploads collection="asset_verifications" record={v} canAdd={can("manage_fixed_assets")} canRemove={open && can("manage_fixed_assets")} onChange={() => q.refetch()} hint="Signed count sheets, photos of damaged assets, Internal Audit's observation note" />}
-        </div>
-      </Sheet>
-      {elsewhere && (
-        <Dialog open onOpenChange={(o) => !o && setElsewhere(null)}>
-          <DialogContent className="max-w-sm bg-white">
-            <DialogHeader>
-              <DialogTitle>Where was it found?</DialogTitle>
-              <DialogDescription>{elsewhere.expand?.asset?.code} {elsewhere.expand?.asset?.name} — expected at {elsewhere.expected_location || "no location"}. Its location is updated when the count is completed.</DialogDescription>
-            </DialogHeader>
-            <input autoFocus className="h-10 w-full rounded-lg border border-slate-200 px-3 text-[13.5px]" value={where} onChange={(e) => setWhere(e.target.value)} placeholder="e.g. HQ 3rd floor, DSG office" />
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setElsewhere(null)}>Cancel</Button>
-              <Button disabled={!where.trim()} onClick={() => { const l = elsewhere; setElsewhere(null); record(l, "found_elsewhere", where.trim()); }}>Record</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+
+      {counter && counts.pending > 0 && (
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-link/25 bg-ims-info-bg px-4 py-3 text-t-body text-ims-info">
+          <ClipboardCheck size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>{fmtNumber(counts.pending)} asset{counts.pending === 1 ? "" : "s"} still to count. Record a result for each one, then complete the count.</span>
+        </p>
       )}
-      <ReasonDialog
+      {v.cancel_reason && (
+        <p className="rounded-card border border-ims-border bg-ims-card px-4 py-3 text-t-body text-ims-body">
+          <span className="font-semibold text-ims-text">Cancelled.</span> {v.cancel_reason}
+        </p>
+      )}
+
+      <KpiBand
+        items={[
+          { label: "Assets", value: fmtNumber(lines.length), onClick: () => showResult("all") },
+          { label: "Found", value: fmtNumber((counts.found || 0) + (counts.found_elsewhere || 0)), sub: counts.found_elsewhere ? `${fmtNumber(counts.found_elsewhere)} elsewhere` : undefined, tone: "success", onClick: () => showResult("found") },
+          { label: "Damaged", value: fmtNumber(counts.damaged || 0), tone: counts.damaged ? "warning" : "default", onClick: () => showResult("damaged") },
+          { label: "Missing", value: fmtNumber(counts.missing || 0), tone: counts.missing ? "danger" : "default", onClick: () => showResult("missing") },
+          { label: "Not counted", value: fmtNumber(counts.pending || 0), onClick: () => showResult("pending") },
+        ]}
+      />
+
+      <Tabs
+        label="Count sections"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "sheet", label: "Count sheet", count: lines.length },
+          ...(v.status === "completed" ? [{ key: "result", label: "Result and reconciliation" }] : []),
+          { key: "details", label: "Details" },
+          { key: "documents", label: "Documents", count: (v.attachments || []).length },
+          { key: "activity", label: "Activity" },
+        ]}
+      />
+
+      {tab === "sheet" && (
+        <Card padded={false} className="overflow-hidden">
+          <FilterBar
+            search={{ value: search, onChange: setSearch, placeholder: "Search tag, asset or location" }}
+            chips={filter !== "all" ? [{ key: "result", label: `Result: ${COUNT_RESULTS[filter]?.label || filter}`, onRemove: () => setFilter("all") }] : []}
+            onClear={() => setFilter("all")}
+            right={<span className="text-t-small text-ims-muted">{fmtNumber(shown.length)} of {fmtNumber(lines.length)} assets</span>}
+          >
+            <FilterSelect
+              label="Result"
+              value={filter === "all" ? "" : filter}
+              onChange={(x) => setFilter(x || "all")}
+              options={["pending", "found", "found_elsewhere", "damaged", "missing"].map((k) => ({ value: k, label: `${COUNT_RESULTS[k].label} (${fmtNumber(counts[k] || 0)})` }))}
+            />
+          </FilterBar>
+          <DataTable
+            columns={sheetColumns}
+            rows={shown}
+            rowKey={(l) => l.id}
+            minWidth={counter ? 980 : 760}
+            caption="Count sheet"
+            empty={<EmptyState compact icon={ClipboardCheck} text={search || filter !== "all" ? "No asset matches. Change the search or clear the filter." : "No asset in the scope of this count."} />}
+          />
+        </Card>
+      )}
+
+      {tab === "result" && v.status === "completed" && (
+        <Card padded={false} className="overflow-hidden">
+          <div className="px-5 pt-5">
+            <CardHeader title="Register against the general ledger" subtitle="On the count date. Any difference must be explained before the period is closed." />
+            <p className="mb-4 text-t-body text-ims-body">
+              {fmtNumber(s.total)} assets counted: {fmtNumber((s.found || 0) + (s.found_elsewhere || 0))} found ({fmtNumber(s.found_elsewhere || 0)} at another location, now updated),{" "}
+              <b className={cn("font-semibold", s.missing && "text-ims-danger")}>{fmtNumber(s.missing)} missing</b> (cost {fmtMoney(s.missing_cost)}, book value {fmtMoney(s.missing_nbv)}, now marked lost: prepare a write-off), {fmtNumber(s.damaged)} damaged (book value {fmtMoney(s.damaged_nbv)}).
+            </p>
+          </div>
+          <DataTable columns={recColumns} rows={rec} rowKey={(r) => r.category} minWidth={900} caption="Reconciliation of the register with the general ledger" empty={<EmptyState compact text="No reconciliation recorded." />} />
+        </Card>
+      )}
+
+      {tab === "details" && (
+        <Card>
+          <CardHeader title="Count" />
+          <Details
+            columns={3}
+            items={[
+              { label: "Scope", value: scope },
+              { label: "Count date", value: fmtDate(v.as_of) },
+              { label: "Status", value: statusText(COUNT_STATUS[v.status], v.status) },
+              { label: "Started by", value: v.expand?.started_by?.name, hint: fmtDate(v.created) },
+              { label: "Completed", value: v.completed_at ? fmtDate(v.completed_at) : null, hint: v.completed_at ? `By ${v.expand?.completed_by?.name || "—"}` : undefined },
+              { label: "Notes", value: v.notes ? <span className="whitespace-pre-line">{v.notes}</span> : null, wide: true },
+            ]}
+          />
+        </Card>
+      )}
+
+      {tab === "documents" && (
+        <Card>
+          <CardHeader title="Documents" subtitle="Signed count sheets, photos of damaged assets, Internal Audit's observation note." />
+          <DocumentUploads collection="asset_verifications" record={v} canAdd={can("manage_fixed_assets")} canRemove={open && can("manage_fixed_assets")} onChange={() => q.refetch()} hint="PDF, images, Word or Excel, up to 20 MB each" />
+        </Card>
+      )}
+
+      {tab === "activity" && <Activity actions={[]} audit={(history.data?.items || []) as any[]} loading={history.isLoading} />}
+
+      {elsewhere && (
+        <Modal
+          open
+          onClose={() => setElsewhere(null)}
+          size="sm"
+          title="Where was it found?"
+          description={`${elsewhere.expand?.asset?.code} ${elsewhere.expand?.asset?.name}, expected at ${elsewhere.expected_location || "no location"}. Its location is updated when the count is completed.`}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setElsewhere(null)}>Cancel</Button>
+              <Button variant="primary" disabled={!where.trim()} onClick={() => { const l = elsewhere; setElsewhere(null); record(l, "found_elsewhere", where.trim()); }}>Record</Button>
+            </>
+          }
+        >
+          <Field label="Found at" required htmlFor="ct-where">
+            <Input id="ct-where" autoFocus value={where} onChange={(e) => setWhere(e.target.value)} placeholder="e.g. HQ 3rd floor, DSG office" />
+          </Field>
+        </Modal>
+      )}
+      <ConfirmDialog
         open={cancelling}
+        onClose={() => setCancelling(false)}
         title={`Cancel ${v.number}?`}
         description="The results recorded so far are not applied to the register."
         confirmLabel="Cancel count"
-        min={5}
-        onClose={() => setCancelling(false)}
+        danger
+        reason={{ label: "Reason", min: 5, placeholder: "Why the count is stopped" }}
         onConfirm={async (reason) => {
           try {
             await assetsApi.count(v.id, "cancel", { reason });
             toast.success(`${v.number} cancelled`);
-            setCancelling(false);
             q.refetch();
           } catch (e) {
             toast.error(errorMessage(e));
+            throw e;
           }
         }}
       />
-    </DocumentPage>
+    </Page>
   );
 }

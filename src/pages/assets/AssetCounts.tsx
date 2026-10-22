@@ -7,59 +7,92 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "react-query";
 import { toast } from "sonner";
-import { ClipboardCheck, Plus } from "lucide-react";
+import { ClipboardCheck, ExternalLink, Plus } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
 import { assetsApi } from "@/lib/assets";
-import { showDay } from "@/lib/ims";
+import type { Tone } from "@/lib/procurement";
 import { errorMessage } from "@/lib/procurement";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge, PageHeader } from "@/components/enterprise/ui";
-import RecordTable from "@/components/enterprise/RecordTable";
-import { Field, inputCls, textareaCls } from "@/components/portal/kit";
+import { StatusBadge } from "@/components/enterprise/ui";
+import RecordTable, { RecordColumn } from "@/components/enterprise/RecordTable";
+import { Button, DatePicker, DocNo, Field, Input, Modal, Page, PageHeader, Person, Select, Textarea, fmtDate, fmtNumber, statusText } from "@/components/ims";
 import { cn } from "@/utils";
 
-const STATUS = { open: { label: "Counting", tone: "warning" as const }, completed: { label: "Completed", tone: "success" as const }, cancelled: { label: "Cancelled", tone: "neutral" as const } };
+/** A count is a document: counting is "In progress", then "Completed" (or "Cancelled"). */
+const COUNT_STATUS: Record<string, { label: string; tone: Tone; note?: string }> = {
+  open: { label: "In progress", tone: "info", note: "Counting" },
+  completed: { label: "Completed", tone: "success", note: "Register updated" },
+  cancelled: { label: "Cancelled", tone: "danger" },
+};
 
 export default function AssetCounts() {
   const navigate = useNavigate();
   const { can } = usePermissions();
   const [starting, setStarting] = React.useState(false);
+  const manage = can("manage_fixed_assets");
+  const open = (r: any) => navigate(`/dashboard/assets/counts/${r.id}`);
+
+  const columns: RecordColumn<any>[] = [
+    { key: "number", header: "Count", sortField: "number", nowrap: true, cell: (r) => <DocNo value={r.number} /> },
+    {
+      key: "title",
+      header: "Title",
+      sortField: "title",
+      clamp: true,
+      csv: (r) => r.title,
+      cell: (r) => <span className="font-semibold">{r.title}</span>,
+      sub: (r) => [r.expand?.department?.name, r.location].filter(Boolean).join(" · ") || "Whole register",
+    },
+    { key: "as_of", header: "Count date", sortField: "as_of", nowrap: true, format: "date", csv: (r) => (r.as_of ? r.as_of.slice(0, 10) : ""), cell: (r) => fmtDate(r.as_of) },
+    {
+      key: "result",
+      header: "Result",
+      nowrap: true,
+      csv: (r) => (r.summary ? `${r.summary.total} counted, ${r.summary.missing} missing, ${r.summary.damaged} damaged` : ""),
+      cell: (r) =>
+        r.summary ? (
+          <span>
+            {fmtNumber(r.summary.total)} counted · <span className={cn(r.summary.missing && "font-semibold text-ims-danger")}>{fmtNumber(r.summary.missing)} missing</span> ·{" "}
+            <span className={cn(r.summary.damaged && "font-semibold text-ims-warning")}>{fmtNumber(r.summary.damaged)} damaged</span>
+          </span>
+        ) : (
+          <span className="text-ims-muted">Counting</span>
+        ),
+    },
+    { key: "by", header: "Counted by", className: "max-w-[180px]", csv: (r) => r.expand?.started_by?.name || "", cell: (r) => <Person name={r.expand?.started_by?.name} /> },
+    { key: "status", header: "Status", sortField: "status", csv: (r) => statusText(COUNT_STATUS[r.status], r.status), cell: (r) => <StatusBadge status={r.status} map={COUNT_STATUS} /> },
+  ];
+
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Fixed assets", to: "/dashboard/assets" }, { label: "Asset counts" }]}
         title="Asset counts"
-        description="Physical verification of the register, floor by floor with the asset tags. Missing assets become lost (a write-off can then be prepared) and the register is reconciled with the general ledger."
-        breadcrumbs={[{ title: "Fixed assets", link: "/dashboard/assets" }, { title: "Asset counts", link: "/dashboard/assets/counts" }]}
-        actions={can("manage_fixed_assets") && <Button onClick={() => setStarting(true)}><Plus size={15} /> Start a count</Button>}
+        subtitle="Physical verification of the register with the asset tags, reconciled with the general ledger."
+        primary={manage ? { label: "Start a count", icon: Plus, onClick: () => setStarting(true) } : undefined}
       />
       <RecordTable<any>
         collection="asset_verifications"
         expand="department,started_by,completed_by"
         searchFields={["number", "title", "location"]}
+        searchPlaceholder="Search number, title or location"
+        filters={[{ field: "status", label: "Status", options: Object.entries(COUNT_STATUS).map(([value, m]) => ({ value, label: statusText(m) })) }]}
         defaultSort="-as_of"
         exportName="asset-counts"
         exportTitle="Asset counts"
         exportPermission={["export_assets", "view_fixed_assets"]}
-        onRowClick={(r) => navigate(`/dashboard/assets/counts/${r.id}`)}
-        empty={{ icon: ClipboardCheck, title: "No count yet", text: "The Store & Asset Officer starts a count; Internal Audit may observe it." }}
-        columns={[
-          { key: "number", header: "Count", sortField: "number", cell: (r) => <span className="whitespace-nowrap font-mono text-[12.5px] font-semibold text-slate-800">{r.number}</span> },
-          { key: "title", header: "Title", sortField: "title", csv: (r) => r.title, cell: (r) => <span className="block min-w-[220px]"><span className="block font-medium text-slate-900">{r.title}</span><span className="block text-[12px] text-slate-500">{[r.expand?.department?.name, r.location].filter(Boolean).join(" · ") || "Whole register"}</span></span> },
-          { key: "as_of", header: "Date", sortField: "as_of", format: "date", csv: (r) => showDay(r.as_of), cell: (r) => <span className="whitespace-nowrap text-[12.5px] text-slate-600">{showDay(r.as_of)}</span> },
-          {
-            key: "result", header: "Result", csv: (r) => (r.summary ? `${r.summary.total} counted, ${r.summary.missing} missing, ${r.summary.damaged} damaged` : ""),
-            cell: (r) => r.summary ? (
-              <span className="whitespace-nowrap text-[12.5px]">{r.summary.total} counted · <span className={cn(r.summary.missing && "font-semibold text-red-700")}>{r.summary.missing} missing</span> · {r.summary.damaged} damaged</span>
-            ) : <span className="text-[12.5px] text-slate-400">in progress</span>,
-          },
-          { key: "by", header: "Counted by", csv: (r) => r.expand?.started_by?.name || "", cell: (r) => <span className="whitespace-nowrap text-[12.5px] text-slate-600">{r.expand?.started_by?.name}</span> },
-          { key: "status", header: "Status", sortField: "status", csv: (r) => STATUS[r.status as keyof typeof STATUS]?.label || r.status, cell: (r) => <Badge tone={STATUS[r.status as keyof typeof STATUS]?.tone || "neutral"}>{STATUS[r.status as keyof typeof STATUS]?.label || r.status}</Badge> },
-        ]}
+        onRowClick={open}
+        rowActions={() => [{ label: "Open", icon: ExternalLink, onSelect: open }]}
+        empty={{
+          icon: ClipboardCheck,
+          title: "No count yet",
+          text: "No count yet. The Store & Asset Officer starts a count; Internal Audit may observe it.",
+          action: manage ? <Button variant="primary" icon={Plus} onClick={() => setStarting(true)}>Start a count</Button> : undefined,
+        }}
+        columns={columns}
       />
       {starting && <StartDialog onClose={() => setStarting(false)} onDone={(id) => navigate(`/dashboard/assets/counts/${id}`)} />}
-    </div>
+    </Page>
   );
 }
 
@@ -71,7 +104,7 @@ function StartDialog({ onClose, onDone }: { onClose: () => void; onDone: (id: st
     setBusy(true);
     try {
       const r = await assetsApi.startCount(v);
-      toast.success(`${r.number} started — the count sheet lists every asset in scope`);
+      toast.success(`${r.number} started. The count sheet lists every asset in scope.`);
       onDone(r.id);
     } catch (e) {
       toast.error(errorMessage(e));
@@ -80,23 +113,38 @@ function StartDialog({ onClose, onDone }: { onClose: () => void; onDone: (id: st
     }
   };
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg bg-white">
-        <DialogHeader>
-          <DialogTitle>Start an asset count</DialogTitle>
-          <DialogDescription>Every asset in the scope is put on the count sheet with where it should be and who should hold it.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <Field label="Title" required><input className={inputCls} value={v.title} onChange={(e) => setV((x) => ({ ...x, title: e.target.value }))} placeholder="e.g. Year-end count June 2027 — head office" /></Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Count date" required><input type="date" className={inputCls} value={v.as_of} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setV((x) => ({ ...x, as_of: e.target.value }))} /></Field>
-            <Field label="Department" hint="Empty: the whole register"><select className={inputCls} value={v.department} onChange={(e) => setV((x) => ({ ...x, department: e.target.value }))}><option value="">All departments</option>{((depts.data || []) as any[]).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
-          </div>
-          <Field label="Location contains" hint="e.g. “2nd floor” to count one floor"><input className={inputCls} value={v.location} onChange={(e) => setV((x) => ({ ...x, location: e.target.value }))} /></Field>
-          <Field label="Notes"><textarea className={cn(textareaCls, "min-h-[60px]")} value={v.notes} onChange={(e) => setV((x) => ({ ...x, notes: e.target.value }))} placeholder="Who counts, who observes" /></Field>
-        </div>
-        <DialogFooter className="gap-2"><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={busy || v.title.trim().length < 5} onClick={start}>{busy ? "Starting…" : "Start the count"}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open
+      onClose={onClose}
+      title="Start an asset count"
+      description="Every asset in the scope is put on the count sheet with where it should be and who should hold it."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={start} loading={busy} disabled={v.title.trim().length < 5}>Start the count</Button>
+        </>
+      }
+    >
+      <Field label="Title" required htmlFor="ct-title" hint="At least 5 characters">
+        <Input id="ct-title" value={v.title} onChange={(e) => setV((x) => ({ ...x, title: e.target.value }))} placeholder="e.g. Year-end count June 2027, head office" />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Count date" required htmlFor="ct-date">
+          <DatePicker id="ct-date" value={v.as_of} max={new Date().toISOString().slice(0, 10)} onChange={(x) => setV((y) => ({ ...y, as_of: x }))} />
+        </Field>
+        <Field label="Department" htmlFor="ct-dept" hint="Leave empty to count the whole register">
+          <Select id="ct-dept" value={v.department} onChange={(e) => setV((x) => ({ ...x, department: e.target.value }))}>
+            <option value="">All departments</option>
+            {((depts.data || []) as any[]).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <Field label="Location contains" htmlFor="ct-location" hint="e.g. “2nd floor” to count one floor">
+        <Input id="ct-location" value={v.location} onChange={(e) => setV((x) => ({ ...x, location: e.target.value }))} />
+      </Field>
+      <Field label="Notes" htmlFor="ct-notes">
+        <Textarea id="ct-notes" className="min-h-[72px]" value={v.notes} onChange={(e) => setV((x) => ({ ...x, notes: e.target.value }))} placeholder="Who counts, who observes" />
+      </Field>
+    </Modal>
   );
 }

@@ -7,11 +7,9 @@ import { useQuery } from "react-query";
 import { toast } from "sonner";
 import pocketbase from "@/lib/pocketbase";
 import { errorMessage } from "@/lib/procurement";
-import { ACQUISITION, ASSET_STATUS, CONDITIONS, DEPRECIATION_METHODS, DISPOSAL_METHODS, MAINTENANCE_KINDS, assetsApi, money } from "@/lib/assets";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, inputCls, textareaCls } from "@/components/portal/kit";
-import { MoneyInput } from "@/components/treasury/TreasuryKit";
+import { ACQUISITION, ASSET_STATUS, CONDITIONS, DEPRECIATION_METHODS, DISPOSAL_METHODS, MAINTENANCE_KINDS, assetsApi } from "@/lib/assets";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button, DatePicker, Field, Input, Modal, ModalSection, MoneyInput, Select, Textarea, fmtMoney, statusText } from "@/components/ims";
 import { cn } from "@/utils";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -22,6 +20,8 @@ const monthAfter = (d: string) => {
   x.setUTCMonth(x.getUTCMonth() + 1);
   return x.toISOString().slice(0, 10);
 };
+/** The physical state of an asset in a sentence: "in use", "under maintenance". */
+const stateOf = (s?: string) => (ASSET_STATUS[s || ""]?.note || s || "").toLowerCase();
 
 /** Reference lists used by the dialogs (cached). */
 export function useAssetRefs() {
@@ -58,16 +58,18 @@ function useSave(fn: () => Promise<unknown>, done: string, onDone: () => void) {
 
 function Shell({ title, description, children, footer, onClose, wide }: { title: string; description?: React.ReactNode; children: React.ReactNode; footer: React.ReactNode; onClose: () => void; wide?: boolean }) {
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className={cn("max-h-[92vh] overflow-y-auto bg-white", wide ? "max-w-2xl" : "max-w-lg")}>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
-        </DialogHeader>
-        <div className="space-y-3">{children}</div>
-        <DialogFooter className="gap-2">{footer}</DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal open onClose={onClose} size={wide ? "lg" : "md"} title={title} description={description} footer={footer}>
+      {children}
+    </Modal>
+  );
+}
+
+function Footer({ onClose, label, onSave, busy, disabled }: { onClose: () => void; label: string; onSave: () => void; busy: boolean; disabled?: boolean }) {
+  return (
+    <>
+      <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
+      <Button variant="primary" onClick={onSave} loading={busy} disabled={disabled}>{label}</Button>
+    </>
   );
 }
 
@@ -101,59 +103,151 @@ export function AssetCardDialog({ asset, onClose, onSaved }: { asset?: any; onCl
       const res = asset ? await assetsApi.act(asset.id, "capitalise", body()) : await assetsApi.register(body());
       onSaved(res.id);
     },
-    asset ? `${asset.code} is in the register — posted to the general ledger` : "Asset registered and posted to the general ledger",
+    asset ? `${asset.code} is in the register and posted to the general ledger` : "Asset registered and posted to the general ledger",
     () => undefined
   );
   return (
     <Shell
       wide
       onClose={onClose}
-      title={asset ? `Asset card — ${asset.code}` : "Register an asset"}
+      title={asset ? `Asset card for ${asset.code}` : "Register an asset"}
       description={asset ? "Complete the card to put the asset in the register. Its cost is posted to the category's asset account (Dr) against assets received not yet invoiced (Cr)." : "For an asset bought outside a purchase order or donated. It is registered and posted to the general ledger at once."}
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={!ready || save.busy} onClick={save.run}>{save.busy ? "Saving…" : asset ? "Capitalise" : "Register and capitalise"}</Button></>}
+      footer={<Footer onClose={onClose} onSave={save.run} busy={save.busy} disabled={!ready} label={asset ? "Capitalise" : "Register and capitalise"} />}
     >
-      {refs.isLoading ? <p className="py-10 text-center text-[13px] text-slate-500">Loading categories, departments and staff…</p> : <>
-      <Field label="Description" required><input className={inputCls} value={v.name} maxLength={200} onChange={set("name")} placeholder="e.g. Dell Latitude 5440 laptop" /></Field>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Category" required hint={cat ? `${DEPRECIATION_METHODS[cat.method] || "—"} over ${cat.useful_life_months ? `${cat.useful_life_months / 12} years` : "—"}${cat.residual_percent ? `, ${cat.residual_percent}% residual` : ""} · threshold RWF ${money(cat.capitalisation_threshold)}` : undefined}>
-          <select className={inputCls} value={v.category} onChange={(e) => setV((x: any) => ({ ...x, category: e.target.value, type: "" }))}>
-            <option value="">Choose…</option>
-            {(r.categories || []).filter((c: any) => c.method).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Type"><select className={inputCls} value={v.type} onChange={set("type")} disabled={!types.length}><option value="">—</option>{types.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Department" required><select className={inputCls} value={v.department} onChange={(e) => setV((x: any) => ({ ...x, department: e.target.value, assigned_to: "" }))}><option value="">Choose…</option>{(r.departments || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
-        <Field label="Custodian" hint="Someone in that department; leave empty if it stays in the store or is shared"><select className={inputCls} value={v.assigned_to} onChange={set("assigned_to")} disabled={!v.department}><option value="">No custodian</option>{people.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
-      </div>
-      <Field label="Location"><input className={inputCls} value={v.location_name} maxLength={160} onChange={set("location_name")} placeholder="e.g. HQ 2nd floor, finance office" /></Field>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Cost" required hint={fromGrn ? "From the purchase order (VAT included)" : undefined} error={below ? `Below the RWF ${money(cat.capitalisation_threshold)} threshold: an expense, not a fixed asset` : undefined}>
-          <MoneyInput value={v.cost} disabled={fromGrn} onChange={(x) => setV((y: any) => ({ ...y, cost: x }))} />
-        </Field>
-        <Field label="Acquired on" required><input type="date" className={inputCls} value={v.purchased_at} max={today()} disabled={fromGrn} onChange={set("purchased_at")} /></Field>
-        <Field label="Depreciation from" hint="Default: the month after"><input type="date" className={inputCls} value={v.depreciation_start || monthAfter(v.purchased_at)} onChange={set("depreciation_start")} /></Field>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Funding source" hint="Who paid for it"><select className={inputCls} value={v.funding_source} onChange={(e) => setV((x: any) => ({ ...x, funding_source: e.target.value, project: "" }))}><option value="">Member contributions</option>{(r.funds || []).map((f: any) => <option key={f.id} value={f.id}>{f.code} · {f.name}</option>)}</select></Field>
-        <Field label="Project"><select className={inputCls} value={v.project} onChange={set("project")}><option value="">—</option>{projects.map((p: any) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</select></Field>
-        <Field label="Condition"><select className={inputCls} value={v.condition} onChange={set("condition")}>{Object.entries(CONDITIONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Serial / plate number"><input className={inputCls} value={v.serial_number} onChange={set("serial_number")} /></Field>
-        <Field label="Residual value" hint={cat?.residual_percent ? `Default ${cat.residual_percent}% of cost` : "Default nil"}><MoneyInput value={v.residual_value} onChange={(x) => setV((y: any) => ({ ...y, residual_value: x }))} placeholder={money(residual)} /></Field>
-        <Field label="Useful life (months)" hint={cat ? `Category: ${cat.useful_life_months || "—"}` : undefined}><input type="number" min={1} className={inputCls} value={v.useful_life_months} onChange={set("useful_life_months")} placeholder={String(cat?.useful_life_months || "")} /></Field>
-      </div>
-      {!asset && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Acquired by"><select className={inputCls} value={v.acquisition_type} onChange={set("acquisition_type")}><option value="purchase">{ACQUISITION.purchase}</option><option value="donation">{ACQUISITION.donation} (deferred capital grant)</option></select></Field>
-          <Field label="Supplier"><select className={inputCls} value={v.supplier} onChange={set("supplier")}><option value="">—</option>{(r.suppliers || []).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+      {refs.isLoading ? (
+        <div className="space-y-3" aria-label="Loading categories, departments and staff">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-2/3" />
         </div>
+      ) : (
+        <>
+          <ModalSection title="Asset">
+            <Field label="Description" required htmlFor="ac-name">
+              <Input id="ac-name" value={v.name} maxLength={200} onChange={set("name")} placeholder="e.g. Dell Latitude 5440 laptop" />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Category"
+                required
+                htmlFor="ac-category"
+                hint={cat ? `${DEPRECIATION_METHODS[cat.method] || "—"} over ${cat.useful_life_months ? `${cat.useful_life_months / 12} years` : "—"}${cat.residual_percent ? `, ${cat.residual_percent}% residual` : ""} · threshold ${fmtMoney(cat.capitalisation_threshold)}` : undefined}
+              >
+                <Select id="ac-category" value={v.category} onChange={(e) => setV((x: any) => ({ ...x, category: e.target.value, type: "" }))}>
+                  <option value="">Choose…</option>
+                  {(r.categories || []).filter((c: any) => c.method).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Type" htmlFor="ac-type">
+                <Select id="ac-type" value={v.type} onChange={set("type")} disabled={!types.length}>
+                  <option value="">—</option>
+                  {types.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Serial or plate number" htmlFor="ac-serial">
+                <Input id="ac-serial" value={v.serial_number} onChange={set("serial_number")} />
+              </Field>
+              <Field label="Condition" htmlFor="ac-condition">
+                <Select id="ac-condition" value={v.condition} onChange={set("condition")}>
+                  {Object.entries(CONDITIONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </Select>
+              </Field>
+            </div>
+          </ModalSection>
+
+          <ModalSection title="Where it is">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Department" required htmlFor="ac-department">
+                <Select id="ac-department" value={v.department} onChange={(e) => setV((x: any) => ({ ...x, department: e.target.value, assigned_to: "" }))}>
+                  <option value="">Choose…</option>
+                  {(r.departments || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Custodian" htmlFor="ac-custodian" hint="Someone in that department. Leave empty if it stays in the store or is shared.">
+                <Select id="ac-custodian" value={v.assigned_to} onChange={set("assigned_to")} disabled={!v.department}>
+                  <option value="">No custodian</option>
+                  {people.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <Field label="Location" htmlFor="ac-location">
+              <Input id="ac-location" value={v.location_name} maxLength={160} onChange={set("location_name")} placeholder="e.g. HQ 2nd floor, finance office" />
+            </Field>
+          </ModalSection>
+
+          <ModalSection title="Value and depreciation">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field
+                label="Cost"
+                required
+                htmlFor="ac-cost"
+                hint={fromGrn ? "From the purchase order (VAT included)" : undefined}
+                error={below ? `Below the ${fmtMoney(cat.capitalisation_threshold)} threshold: record it as an expense, not a fixed asset` : undefined}
+              >
+                <MoneyInput id="ac-cost" value={v.cost} disabled={fromGrn} invalid={Boolean(below)} onChange={(x) => setV((y: any) => ({ ...y, cost: x }))} />
+              </Field>
+              <Field label="Acquired on" required htmlFor="ac-acquired">
+                <DatePicker id="ac-acquired" value={v.purchased_at} max={today()} disabled={fromGrn} onChange={(x) => setV((y: any) => ({ ...y, purchased_at: x }))} />
+              </Field>
+              <Field label="Depreciation from" htmlFor="ac-start" hint="Default: the month after">
+                <DatePicker id="ac-start" value={v.depreciation_start || monthAfter(v.purchased_at)} onChange={(x) => setV((y: any) => ({ ...y, depreciation_start: x }))} />
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Residual value" htmlFor="ac-residual" hint={cat?.residual_percent ? `Default ${cat.residual_percent}% of cost` : "Default nil"}>
+                <MoneyInput id="ac-residual" value={v.residual_value} onChange={(x) => setV((y: any) => ({ ...y, residual_value: x }))} placeholder={residual.toLocaleString("en-US")} />
+              </Field>
+              <Field label="Useful life (months)" htmlFor="ac-life" hint={cat ? `Category: ${cat.useful_life_months || "—"}` : undefined}>
+                <Input id="ac-life" type="number" min={1} value={v.useful_life_months} onChange={set("useful_life_months")} placeholder={String(cat?.useful_life_months || "")} />
+              </Field>
+            </div>
+            {monthly > 0 && (
+              <p className="rounded-control bg-ims-thead px-3 py-2.5 text-t-small text-ims-body">
+                Depreciation of about <b className="font-semibold text-ims-text">{fmtMoney(monthly)}</b> a month from {new Date(`${start}T12:00:00`).toLocaleDateString("en-GB", { month: "long", year: "numeric" })} for {life} months
+                {residual ? `, down to a residual value of ${fmtMoney(residual)}` : ""}.
+              </p>
+            )}
+          </ModalSection>
+
+          <ModalSection title="Funding and source">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Funding source" htmlFor="ac-fund" hint="Who paid for it">
+                <Select id="ac-fund" value={v.funding_source} onChange={(e) => setV((x: any) => ({ ...x, funding_source: e.target.value, project: "" }))}>
+                  <option value="">Member contributions</option>
+                  {(r.funds || []).map((f: any) => <option key={f.id} value={f.id}>{f.code} · {f.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Project" htmlFor="ac-project">
+                <Select id="ac-project" value={v.project} onChange={set("project")}>
+                  <option value="">—</option>
+                  {projects.map((p: any) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+                </Select>
+              </Field>
+            </div>
+            {!asset && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Acquired by" htmlFor="ac-acq">
+                  <Select id="ac-acq" value={v.acquisition_type} onChange={set("acquisition_type")}>
+                    <option value="purchase">{ACQUISITION.purchase}</option>
+                    <option value="donation">{ACQUISITION.donation} (deferred capital grant)</option>
+                  </Select>
+                </Field>
+                <Field label="Supplier" htmlFor="ac-supplier">
+                  <Select id="ac-supplier" value={v.supplier} onChange={set("supplier")}>
+                    <option value="">—</option>
+                    {(r.suppliers || []).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </Select>
+                </Field>
+              </div>
+            )}
+            <Field label="Notes" htmlFor="ac-notes">
+              <Textarea id="ac-notes" className="min-h-[72px]" value={v.description} maxLength={1000} onChange={set("description")} placeholder="Specification, warranty, what it is used for" />
+            </Field>
+          </ModalSection>
+        </>
       )}
-      <Field label="Notes"><textarea className={cn(textareaCls, "min-h-[60px]")} value={v.description} maxLength={1000} onChange={set("description")} placeholder="Specification, warranty, what it is used for" /></Field>
-      {monthly > 0 && <p className="rounded-md bg-slate-50 px-3 py-2 text-[12.5px] text-slate-600">Depreciation of about <b>RWF {money(monthly)}</b> a month from {new Date(`${start}T12:00:00`).toLocaleDateString("en-GB", { month: "long", year: "numeric" })} for {life} months{residual ? `, down to a residual value of RWF ${money(residual)}` : ""}.</p>}
-      </>}
     </Shell>
   );
 }
@@ -165,17 +259,27 @@ export function AssignDialog({ asset, onClose, onDone }: { asset: any; onClose: 
   const [location, setLocation] = React.useState(asset.location_name || "");
   const [reason, setReason] = React.useState("");
   const people = ((refs.data?.users || []) as any[]).filter((u) => u.department === asset.department);
-  const save = useSave(() => assetsApi.act(asset.id, "assign", { custodian, location_name: location, reason }), custodian ? "Custodian changed" : "Returned to the store", onDone);
+  const name = people.find((u) => u.id === custodian)?.name;
+  const save = useSave(() => assetsApi.act(asset.id, "assign", { custodian, location_name: location, reason }), custodian ? `${asset.code} is now in the care of ${name || "the new custodian"}` : `${asset.code} returned to the store`, onDone);
   return (
     <Shell
       onClose={onClose}
-      title={`Custodian and location — ${asset.code}`}
+      title={`Custodian and location of ${asset.code}`}
       description="Within the asset's department. To move it to another department, request a transfer."
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.busy || (custodian === (asset.assigned_to || "") && location === (asset.location_name || ""))} onClick={save.run}>Save</Button></>}
+      footer={<Footer onClose={onClose} onSave={save.run} busy={save.busy} disabled={custodian === (asset.assigned_to || "") && location === (asset.location_name || "")} label="Save" />}
     >
-      <Field label="Custodian"><select className={inputCls} value={custodian} onChange={(e) => setCustodian(e.target.value)}><option value="">Nobody — back to the store / shared</option>{people.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
-      <Field label="Location"><input className={inputCls} value={location} maxLength={160} onChange={(e) => setLocation(e.target.value)} /></Field>
-      <Field label="Reason" hint="Kept in the asset's history"><textarea className={cn(textareaCls, "min-h-[60px]")} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+      <Field label="Custodian" htmlFor="as-custodian">
+        <Select id="as-custodian" value={custodian} onChange={(e) => setCustodian(e.target.value)}>
+          <option value="">Nobody: back to the store or shared</option>
+          {people.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </Select>
+      </Field>
+      <Field label="Location" htmlFor="as-location">
+        <Input id="as-location" value={location} maxLength={160} onChange={(e) => setLocation(e.target.value)} />
+      </Field>
+      <Field label="Reason" htmlFor="as-reason" hint="Kept in the asset's history">
+        <Textarea id="as-reason" className="min-h-[72px]" value={reason} onChange={(e) => setReason(e.target.value)} />
+      </Field>
     </Shell>
   );
 }
@@ -184,21 +288,23 @@ export function AssignDialog({ asset, onClose, onDone }: { asset: any; onClose: 
 export function StatusDialog({ asset, onClose, onDone }: { asset: any; onClose: () => void; onDone: () => void }) {
   const [status, setStatus] = React.useState("");
   const [reason, setReason] = React.useState("");
-  const save = useSave(() => assetsApi.act(asset.id, "status", { status, reason }), "Status changed", onDone);
+  const save = useSave(() => assetsApi.act(asset.id, "status", { status, reason }), `${asset.code} is now ${stateOf(status)}`, onDone);
   return (
     <Shell
       onClose={onClose}
-      title={`Change the status — ${asset.code}`}
-      description={`Now ${ASSET_STATUS[asset.status]?.label.toLowerCase() || asset.status}. A lost or damaged asset stays in the register until its disposal is approved.`}
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.busy || !status || reason.trim().length < 5} onClick={save.run}>Change status</Button></>}
+      title={`Change the status of ${asset.code}`}
+      description={`Now ${stateOf(asset.status)}. A lost or damaged asset stays in the register until its disposal is approved.`}
+      footer={<Footer onClose={onClose} onSave={save.run} busy={save.busy} disabled={!status || reason.trim().length < 5} label="Change status" />}
     >
-      <Field label="New status" required>
-        <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>
+      <Field label="New status" required htmlFor="st-status">
+        <Select id="st-status" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Choose…</option>
-          {["in_use", "in_stock", "under_maintenance", "damaged", "lost"].filter((s) => s !== asset.status).map((s) => <option key={s} value={s}>{ASSET_STATUS[s].label}</option>)}
-        </select>
+          {["in_use", "in_stock", "under_maintenance", "damaged", "lost"].filter((s) => s !== asset.status).map((s) => <option key={s} value={s}>{statusText(ASSET_STATUS[s], s)}</option>)}
+        </Select>
       </Field>
-      <Field label="Reason" required><textarea className={cn(textareaCls, "min-h-[70px]")} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="What happened, who reported it" /></Field>
+      <Field label="Reason" required htmlFor="st-reason" hint="At least 5 characters">
+        <Textarea id="st-reason" className="min-h-[80px]" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="What happened, who reported it" />
+      </Field>
     </Shell>
   );
 }
@@ -208,21 +314,37 @@ export function TransferDialog({ asset, onClose, onDone }: { asset: any; onClose
   const refs = useAssetRefs();
   const [v, setV] = React.useState({ to_department: "", to_custodian: "", to_location: asset.location_name || "", effective_date: today(), reason: "" });
   const people = ((refs.data?.users || []) as any[]).filter((u) => u.department === v.to_department);
-  const save = useSave(() => assetsApi.act(asset.id, "transfer", v), "Transfer sent to the Director of Finance for approval", onDone);
+  const save = useSave(() => assetsApi.act(asset.id, "transfer", v), `Transfer of ${asset.code} sent to the Director of Finance for approval`, onDone);
   return (
     <Shell
       onClose={onClose}
       title={`Transfer ${asset.code} to another department`}
-      description="The Director of Finance approves the transfer; the asset moves when it is approved and its depreciation is then charged to the new department."
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.busy || !v.to_department || v.reason.trim().length < 10} onClick={save.run}>Send for approval</Button></>}
+      description="The Director of Finance approves the transfer. The asset moves when it is approved, and its depreciation is then charged to the new department."
+      footer={<Footer onClose={onClose} onSave={save.run} busy={save.busy} disabled={!v.to_department || v.reason.trim().length < 10} label="Submit for approval" />}
     >
-      <Field label="To department" required><select className={inputCls} value={v.to_department} onChange={(e) => setV((x) => ({ ...x, to_department: e.target.value, to_custodian: "" }))}><option value="">Choose…</option>{((refs.data?.departments || []) as any[]).filter((d) => d.id !== asset.department).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="New custodian"><select className={inputCls} value={v.to_custodian} onChange={(e) => setV((x) => ({ ...x, to_custodian: e.target.value }))} disabled={!v.to_department}><option value="">Nobody yet</option>{people.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
-        <Field label="From"><input type="date" className={inputCls} value={v.effective_date} onChange={(e) => setV((x) => ({ ...x, effective_date: e.target.value }))} /></Field>
+      <Field label="To department" required htmlFor="tr-dept">
+        <Select id="tr-dept" value={v.to_department} onChange={(e) => setV((x) => ({ ...x, to_department: e.target.value, to_custodian: "" }))}>
+          <option value="">Choose…</option>
+          {((refs.data?.departments || []) as any[]).filter((d) => d.id !== asset.department).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </Select>
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="New custodian" htmlFor="tr-custodian">
+          <Select id="tr-custodian" value={v.to_custodian} onChange={(e) => setV((x) => ({ ...x, to_custodian: e.target.value }))} disabled={!v.to_department}>
+            <option value="">Nobody yet</option>
+            {people.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="From" htmlFor="tr-date">
+          <DatePicker id="tr-date" value={v.effective_date} onChange={(x) => setV((y) => ({ ...y, effective_date: x }))} />
+        </Field>
       </div>
-      <Field label="New location"><input className={inputCls} value={v.to_location} maxLength={160} onChange={(e) => setV((x) => ({ ...x, to_location: e.target.value }))} /></Field>
-      <Field label="Why" required hint="At least 10 characters"><textarea className={cn(textareaCls, "min-h-[70px]")} value={v.reason} onChange={(e) => setV((x) => ({ ...x, reason: e.target.value }))} /></Field>
+      <Field label="New location" htmlFor="tr-location">
+        <Input id="tr-location" value={v.to_location} maxLength={160} onChange={(e) => setV((x) => ({ ...x, to_location: e.target.value }))} />
+      </Field>
+      <Field label="Why" required htmlFor="tr-reason" hint="At least 10 characters">
+        <Textarea id="tr-reason" className="min-h-[80px]" value={v.reason} onChange={(e) => setV((x) => ({ ...x, reason: e.target.value }))} />
+      </Field>
     </Shell>
   );
 }
@@ -231,27 +353,48 @@ export function TransferDialog({ asset, onClose, onDone }: { asset: any; onClose
 export function MaintenanceDialog({ asset, onClose, onDone }: { asset: any; onClose: () => void; onDone: () => void }) {
   const refs = useAssetRefs();
   const [v, setV] = React.useState({ date: today(), kind: "service", description: "", supplier: "", provider: "", cost: "" as number | "", downtime_days: "", next_due: "" });
-  const save = useSave(() => assetsApi.act(asset.id, "maintenance", { ...v, cost: Number(v.cost) || 0 }), "Maintenance recorded", onDone);
+  const save = useSave(() => assetsApi.act(asset.id, "maintenance", { ...v, cost: Number(v.cost) || 0 }), `Maintenance of ${asset.code} recorded`, onDone);
   return (
     <Shell
       onClose={onClose}
-      title={`Record maintenance — ${asset.code}`}
+      title={`Record maintenance on ${asset.code}`}
       description="Once the work is done. The invoice itself is paid through a payment voucher."
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.busy || v.description.trim().length < 5} onClick={save.run}>Record</Button></>}
+      footer={<Footer onClose={onClose} onSave={save.run} busy={save.busy} disabled={v.description.trim().length < 5} label="Record" />}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Date" required><input type="date" className={inputCls} value={v.date} max={today()} onChange={(e) => setV((x) => ({ ...x, date: e.target.value }))} /></Field>
-        <Field label="Type"><select className={inputCls} value={v.kind} onChange={(e) => setV((x) => ({ ...x, kind: e.target.value }))}>{Object.entries(MAINTENANCE_KINDS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Date" required htmlFor="mt-date">
+          <DatePicker id="mt-date" value={v.date} max={today()} onChange={(x) => setV((y) => ({ ...y, date: x }))} />
+        </Field>
+        <Field label="Type" htmlFor="mt-kind">
+          <Select id="mt-kind" value={v.kind} onChange={(e) => setV((x) => ({ ...x, kind: e.target.value }))}>
+            {Object.entries(MAINTENANCE_KINDS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </Select>
+        </Field>
       </div>
-      <Field label="Work done" required><textarea className={cn(textareaCls, "min-h-[70px]")} value={v.description} onChange={(e) => setV((x) => ({ ...x, description: e.target.value }))} /></Field>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Supplier"><select className={inputCls} value={v.supplier} onChange={(e) => setV((x) => ({ ...x, supplier: e.target.value }))}><option value="">—</option>{((refs.data?.suppliers || []) as any[]).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
-        <Field label="Or done by"><input className={inputCls} value={v.provider} onChange={(e) => setV((x) => ({ ...x, provider: e.target.value }))} placeholder="e.g. ICT team" /></Field>
+      <Field label="Work done" required htmlFor="mt-desc" hint="At least 5 characters">
+        <Textarea id="mt-desc" className="min-h-[80px]" value={v.description} onChange={(e) => setV((x) => ({ ...x, description: e.target.value }))} />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Supplier" htmlFor="mt-supplier">
+          <Select id="mt-supplier" value={v.supplier} onChange={(e) => setV((x) => ({ ...x, supplier: e.target.value }))}>
+            <option value="">—</option>
+            {((refs.data?.suppliers || []) as any[]).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Or done by" htmlFor="mt-provider">
+          <Input id="mt-provider" value={v.provider} onChange={(e) => setV((x) => ({ ...x, provider: e.target.value }))} placeholder="e.g. ICT team" />
+        </Field>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Cost"><MoneyInput value={v.cost} onChange={(x) => setV((y) => ({ ...y, cost: x }))} /></Field>
-        <Field label="Days out of use"><input type="number" min={0} className={inputCls} value={v.downtime_days} onChange={(e) => setV((x) => ({ ...x, downtime_days: e.target.value }))} /></Field>
-        <Field label="Next due"><input type="date" className={inputCls} value={v.next_due} min={v.date} onChange={(e) => setV((x) => ({ ...x, next_due: e.target.value }))} /></Field>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label="Cost" htmlFor="mt-cost">
+          <MoneyInput id="mt-cost" value={v.cost} onChange={(x) => setV((y) => ({ ...y, cost: x }))} />
+        </Field>
+        <Field label="Days out of use" htmlFor="mt-down">
+          <Input id="mt-down" type="number" min={0} value={v.downtime_days} onChange={(e) => setV((x) => ({ ...x, downtime_days: e.target.value }))} />
+        </Field>
+        <Field label="Next due" htmlFor="mt-next">
+          <DatePicker id="mt-next" value={v.next_due} min={v.date} onChange={(x) => setV((y) => ({ ...y, next_due: x }))} />
+        </Field>
       </div>
     </Shell>
   );
@@ -272,32 +415,54 @@ export function DisposalDialog({ asset, disposal, onClose, onSaved }: { asset: a
       const r = disposal ? await assetsApi.disposal(disposal.id, "update", body) : await assetsApi.act(asset.id, "dispose", body);
       onSaved(r.id);
     },
-    disposal ? "Disposal updated" : "Disposal prepared — send it for approval when the documents are attached",
+    disposal ? `Disposal of ${asset.code} updated` : `Disposal of ${asset.code} prepared. Attach the documents, then submit it for approval.`,
     () => undefined
   );
   return (
     <Shell
       onClose={onClose}
       title={`${disposal ? "Edit the disposal of" : "Dispose of"} ${asset.code}`}
-      description="Prepared by the Store & Asset Officer with the disposal committee's minutes; the DAF reviews and the SG approves. The asset leaves the register and the GL when it is approved."
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.busy || !v.method || v.reason.trim().length < 10 || (sold && !v.buyer.trim())} onClick={save.run}>{disposal ? "Save" : "Prepare disposal"}</Button></>}
+      description="Prepared by the Store & Asset Officer with the disposal committee's minutes, reviewed by the DAF and approved by the SG. The asset leaves the register and the GL when it is approved."
+      footer={<Footer onClose={onClose} onSave={save.run} busy={save.busy} disabled={!v.method || v.reason.trim().length < 10 || (sold && !v.buyer.trim())} label={disposal ? "Save" : "Prepare disposal"} />}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Method" required><select className={inputCls} value={v.method} onChange={(e) => setV((x) => ({ ...x, method: e.target.value }))}><option value="">Choose…</option>{Object.entries(DISPOSAL_METHODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
-        <Field label="Date" required><input type="date" className={inputCls} value={v.disposal_date} onChange={(e) => setV((x) => ({ ...x, disposal_date: e.target.value }))} /></Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Method" required htmlFor="dp-method">
+          <Select id="dp-method" value={v.method} onChange={(e) => setV((x) => ({ ...x, method: e.target.value }))}>
+            <option value="">Choose…</option>
+            {Object.entries(DISPOSAL_METHODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </Select>
+        </Field>
+        <Field label="Date" required htmlFor="dp-date">
+          <DatePicker id="dp-date" value={v.disposal_date} onChange={(x) => setV((y) => ({ ...y, disposal_date: x }))} />
+        </Field>
       </div>
       {sold && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Proceeds" required><MoneyInput value={v.proceeds} onChange={(x) => setV((y) => ({ ...y, proceeds: x }))} /></Field>
-          <Field label="Buyer" required><input className={inputCls} value={v.buyer} maxLength={200} onChange={(e) => setV((x) => ({ ...x, buyer: e.target.value }))} /></Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Proceeds" required htmlFor="dp-proceeds">
+            <MoneyInput id="dp-proceeds" value={v.proceeds} onChange={(x) => setV((y) => ({ ...y, proceeds: x }))} />
+          </Field>
+          <Field label="Buyer" required htmlFor="dp-buyer">
+            <Input id="dp-buyer" value={v.buyer} maxLength={200} onChange={(e) => setV((x) => ({ ...x, buyer: e.target.value }))} />
+          </Field>
         </div>
       )}
-      <Field label="Why" required hint="Committee decision, condition, valuation (at least 10 characters)"><textarea className={cn(textareaCls, "min-h-[80px]")} value={v.reason} onChange={(e) => setV((x) => ({ ...x, reason: e.target.value }))} /></Field>
-      <div className="grid grid-cols-3 gap-2 rounded-md bg-slate-50 px-3 py-2 text-[12.5px]">
-        <div><p className="text-slate-500">Net book value</p><p className="font-semibold tabular-nums">RWF {money(nbv)}</p></div>
-        <div><p className="text-slate-500">Proceeds</p><p className="font-semibold tabular-nums">RWF {money(proceeds)}</p></div>
-        <div><p className="text-slate-500">{gain >= 0 ? "Gain" : "Loss"}</p><p className={cn("font-semibold tabular-nums", gain < 0 ? "text-red-700" : gain > 0 ? "text-emerald-700" : "")}>RWF {money(Math.abs(gain))}</p></div>
-      </div>
+      <Field label="Why" required htmlFor="dp-reason" hint="Committee decision, condition, valuation (at least 10 characters)">
+        <Textarea id="dp-reason" className="min-h-[88px]" value={v.reason} onChange={(e) => setV((x) => ({ ...x, reason: e.target.value }))} />
+      </Field>
+      <dl className="grid grid-cols-3 gap-3 rounded-control bg-ims-thead px-4 py-3">
+        <div className="min-w-0">
+          <dt className="text-t-small text-ims-muted">Net book value</dt>
+          <dd className="mt-0.5 text-t-body font-semibold tabular-nums text-ims-text">{fmtMoney(nbv)}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-t-small text-ims-muted">Proceeds</dt>
+          <dd className="mt-0.5 text-t-body font-semibold tabular-nums text-ims-text">{fmtMoney(proceeds)}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-t-small text-ims-muted">{gain >= 0 ? "Gain" : "Loss"}</dt>
+          <dd className={cn("mt-0.5 text-t-body font-semibold tabular-nums", gain < 0 ? "text-ims-danger" : gain > 0 ? "text-ims-success" : "text-ims-text")}>{fmtMoney(Math.abs(gain))}</dd>
+        </div>
+      </dl>
     </Shell>
   );
 }

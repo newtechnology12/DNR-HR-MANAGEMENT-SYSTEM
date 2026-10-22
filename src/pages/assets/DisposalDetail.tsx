@@ -6,31 +6,24 @@ import * as React from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "react-query";
 import { toast } from "sonner";
-import { Pencil, Send, Trash2, XCircle } from "lucide-react";
+import { Ban, Clock, Pencil, Send, Trash2 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
-import { DISPOSAL_METHODS, DOC_STATUS, assetsApi, money } from "@/lib/assets";
-import { showDay } from "@/lib/ims";
+import { DISPOSAL_METHODS, DOC_STATUS, assetsApi } from "@/lib/assets";
 import { errorMessage } from "@/lib/procurement";
-import { Button } from "@/components/ui/button";
-import { EmptyState, ListSkeleton, StatusBadge } from "@/components/enterprise/ui";
-import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, toChatter } from "@/components/enterprise/DocumentLayout";
-import { ApprovalTracker } from "@/components/enterprise/Approval";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Activity, ApprovalTracker } from "@/components/enterprise/Approval";
 import { DecisionButtons, useApprovalTrail } from "@/components/enterprise/useApprovalTrail";
 import DocumentUploads from "@/components/enterprise/Attachments";
-import { ReasonDialog } from "@/components/treasury/TreasuryKit";
+import { Button, ButtonLink, Card, CardHeader, ConfirmDialog, DetailHeader, Details, EmptyState, KpiBand, MenuItem, MoreMenu, Page, Tabs, fmtDate, fmtDateTime, fmtMoney, statusText } from "@/components/ims";
 import { DisposalDialog } from "@/components/assets/AssetDialogs";
-import { cn } from "@/utils";
 
-const STEPS = [{ key: "draft", label: "Prepared" }, { key: "pending_approval", label: "Approval" }, { key: "approved", label: "Disposed" }];
-const RIBBON: Record<string, { label: string; tone: "success" | "danger" | "warning" | "neutral" }> = {
-  approved: { label: "Disposed", tone: "success" }, rejected: { label: "Rejected", tone: "danger" }, cancelled: { label: "Cancelled", tone: "neutral" },
-};
+const LIST = "/dashboard/assets/disposals";
 
 export default function DisposalDetail() {
   const { disposalId } = useParams();
   const { can } = usePermissions();
-  const [tab, setTab] = React.useState("figures");
+  const [tab, setTab] = React.useState("details");
   const [editing, setEditing] = React.useState(false);
   const [cancelling, setCancelling] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -40,18 +33,37 @@ export default function DisposalDetail() {
     q.refetch();
     trail.refresh();
   };
-  if (q.isLoading) return <div className="p-6"><ListSkeleton rows={6} /></div>;
-  if (!q.data) return <div className="p-6"><EmptyState icon={Trash2} title="Disposal not found" text="It may not exist, or it is outside what your role can see." /></div>;
+  if (q.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-24 w-full rounded-card" />
+        <Skeleton className="h-64 w-full rounded-card" />
+      </Page>
+    );
+  }
+  if (!q.data) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState icon={Trash2} text="This disposal is not available. It may not exist, or it is outside what your role can see." action={<ButtonLink to={LIST}>Back to disposals</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
   const d: any = q.data;
   const x = d.expand || {};
   const a = x.asset || {};
+  const approval = x.approval;
   const editable = ["draft", "returned"].includes(d.status) && can("manage_fixed_assets");
   const open = ["draft", "returned", "pending_approval"].includes(d.status) && can("manage_fixed_assets");
+  const stepName = approval?.status === "pending" ? approval.steps?.[approval.current_level]?.name : null;
   const submit = async () => {
     setBusy(true);
     try {
       await assetsApi.disposal(d.id, "submit");
-      toast.success("Sent to the Director of Finance");
+      toast.success(`${d.number} sent to the Director of Finance for approval`);
       refresh();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -59,85 +71,140 @@ export default function DisposalDetail() {
       setBusy(false);
     }
   };
+  const more: MenuItem[] = [{ label: "Cancel disposal", icon: Ban, danger: true, onSelect: () => setCancelling(true), hidden: !open }];
+  const journal = x.journal ? (
+    can(["view_journals", "export_ledger", "approve_journals"]) ? (
+      <Link className="whitespace-nowrap font-mono font-semibold text-ims-link hover:underline" to={`/dashboard/finance/journals/${d.journal}`}>{x.journal.number}</Link>
+    ) : (
+      <span className="whitespace-nowrap font-mono">{x.journal.number}</span>
+    )
+  ) : d.status === "approved" ? "Not capitalised, nothing to post" : "Posted when approved";
+
   return (
-    <DocumentPage chatter={<Chatter items={toChatter(trail.actions, trail.audit)} />}>
-      <ControlBar
-        breadcrumbs={[{ title: "Fixed assets", link: "/dashboard/assets" }, { title: "Disposals", link: "/dashboard/assets/disposals" }, { title: d.number }]}
-        steps={STEPS}
-        current={d.status === "returned" ? "draft" : ["rejected", "cancelled"].includes(d.status) ? "draft" : d.status}
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to disposals", to: LIST }}
+        number={d.number}
+        type={`Asset disposal · ${DISPOSAL_METHODS[d.method] || d.method}`}
+        status={DOC_STATUS[d.status]?.label || d.status}
+        statusNote={stepName ? `At “${stepName}”` : DOC_STATUS[d.status]?.note}
+        title={a.name || d.number}
+        facts={[
+          a.code ? <Link key="asset" to={`/dashboard/assets/register/${d.asset}`} className="whitespace-nowrap font-mono text-t-small font-semibold text-ims-link hover:underline">{a.code}</Link> : null,
+          a.expand?.department?.name,
+          d.disposal_date ? { label: "Date", value: fmtDate(d.disposal_date) } : null,
+          x.prepared_by?.name ? { label: "Prepared by", value: x.prepared_by.name } : null,
+        ]}
         actions={
           <>
-            {editable && <Button size="sm" onClick={submit} disabled={busy}><Send size={14} /> Send for approval</Button>}
-            {editable && <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>}
-            <DecisionButtons approval={x.approval} number={d.number} onDone={refresh} />
-            {open && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setCancelling(true)}><XCircle size={14} /> Cancel</Button>}
+            <MoreMenu items={more} />
+            {editable && <Button icon={Pencil} onClick={() => setEditing(true)}>Edit</Button>}
+            {editable && <Button variant="primary" icon={Send} onClick={submit} loading={busy}>Submit for approval</Button>}
+            <DecisionButtons approval={approval} number={d.number} onDone={refresh} />
           </>
         }
       />
-      <Sheet ribbon={RIBBON[d.status]}>
-        <SheetTitle kicker={`Disposal — ${DISPOSAL_METHODS[d.method] || d.method}`} title={d.number} badges={<StatusBadge status={d.status} map={DOC_STATUS} />} />
-        <Link to={`/dashboard/assets/register/${d.asset}`} className="mb-5 block rounded-lg border border-slate-100 bg-slate-50/70 px-4 py-3 hover:bg-slate-100/70">
-          <span className="block font-mono text-[12px] text-slate-500">{a.code}</span>
-          <span className="block text-[15px] font-semibold text-slate-900">{a.name}</span>
-          <span className="block text-[12.5px] text-slate-500">{a.expand?.category?.name} · {a.expand?.department?.name} · acquired {showDay(a.purchased_at)}</span>
-        </Link>
-        <FieldGrid
-          left={[
-            { label: "Method", value: DISPOSAL_METHODS[d.method] },
-            { label: "Date", value: showDay(d.disposal_date) },
-            { label: "Buyer", value: d.buyer },
-            { label: "Why", value: d.reason },
-          ]}
-          right={[
-            { label: "Prepared by", value: x.prepared_by?.name, hint: showDay(d.created) },
-            { label: "Approval", value: x.approval ? `${x.approval.workflow_name} — ${x.approval.status}` : "Not sent yet" },
-            { label: "General ledger", value: x.journal ? (can(["view_journals", "export_ledger", "approve_journals"]) ? <Link className="font-mono text-primaryDark hover:underline" to={`/dashboard/finance/journals/${d.journal}`}>{x.journal.number}</Link> : x.journal.number) : d.status === "approved" ? "Not capitalised — nothing to post" : "Posted when approved" },
-            { label: "Cancelled because", value: d.cancel_reason },
-          ]}
-        />
-        <Notebook tabs={[{ key: "figures", label: "Figures" }, { key: "documents", label: "Documents", count: (d.attachments || []).length }, { key: "approval", label: "Approval" }]} active={tab} onChange={setTab} />
-        <div className="pt-4">
-          {tab === "figures" && (
-            <div className="max-w-xl rounded-md border border-slate-200">
-              {[
-                ["Cost", d.cost],
-                ["Accumulated depreciation", -d.accumulated],
-                ["Net book value", d.net_book_value, true],
-                ["Proceeds", d.proceeds],
-              ].map(([label, value, bold]) => (
-                <div key={String(label)} className={cn("flex justify-between border-b border-slate-100 px-3 py-2 text-[13px]", bold && "font-semibold")}>
-                  <span>{label}</span><span className="tabular-nums">{Number(value) < 0 ? `(${money(-Number(value))})` : money(Number(value))}</span>
-                </div>
-              ))}
-              <div className={cn("flex justify-between px-3 py-2.5 text-[14px] font-semibold", d.gain_loss < 0 ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800")}>
-                <span>{d.gain_loss < 0 ? "Loss on disposal" : "Gain on disposal"}</span><span className="tabular-nums">RWF {money(Math.abs(d.gain_loss))}</span>
-              </div>
-              <p className="px-3 py-2 text-[12px] text-slate-500">Figures use the depreciation posted so far; they are recalculated when the disposal is sent and when it is finally approved. Proceeds are recorded as receivable until the Cashier records the receipt.</p>
-            </div>
-          )}
-          {tab === "documents" && <DocumentUploads collection="asset_disposals" record={d} canAdd={can(["manage_fixed_assets", "approve_asset_disposals"])} canRemove={editable} onChange={refresh} hint="Disposal committee minutes, valuation, auction report, buyer's receipt, police report for a loss" />}
-          {tab === "approval" && <ApprovalTracker approval={x.approval} actions={trail.actions} />}
+
+      {stepName && (
+        <p role="status" className="flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+          <Clock size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>Pending approval at step “{stepName}”. The asset leaves the register and the general ledger when the disposal is approved.</span>
+        </p>
+      )}
+      {d.cancel_reason && (
+        <p className="rounded-card border border-ims-border bg-ims-card px-4 py-3 text-t-body text-ims-body">
+          <span className="font-semibold text-ims-text">Cancelled.</span> {d.cancel_reason}
+        </p>
+      )}
+
+      <KpiBand
+        items={[
+          { label: "Cost", value: fmtMoney(d.cost) },
+          { label: "Accumulated depreciation", value: fmtMoney(d.accumulated) },
+          { label: "Net book value", value: fmtMoney(d.net_book_value) },
+          { label: "Proceeds", value: fmtMoney(d.proceeds), sub: d.buyer || undefined },
+          { label: d.gain_loss < 0 ? "Loss on disposal" : "Gain on disposal", value: fmtMoney(Math.abs(d.gain_loss || 0)), tone: d.gain_loss < 0 ? "danger" : d.gain_loss > 0 ? "success" : "default" },
+        ]}
+      />
+
+      <Tabs
+        label="Disposal sections"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "approvals", label: "Approvals" },
+          { key: "documents", label: "Documents", count: (d.attachments || []).length },
+          { key: "activity", label: "Activity" },
+        ]}
+      />
+
+      {tab === "details" && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
+            <CardHeader title="Disposal" />
+            <Details
+              items={[
+                { label: "Method", value: DISPOSAL_METHODS[d.method] },
+                { label: "Date", value: d.disposal_date ? fmtDate(d.disposal_date) : null },
+                { label: "Buyer", value: d.buyer },
+                { label: "Prepared by", value: x.prepared_by?.name, hint: fmtDateTime(d.created) },
+                { label: "Approval", value: approval ? approval.workflow_name : "Not submitted yet", hint: approval ? statusText(DOC_STATUS[d.status], d.status) : undefined },
+                { label: "General ledger", value: journal, hint: d.status !== "approved" && !x.journal ? "The gain or loss is posted with the disposal" : undefined },
+                { label: "Why", value: d.reason ? <span className="whitespace-pre-line">{d.reason}</span> : null, wide: true },
+                ...(d.cancel_reason ? [{ label: "Cancelled because", value: d.cancel_reason, wide: true }] : []),
+              ]}
+            />
+            <p className="mt-5 border-t border-ims-divider pt-4 text-t-small text-ims-muted">
+              Figures use the depreciation posted so far. They are recalculated when the disposal is submitted and when it is finally approved. Proceeds are recorded as receivable until the Cashier records the receipt.
+            </p>
+          </Card>
+          <Card>
+            <CardHeader title="Asset" link={{ label: "Open the asset", to: `/dashboard/assets/register/${d.asset}` }} />
+            <Details
+              columns={1}
+              items={[
+                { label: "Asset", value: a.name, hint: a.code ? <span className="whitespace-nowrap font-mono">{a.code}</span> : undefined },
+                { label: "Category", value: a.expand?.category?.name },
+                { label: "Department", value: a.expand?.department?.name },
+                { label: "Acquired", value: a.purchased_at ? fmtDate(a.purchased_at) : null },
+              ]}
+            />
+          </Card>
         </div>
-      </Sheet>
+      )}
+
+      {tab === "approvals" && <ApprovalTracker approval={approval} actions={trail.actions} />}
+
+      {tab === "documents" && (
+        <Card>
+          <CardHeader title="Documents" subtitle="Disposal committee minutes, valuation, auction report, buyer's receipt, police report for a loss." />
+          <DocumentUploads collection="asset_disposals" record={d} canAdd={can(["manage_fixed_assets", "approve_asset_disposals"])} canRemove={editable} onChange={refresh} hint="PDF, images, Word or Excel, up to 20 MB each" />
+        </Card>
+      )}
+
+      {tab === "activity" && <Activity actions={trail.actions} audit={trail.audit} loading={trail.loading} />}
+
       {editing && <DisposalDialog asset={a} disposal={d} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh(); }} />}
-      <ReasonDialog
+      <ConfirmDialog
         open={cancelling}
+        onClose={() => setCancelling(false)}
         title={`Cancel ${d.number}?`}
         description="The asset stays in the register."
         confirmLabel="Cancel disposal"
-        min={5}
-        onClose={() => setCancelling(false)}
+        danger
+        reason={{ label: "Reason", min: 5, placeholder: "Why the disposal is stopped" }}
         onConfirm={async (reason) => {
           try {
             await assetsApi.disposal(d.id, "cancel", { reason });
             toast.success(`${d.number} cancelled`);
-            setCancelling(false);
             refresh();
           } catch (e) {
             toast.error(errorMessage(e));
+            throw e;
           }
         }}
       />
-    </DocumentPage>
+    </Page>
   );
 }

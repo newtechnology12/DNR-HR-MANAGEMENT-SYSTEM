@@ -4,14 +4,16 @@
  */
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Boxes, Plus } from "lucide-react";
+import { Boxes, ExternalLink, Plus } from "lucide-react";
 import { usePermissions } from "@/context/auth.context";
-import { ASSET_STATUS, CONDITIONS, money } from "@/lib/assets";
-import { showDay } from "@/lib/ims";
-import { Button } from "@/components/ui/button";
-import { PageHeader, StatusBadge } from "@/components/enterprise/ui";
-import RecordTable, { RecordView } from "@/components/enterprise/RecordTable";
+import { ASSET_STATUS, CONDITIONS } from "@/lib/assets";
+import { StatusBadge } from "@/components/enterprise/ui";
+import RecordTable, { RecordColumn, RecordView } from "@/components/enterprise/RecordTable";
+import { Button, DocNo, Num, Page, PageHeader, Person, fmtDate, statusText } from "@/components/ims";
 import { AssetCardDialog } from "@/components/assets/AssetDialogs";
+
+/** Conditions that need attention (conditions are tags, not statuses). */
+const POOR = ["poor", "damaged"];
 
 export default function AssetRegister() {
   const navigate = useNavigate();
@@ -20,21 +22,77 @@ export default function AssetRegister() {
   const [registering, setRegistering] = React.useState(false);
   const view = params.get("view") || "all";
   const category = params.get("category") || "";
+  const manage = can("manage_fixed_assets");
+  // At most five tabs: "in use" and "in store" are a status filter.
   const views: RecordView[] = [
     { key: "all", label: "In the register", filter: 'status != "disposed"' },
     { key: "to_capitalise", label: "To capitalise", filter: 'capitalised = false && status != "disposed"' },
-    { key: "in_use", label: "In use", filter: 'status = "in_use"' },
-    { key: "in_store", label: "In store", filter: 'status = "in_stock"' },
     { key: "attention", label: "Maintenance, damaged, lost", filter: 'status = "under_maintenance" || status = "damaged" || status = "lost"' },
     { key: "disposed", label: "Disposed", filter: 'status = "disposed"' },
   ];
+  const open = (r: any) => navigate(`/dashboard/assets/register/${r.id}`);
+
+  const columns: RecordColumn<any>[] = [
+    { key: "code", header: "Tag", sortField: "code", nowrap: true, cell: (r) => <DocNo value={r.code} className="font-semibold text-ims-text" />, sub: (r) => (r.serial_number ? <span className="block max-w-[150px] truncate font-mono">{r.serial_number}</span> : null) },
+    {
+      key: "name",
+      header: "Asset",
+      sortField: "name",
+      clamp: true,
+      csv: (r) => r.name,
+      cell: (r) => <span className="font-semibold">{r.name}</span>,
+      sub: (r) => (
+        <>
+          {!r.capitalised && r.status !== "disposed" ? <span className="font-semibold text-ims-warning">To capitalise · </span> : null}
+          {r.expand?.category?.name || "No category"}
+          {r.expand?.type?.name ? ` · ${r.expand.type.name}` : ""}
+        </>
+      ),
+    },
+    { key: "category", header: "Category", exportOnly: true, csv: (r) => r.expand?.category?.name || "", cell: () => null },
+    {
+      key: "where",
+      header: "Department",
+      className: "max-w-[180px]",
+      csv: (r) => `${r.expand?.department?.name || ""}${r.location_name ? ` — ${r.location_name}` : ""}`,
+      cell: (r) => r.expand?.department?.name || <span className="text-ims-faint">—</span>,
+      sub: (r) => (r.location_name ? <span className="block truncate">{r.location_name}</span> : null),
+    },
+    { key: "custodian", header: "Custodian", className: "max-w-[150px]", csv: (r) => r.expand?.assigned_to?.name || "", cell: (r) => (r.expand?.assigned_to ? <Person name={r.expand.assigned_to.name} /> : <span className="text-ims-faint">—</span>) },
+    { key: "acquired", header: "Acquired", sortField: "purchased_at", exportOnly: true, format: "date", csv: (r) => (r.purchased_at ? r.purchased_at.slice(0, 10) : ""), cell: (r) => fmtDate(r.purchased_at) },
+    { key: "funding", header: "Funding", exportOnly: true, csv: (r) => r.expand?.funding_source?.code || "", cell: () => null },
+    { key: "cost", header: "Cost (RWF)", sortField: "cost", align: "right", sum: "cost", format: "money", csv: (r) => Math.round(r.cost), cell: (r) => <Num value={r.cost} /> },
+    { key: "accumulated", header: "Accumulated depreciation (RWF)", exportOnly: true, format: "money", csv: (r) => r.accumulated_depreciation || 0, cell: () => null },
+    {
+      key: "nbv",
+      header: "Book value (RWF)",
+      sortField: "net_book_value",
+      align: "right",
+      sum: "net_book_value",
+      format: "money",
+      csv: (r) => (r.capitalised ? r.net_book_value : ""),
+      cell: (r) => (r.capitalised ? <span className="font-semibold text-ims-text"><Num value={r.net_book_value} /></span> : <span className="text-ims-faint">—</span>),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortField: "status",
+      nowrap: true,
+      csv: (r) => statusText(ASSET_STATUS[r.status], r.status),
+      cell: (r) => <StatusBadge status={r.status} map={ASSET_STATUS} />,
+      // Condition is a tag, not a status: shown here only when it needs attention.
+      sub: (r) => (r.status !== "disposed" && POOR.includes(r.condition) ? <span className="font-semibold text-ims-warning">{CONDITIONS[r.condition]} condition</span> : null),
+    },
+    { key: "condition", header: "Condition", exportOnly: true, csv: (r) => CONDITIONS[r.condition] || "", cell: () => null },
+  ];
+
   return (
-    <div className="space-y-4 px-3 sm:px-4">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "Fixed assets", to: "/dashboard/assets" }, { label: "Asset register" }]}
         title="Asset register"
-        description="Every fixed asset with its tag, location and custodian, what it cost and what it is still worth. Assets received on a delivery note wait under “To capitalise” for their card."
-        breadcrumbs={[{ title: "Fixed assets", link: "/dashboard/assets" }, { title: "Asset register", link: "/dashboard/assets/register" }]}
-        actions={can("manage_fixed_assets") && <Button onClick={() => setRegistering(true)}><Plus size={15} /> Register an asset</Button>}
+        subtitle="Every fixed asset with its tag, location and custodian, what it cost and what it is still worth."
+        primary={manage ? { label: "Register an asset", icon: Plus, onClick: () => setRegistering(true) } : undefined}
       />
       <RecordTable<any>
         collection="assets"
@@ -44,7 +102,9 @@ export default function AssetRegister() {
         onViewChange={(v) => setParams(v === "all" ? {} : { view: v })}
         baseFilter={category ? `category = "${category.replace(/[^a-z0-9]/gi, "")}"` : undefined}
         searchFields={["code", "name", "serial_number", "location_name", "assigned_to.name"]}
+        searchPlaceholder="Search tag, name, serial or custodian"
         filters={[
+          { field: "status", label: "Status", options: ["in_use", "in_stock", "under_maintenance", "damaged", "lost"].map((value) => ({ value, label: statusText(ASSET_STATUS[value], value) })) },
           { field: "category", label: "Category", collection: "assets_categories" },
           { field: "department", label: "Department", collection: "departments" },
           { field: "funding_source", label: "Funding", collection: "funding_sources", optionLabel: (f) => `${f.code} · ${f.name}` },
@@ -55,42 +115,17 @@ export default function AssetRegister() {
         exportName="asset-register"
         exportTitle="Fixed asset register"
         exportPermission={["export_assets", "view_fixed_assets", "manage_fixed_assets"]}
-        onRowClick={(r) => navigate(`/dashboard/assets/register/${r.id}`)}
-        empty={{ icon: Boxes, title: "No assets here", text: "Assets come from deliveries of capital items, from the opening register, or are registered by the Store & Asset Officer." }}
-        columns={[
-          { key: "code", header: "Tag", sortField: "code", cell: (r) => <span className="block whitespace-nowrap"><span className="block font-mono text-[12.5px] font-semibold text-slate-800">{r.code}</span>{r.serial_number && <span className="block max-w-[150px] truncate font-mono text-[11px] text-slate-400">{r.serial_number}</span>}</span> },
-          {
-            key: "name", header: "Asset", sortField: "name", csv: (r) => r.name,
-            cell: (r) => (
-              <span className="block min-w-[220px]">
-                <span className="block font-medium text-slate-900">{r.name}</span>
-                <span className="block text-[12px] text-slate-500">{r.expand?.category?.name || "No category"}{r.expand?.type?.name ? ` · ${r.expand.type.name}` : ""}{!r.capitalised && r.status !== "disposed" ? <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-px text-[11px] font-semibold text-amber-800">to capitalise</span> : null}</span>
-              </span>
-            ),
-          },
-          { key: "category", header: "Category", exportOnly: true, csv: (r) => r.expand?.category?.name || "", cell: () => null },
-          {
-            key: "where", header: "Department / location", csv: (r) => `${r.expand?.department?.name || ""}${r.location_name ? ` — ${r.location_name}` : ""}`,
-            cell: (r) => <span className="block min-w-[160px]"><span className="block text-[12.5px] text-slate-800">{r.expand?.department?.name || "—"}</span><span className="block max-w-[220px] truncate text-[12px] text-slate-500">{r.location_name}</span></span>,
-          },
-          { key: "custodian", header: "Custodian", csv: (r) => r.expand?.assigned_to?.name || "", cell: (r) => <span className="whitespace-nowrap text-[12.5px] text-slate-700">{r.expand?.assigned_to?.name || <span className="text-slate-400">—</span>}</span> },
-          { key: "acquired", header: "Acquired", sortField: "purchased_at", format: "date", csv: (r) => showDay(r.purchased_at), cell: (r) => <span className="whitespace-nowrap text-[12.5px] text-slate-600">{showDay(r.purchased_at)}</span> },
-          { key: "funding", header: "Funding", exportOnly: true, csv: (r) => r.expand?.funding_source?.code || "", cell: () => null },
-          { key: "cost", header: "Cost", sortField: "cost", align: "right", format: "money", csv: (r) => Math.round(r.cost), cell: (r) => <span className="whitespace-nowrap tabular-nums text-slate-700">{money(r.cost)}</span> },
-          { key: "accumulated", header: "Accumulated depreciation", exportOnly: true, format: "money", csv: (r) => r.accumulated_depreciation || 0, cell: () => null },
-          {
-            key: "nbv", header: "Net book value", sortField: "net_book_value", align: "right", format: "money", csv: (r) => (r.capitalised ? r.net_book_value : ""),
-            cell: (r) => r.capitalised ? (
-              <span className="block min-w-[110px] text-right">
-                <span className="block font-semibold tabular-nums text-slate-900">{money(r.net_book_value)}</span>
-                <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-primary" style={{ width: `${r.cost ? Math.max(0, Math.min(100, (r.net_book_value / r.cost) * 100)) : 0}%` }} /></span>
-              </span>
-            ) : <span className="text-slate-400">—</span>,
-          },
-          { key: "status", header: "Status", sortField: "status", csv: (r) => ASSET_STATUS[r.status]?.label || r.status, cell: (r) => <span className="block whitespace-nowrap"><StatusBadge status={r.status} map={ASSET_STATUS} />{r.condition && r.status !== "disposed" ? <span className="mt-0.5 block text-[11px] text-slate-500">{CONDITIONS[r.condition]}</span> : null}</span> },
-        ]}
+        onRowClick={open}
+        rowActions={() => [{ label: "Open", icon: ExternalLink, onSelect: open }]}
+        empty={{
+          icon: Boxes,
+          title: "No assets here",
+          text: view === "to_capitalise" ? "Nothing is waiting for its asset card." : "Assets come from deliveries of capital items or the opening register, or are registered by the Store & Asset Officer.",
+          action: manage && view === "all" ? <Button variant="primary" icon={Plus} onClick={() => setRegistering(true)}>Register an asset</Button> : undefined,
+        }}
+        columns={columns}
       />
       {registering && <AssetCardDialog onClose={() => setRegistering(false)} onSaved={(id) => { setRegistering(false); navigate(`/dashboard/assets/register/${id}`); }} />}
-    </div>
+    </Page>
   );
 }

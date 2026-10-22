@@ -9,13 +9,10 @@ import { toast } from "sonner";
 import { Layers, Pencil, Plus } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
-import { DEPRECIATION_METHODS, money } from "@/lib/assets";
+import { DEPRECIATION_METHODS } from "@/lib/assets";
 import { errorMessage } from "@/lib/procurement";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge, EmptyState, ListSkeleton, PageHeader, Panel } from "@/components/enterprise/ui";
-import { Field, inputCls } from "@/components/portal/kit";
-import { MoneyInput } from "@/components/treasury/TreasuryKit";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button, Card, CardHeader, Checkbox, Details, EmptyState, ErrorState, Field, Input, Modal, ModalSection, MoneyInput, Page, PageHeader, Pill, Select, StatusPill, fmtMoney, fmtNumber } from "@/components/ims";
 
 export default function AssetCategories() {
   const { can } = usePermissions();
@@ -32,51 +29,95 @@ export default function AssetCategories() {
     return { cats: cats as any[], types: types as any[], accounts: accounts as any[], assets: assets as any[] };
   });
   const refresh = () => qc.invalidateQueries(["asset-categories"]);
-  if (q.isLoading) return <div className="p-6"><ListSkeleton rows={5} /></div>;
+  const canEdit = can("approve_fixed_assets");
+  const header = (
+    <PageHeader
+      breadcrumbs={[{ label: "Fixed assets", to: "/dashboard/assets" }, { label: "Categories" }]}
+      title="Asset categories"
+      subtitle="How each kind of asset is depreciated and where it is posted. Changes apply from the next monthly run."
+      primary={canEdit ? { label: "New category", icon: Plus, onClick: () => setEditing({}) } : undefined}
+    />
+  );
+  if (q.isLoading) {
+    return (
+      <Page>
+        {header}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-72 w-full rounded-card" />
+          <Skeleton className="h-72 w-full rounded-card" />
+        </div>
+      </Page>
+    );
+  }
   const { cats, types, accounts, assets } = q.data || { cats: [], types: [], accounts: [], assets: [] };
+  const account = (a?: any) => (a ? <><span className="whitespace-nowrap font-mono text-t-small">{a.code}</span> {a.name}</> : <span className="font-semibold text-ims-danger">Not set</span>);
   return (
-    <div className="space-y-4 px-3 sm:px-4">
-      <PageHeader
-        title="Asset categories"
-        description="How each kind of asset is depreciated and where it is posted. Changed by the Director of Finance; a change applies from the next monthly run, posted months are not changed."
-        breadcrumbs={[{ title: "Fixed assets", link: "/dashboard/assets" }, { title: "Categories", link: "/dashboard/assets/categories" }]}
-        actions={can("approve_fixed_assets") && <Button onClick={() => setEditing({})}><Plus size={15} /> New category</Button>}
-      />
-      {!cats.length ? <EmptyState icon={Layers} title="No category" text="The Director of Finance creates the categories with their depreciation policy." /> : (
+    <Page>
+      {header}
+      {q.isError ? (
+        <Card>
+          <ErrorState text="The categories could not be loaded." detail={errorMessage(q.error)} onRetry={() => q.refetch()} />
+        </Card>
+      ) : !cats.length ? (
+        <Card>
+          <EmptyState
+            icon={Layers}
+            text="No category yet. The Director of Finance creates the categories with their depreciation policy."
+            action={canEdit ? <Button variant="primary" icon={Plus} onClick={() => setEditing({})}>New category</Button> : undefined}
+          />
+        </Card>
+      ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {cats.map((c) => {
             const x = c.expand || {};
             const mine = types.filter((t) => t.category === c.id);
             const n = assets.filter((a) => a.category === c.id).length;
             return (
-              <Panel
-                key={c.id}
-                title={<span className="flex items-center gap-2">{c.name}{c.code && <span className="rounded bg-slate-100 px-1.5 py-px font-mono text-[11px] text-slate-600">{c.code}</span>}{c.active === false && <Badge tone="neutral">not in use</Badge>}</span>}
-                subtitle={`${n} asset${n === 1 ? "" : "s"} in the register`}
-                action={can("approve_fixed_assets") ? <Button size="sm" variant="outline" onClick={() => setEditing(c)}><Pencil size={13} /> Edit</Button> : undefined}
-              >
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
-                  <dt className="text-slate-500">Depreciation</dt>
-                  <dd className="font-medium">{DEPRECIATION_METHODS[c.method] || "Not set"}{c.method === "straight_line" && c.useful_life_months ? ` · ${c.useful_life_months} months (${Math.round((c.useful_life_months / 12) * 10) / 10} years)` : ""}{c.method === "reducing_balance" ? ` · ${c.rate}% a year` : ""}</dd>
-                  <dt className="text-slate-500">Residual value</dt><dd>{c.residual_percent ? `${c.residual_percent}% of cost` : "Nil"}</dd>
-                  <dt className="text-slate-500">Capitalised from</dt><dd>RWF {money(c.capitalisation_threshold)}</dd>
-                  <dt className="text-slate-500">Cost account</dt><dd>{x.asset_account ? <><span className="font-mono">{x.asset_account.code}</span> {x.asset_account.name}</> : <span className="text-red-700">not set</span>}</dd>
-                  <dt className="text-slate-500">Accumulated depreciation</dt><dd>{x.accumulated_account ? <><span className="font-mono">{x.accumulated_account.code}</span> {x.accumulated_account.name}</> : <span className="text-red-700">not set</span>}</dd>
-                  <dt className="text-slate-500">Depreciation expense</dt><dd>{x.expense_account ? <><span className="font-mono">{x.expense_account.code}</span> {x.expense_account.name}</> : <span className="text-red-700">not set</span>}</dd>
-                </dl>
-                <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3">
-                  <span className="mr-1 text-[12px] text-slate-500">Types:</span>
-                  {mine.map((t) => <span key={t.id} className="rounded-full border border-slate-200 px-2 py-0.5 text-[12px]">{t.name}</span>)}
-                  {can("manage_fixed_assets") && <button type="button" onClick={() => setTypeFor(c)} className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-[12px] text-primaryDark hover:bg-slate-50"><Plus size={11} /> Add</button>}
+              <Card key={c.id} className="flex flex-col">
+                <CardHeader
+                  title={
+                    <span className="flex flex-wrap items-center gap-2">
+                      {c.name}
+                      {c.code && <span className="whitespace-nowrap rounded-control bg-ims-subtle px-1.5 py-px font-mono text-t-hint font-semibold text-ims-body">{c.code}</span>}
+                      {c.active === false && <StatusPill status="Inactive" />}
+                    </span>
+                  }
+                  subtitle={`${fmtNumber(n)} asset${n === 1 ? "" : "s"} in the register`}
+                  action={canEdit ? <Button size="sm" icon={Pencil} onClick={() => setEditing(c)}>Edit</Button> : undefined}
+                />
+                <Details
+                  className="mb-5"
+                  items={[
+                    {
+                      label: "Depreciation",
+                      value: DEPRECIATION_METHODS[c.method] || "Not set",
+                      hint:
+                        c.method === "straight_line" && c.useful_life_months
+                          ? `${c.useful_life_months} months (${Math.round((c.useful_life_months / 12) * 10) / 10} years)`
+                          : c.method === "reducing_balance"
+                            ? `${c.rate}% a year`
+                            : undefined,
+                    },
+                    { label: "Residual value", value: c.residual_percent ? `${c.residual_percent}% of cost` : "Nil" },
+                    { label: "Capitalised from", value: fmtMoney(c.capitalisation_threshold) },
+                    { label: "Cost account", value: account(x.asset_account) },
+                    { label: "Accumulated depreciation", value: account(x.accumulated_account) },
+                    { label: "Depreciation expense", value: account(x.expense_account) },
+                  ]}
+                />
+                <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-ims-divider pt-4">
+                  <span className="mr-1 text-t-small text-ims-muted">Types</span>
+                  {mine.length ? mine.map((t) => <Pill key={t.id} tone="neutral">{t.name}</Pill>) : <span className="text-t-small text-ims-faint">None yet</span>}
+                  {can("manage_fixed_assets") && <Button size="sm" variant="ghost" icon={Plus} className="text-ims-link" onClick={() => setTypeFor(c)}>Add type</Button>}
                 </div>
-              </Panel>
+              </Card>
             );
           })}
         </div>
       )}
       {editing && <CategoryDialog category={editing} accounts={accounts} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
       {typeFor && <TypeDialog category={typeFor} onClose={() => setTypeFor(null)} onSaved={() => { setTypeFor(null); refresh(); }} />}
-    </div>
+    </Page>
   );
 }
 
@@ -96,7 +137,7 @@ function CategoryDialog({ category, accounts, onClose, onSaved }: { category: an
       const data = { ...v, useful_life_months: Number(v.useful_life_months) || 0, rate: Number(v.rate) || 0, residual_percent: Number(v.residual_percent) || 0, capitalisation_threshold: Number(v.capitalisation_threshold) || 0 };
       if (category.id) await pocketbase.collection("assets_categories").update(category.id, data);
       else await pocketbase.collection("assets_categories").create(data);
-      toast.success(category.id ? `${v.name} updated — applies from the next depreciation run` : `${v.name} created`);
+      toast.success(category.id ? `${v.name} updated. The change applies from the next depreciation run.` : `${v.name} created`);
       onSaved();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -105,36 +146,82 @@ function CategoryDialog({ category, accounts, onClose, onSaved }: { category: an
     }
   };
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto bg-white">
-        <DialogHeader>
-          <DialogTitle>{category.id ? `Edit ${category.name}` : "New asset category"}</DialogTitle>
-          <DialogDescription>The useful life and rate apply to every asset of the category that does not have its own.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
-            <Field label="Name" required><input className={inputCls} value={v.name} onChange={set("name")} /></Field>
-            <Field label="Code"><input className={`${inputCls} font-mono uppercase`} value={v.code} maxLength={20} onChange={set("code")} /></Field>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Method"><select className={inputCls} value={v.method} onChange={set("method")}>{Object.entries(DEPRECIATION_METHODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
-            {v.method === "straight_line" && <Field label="Useful life (months)" required><input type="number" min={1} className={inputCls} value={v.useful_life_months} onChange={set("useful_life_months")} /></Field>}
-            {v.method === "reducing_balance" && <Field label="Rate (% a year)" required><input type="number" min={0} max={100} step="0.5" className={inputCls} value={v.rate} onChange={set("rate")} /></Field>}
-            {v.method !== "none" && <Field label="Residual value (% of cost)"><input type="number" min={0} max={99} className={inputCls} value={v.residual_percent} onChange={set("residual_percent")} /></Field>}
-          </div>
-          <Field label="Capitalisation threshold" hint="Cheaper items are expensed, not registered"><MoneyInput value={v.capitalisation_threshold} onChange={(x) => setV((y: any) => ({ ...y, capitalisation_threshold: x }))} /></Field>
-          <Field label="Cost account" required><select className={inputCls} value={v.asset_account} onChange={set("asset_account")}><option value="">Choose…</option>{assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></Field>
-          {v.method !== "none" && (
-            <>
-              <Field label="Accumulated depreciation account" required><select className={inputCls} value={v.accumulated_account} onChange={set("accumulated_account")}><option value="">Choose…</option>{assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></Field>
-              <Field label="Depreciation expense account" required><select className={inputCls} value={v.expense_account} onChange={set("expense_account")}><option value="">Choose…</option>{expenseAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></Field>
-            </>
-          )}
-          <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" className="h-4 w-4" checked={v.active} onChange={set("active")} /> In use for new assets</label>
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={category.id ? `Edit ${category.name}` : "New asset category"}
+      description="The useful life and rate apply to every asset of the category that does not have its own."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={save} loading={busy} disabled={!v.name.trim() || !v.asset_account}>Save</Button>
+        </>
+      }
+    >
+      <ModalSection title="Category">
+        <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
+          <Field label="Name" required htmlFor="cat-name">
+            <Input id="cat-name" value={v.name} onChange={set("name")} />
+          </Field>
+          <Field label="Code" htmlFor="cat-code">
+            <Input id="cat-code" className="font-mono" value={v.code} maxLength={20} onChange={set("code")} />
+          </Field>
         </div>
-        <DialogFooter className="gap-2"><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={busy || !v.name.trim() || !v.asset_account} onClick={save}>{busy ? "Saving…" : "Save"}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <Checkbox id="cat-active" label="In use for new assets" checked={v.active} onChange={(on) => setV((x: any) => ({ ...x, active: on }))} />
+      </ModalSection>
+      <ModalSection title="Depreciation policy">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Method" htmlFor="cat-method">
+            <Select id="cat-method" value={v.method} onChange={set("method")}>
+              {Object.entries(DEPRECIATION_METHODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </Select>
+          </Field>
+          {v.method === "straight_line" && (
+            <Field label="Useful life (months)" required htmlFor="cat-life">
+              <Input id="cat-life" type="number" min={1} value={v.useful_life_months} onChange={set("useful_life_months")} />
+            </Field>
+          )}
+          {v.method === "reducing_balance" && (
+            <Field label="Rate (% a year)" required htmlFor="cat-rate">
+              <Input id="cat-rate" type="number" min={0} max={100} step="0.5" value={v.rate} onChange={set("rate")} />
+            </Field>
+          )}
+          {v.method !== "none" && (
+            <Field label="Residual value (% of cost)" htmlFor="cat-residual">
+              <Input id="cat-residual" type="number" min={0} max={99} value={v.residual_percent} onChange={set("residual_percent")} />
+            </Field>
+          )}
+        </div>
+        <Field label="Capitalisation threshold" htmlFor="cat-threshold" hint="Cheaper items are expensed, not registered">
+          <MoneyInput id="cat-threshold" value={v.capitalisation_threshold} onChange={(x) => setV((y: any) => ({ ...y, capitalisation_threshold: x }))} />
+        </Field>
+      </ModalSection>
+      <ModalSection title="General ledger accounts">
+        <Field label="Cost account" required htmlFor="cat-asset-account">
+          <Select id="cat-asset-account" value={v.asset_account} onChange={set("asset_account")}>
+            <option value="">Choose…</option>
+            {assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
+          </Select>
+        </Field>
+        {v.method !== "none" && (
+          <>
+            <Field label="Accumulated depreciation account" required htmlFor="cat-acc-account">
+              <Select id="cat-acc-account" value={v.accumulated_account} onChange={set("accumulated_account")}>
+                <option value="">Choose…</option>
+                {assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Depreciation expense account" required htmlFor="cat-exp-account">
+              <Select id="cat-exp-account" value={v.expense_account} onChange={set("expense_account")}>
+                <option value="">Choose…</option>
+                {expenseAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
+              </Select>
+            </Field>
+          </>
+        )}
+      </ModalSection>
+    </Modal>
   );
 }
 
@@ -145,7 +232,7 @@ function TypeDialog({ category, onClose, onSaved }: { category: any; onClose: ()
     setBusy(true);
     try {
       await pocketbase.collection("assets_types").create({ name: name.trim(), description: `${name.trim()} (${category.name})`, category: category.id });
-      toast.success(`${name.trim()} added`);
+      toast.success(`${name.trim()} added to ${category.name}`);
       onSaved();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -154,12 +241,22 @@ function TypeDialog({ category, onClose, onSaved }: { category: any; onClose: ()
     }
   };
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-sm bg-white">
-        <DialogHeader><DialogTitle>New type of {category.name.toLowerCase()}</DialogTitle><DialogDescription>Staff choose a type when they ask for equipment.</DialogDescription></DialogHeader>
-        <Field label="Name" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Docking station" /></Field>
-        <DialogFooter className="gap-2"><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={busy || name.trim().length < 2} onClick={save}>Add</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`New type of ${category.name.toLowerCase()}`}
+      description="Staff choose a type when they ask for equipment."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={save} loading={busy} disabled={name.trim().length < 2}>Add</Button>
+        </>
+      }
+    >
+      <Field label="Name" required htmlFor="type-name" hint="At least 2 characters">
+        <Input id="type-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Docking station" />
+      </Field>
+    </Modal>
   );
 }
