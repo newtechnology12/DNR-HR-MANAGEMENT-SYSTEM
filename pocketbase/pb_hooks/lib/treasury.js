@@ -350,7 +350,8 @@ function recordVoucherPayment(dao, v, account, opts) {
     account, date: opts.date, direction: "out", amount: net, type: "payment", method: opts.method, reference: opts.reference,
     counterparty: v.getString("payee_name"), description: v.getString("description"),
     source: { type: "payment_voucher", id: v.id, number: v.getString("number") },
-    gl_account: v.getString("voucher_type") === "direct" ? v.getString("expense_account") : "", funding_source: v.getString("funding_source"), actor: opts.actor,
+    gl_account: v.getString("voucher_type") === "direct" ? v.getString("expense_account") : v.getString("voucher_type") === "statutory" ? ((core.parseJson(v, "lines", []) || [])[0] || {}).account || "" : "",
+    funding_source: v.getString("funding_source"), actor: opts.actor,
   });
 }
 

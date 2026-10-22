@@ -127,6 +127,15 @@ export const NAVIGATION: NavGroup[] = [
     ],
   },
   {
+    key: "reports",
+    label: "Reports",
+    items: [
+      { key: "executiveDashboard", label: "Executive dashboard", link: "/dashboard/reports/executive", icon: PieChart, perms: ["view_financial_reports", "view_journals", "approve_journals", "close_periods", "export_ledger"] },
+      { key: "financialStatements", label: "Financial statements", link: "/dashboard/reports/statements", icon: FileText, perms: ["view_financial_reports", "view_journals", "approve_journals", "close_periods", "export_ledger"] },
+      { key: "donorReport", label: "Donor report", link: "/dashboard/reports/donor", icon: Landmark, perms: ["view_financial_reports", "view_journals", "approve_journals", "close_periods", "export_ledger"] },
+    ],
+  },
+  {
     key: "hr",
     label: "HR & payroll",
     items: [
@@ -166,7 +175,7 @@ export const NAVIGATION: NavGroup[] = [
     label: "Vehicles & expense reports",
     items: [
       { key: "carManagement", label: "Vehicle requests", link: "/dashboard/finance/carmanagement", icon: CarFront, perms: ["view_petty_cash_requests"] },
-      { key: "expenseReports", label: "Expense reports", link: "/dashboard/reports/expense-reports", icon: BarChart3, perms: ["view_expense_reports"] },
+      { key: "expenseReports", label: "Expense reports", link: "/dashboard/finance/staff-expenses?view=categories", icon: BarChart3, perms: ["view_expense_reports"] },
     ],
   },
   {

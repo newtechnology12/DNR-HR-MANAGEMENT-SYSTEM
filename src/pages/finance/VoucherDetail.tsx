@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { AlertTriangle, Banknote, Clock, CornerUpLeft, FileCheck2, Info, LucideIcon, Pencil, Printer, Send, ShieldCheck, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { usePermissions } from "@/context/auth.context";
-import { BANK_LABELS, VOUCHER_STATUS, VOUCHER_TYPES, payablesApi } from "@/lib/payables";
+import { AUTHORITIES, BANK_LABELS, VOUCHER_STATUS, VOUCHER_TYPES, payablesApi } from "@/lib/payables";
 import { PAYMENT_METHODS, errorMessage } from "@/lib/procurement";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Totals } from "@/components/enterprise/DocumentLayout";
@@ -173,6 +173,28 @@ export default function VoucherDetail() {
     { key: "base", header: "Taxable before VAT (RWF)", numeric: true, cell: (l) => <Num value={l.base} />, total: <Num value={lines.reduce((a, l) => a + (Number(l.base) || 0), 0)} /> },
   ];
 
+  const statutoryColumns: Column<any>[] = [
+    {
+      key: "liability",
+      header: "Liability",
+      cell: (l) => (
+        <span>
+          <span className="mr-1.5 font-mono text-t-small font-semibold text-ims-text">{l.code}</span>
+          {l.name}
+        </span>
+      ),
+    },
+    { key: "authority", header: "Paid to", nowrap: true, cell: (l) => AUTHORITIES[l.authority]?.label || l.authority || "—" },
+    { key: "period", header: "For the month of", nowrap: true, cell: (l) => l.period || "—" },
+    { key: "amount", header: "Paid by this voucher (RWF)", numeric: true, cell: (l) => <span className="font-semibold"><Num value={l.amount} /></span>, total: <Num value={lines.reduce((a, l) => a + (Number(l.amount) || 0), 0)} /> },
+  ];
+  const LINES_TITLE: Record<string, [string, string, string]> = {
+    invoice: ["Invoices", "Invoices paid by this voucher", "Approved supplier invoices, after the three-way match."],
+    statutory: ["Liabilities", "Liabilities paid by this voucher", "What the payroll and the tax withheld left owing to the authority. No budget line: the cost was charged when the payroll or the invoice was approved."],
+    direct: ["Expense", "Expense", "A payment without a purchase order, charged to a budget line."],
+  };
+  const [linesTab, linesTitle, linesSubtitle] = LINES_TITLE[v.voucher_type] || LINES_TITLE.direct;
+
   const paymentColumns: Column<any>[] = [
     { key: "number", header: "Payment", nowrap: true, cell: (p) => <DocNo value={p.number} />, sub: (p) => fmtDate(p.payment_date) },
     { key: "invoice", header: "Invoice", nowrap: true, cell: (p) => <DocNo value={p.expand?.invoice?.number} /> },
@@ -239,7 +261,7 @@ export default function VoucherDetail() {
         onChange={setTab}
         tabs={[
           { key: "details", label: "Details" },
-          { key: "lines", label: v.voucher_type === "invoice" ? "Invoices" : "Expense", count: v.voucher_type === "invoice" ? lines.length : undefined },
+          { key: "lines", label: linesTab, count: v.voucher_type === "direct" ? undefined : lines.length },
           { key: "payments", label: "Payments", count: payments.length },
           { key: "approval", label: "Approvals" },
           { key: "activity", label: "Activity" },
@@ -309,13 +331,12 @@ export default function VoucherDetail() {
       {tab === "lines" && (
         <Card padded={false}>
           <div className="px-5 pt-5">
-            <CardHeader
-              title={v.voucher_type === "invoice" ? "Invoices paid by this voucher" : "Expense"}
-              subtitle={v.voucher_type === "invoice" ? "Approved supplier invoices, after the three-way match." : "A payment without a purchase order, charged to a budget line."}
-            />
+            <CardHeader title={linesTitle} subtitle={linesSubtitle} />
           </div>
           {v.voucher_type === "invoice" ? (
             <DataTable columns={invoiceColumns} rows={lines} rowKey={(l) => l.invoice} minWidth={760} caption="Invoices" onRowClick={(l) => navigate(`/dashboard/finance/invoices/${l.invoice}`)} empty={<EmptyState compact text="No invoices on this voucher." />} />
+          ) : v.voucher_type === "statutory" ? (
+            <DataTable columns={statutoryColumns} rows={lines} rowKey={(l) => l.account} minWidth={680} caption="Liabilities paid" empty={<EmptyState compact text="No liabilities on this voucher." />} />
           ) : (
             <div className="px-5 pb-5">
               <div className="rounded-control border border-ims-border px-4 py-3">
@@ -346,7 +367,7 @@ export default function VoucherDetail() {
       {tab === "payments" && (
         <Card padded={false}>
           <div className="px-5 pt-5">
-            <CardHeader title="Payments" subtitle="Created when the Cashier executes the voucher, one per invoice." />
+            <CardHeader title="Payments" subtitle={`Created when the Cashier executes the voucher${v.voucher_type === "invoice" ? ", one per invoice" : ""}.`} />
           </div>
           <DataTable
             columns={paymentColumns}
@@ -375,7 +396,7 @@ export default function VoucherDetail() {
         open={cancelling}
         onClose={() => setCancelling(false)}
         title={`Cancel ${v.number}?`}
-        description={`${v.actual_amount ? "The amount charged to the budget line is reversed. " : ""}The invoices become free to pay on another voucher.`}
+        description={`${v.actual_amount ? "The amount charged to the budget line is reversed. " : ""}${v.voucher_type === "invoice" ? "The invoices become free to pay on another voucher." : v.voucher_type === "statutory" ? "What it holds becomes free to pay on another voucher." : ""}`.trim()}
         confirmLabel="Cancel voucher"
         danger
         reason={{ label: "Reason", placeholder: "Why the voucher is no longer needed", required: true }}

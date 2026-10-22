@@ -151,6 +151,43 @@ function submitJournal(dao, auth, id, meta) {
 
 const lineJson = (l) => ({ account: l.getString("account"), debit: l.getInt("debit"), credit: l.getInt("credit"), description: l.getString("description"), department: l.getString("department"), funding_source: l.getString("funding_source"), project: l.getString("project"), budget_line: l.getString("budget_line") });
 
+/** The active budget line of a department for an account, fund and project (the project's own line first). */
+function budgetLineOf(dao, department, account, fund, project, d) {
+  const period = require("./masterdata.js").periodFor(dao, noon(d));
+  if (!period || !department || !account || !fund) return null;
+  const rows = dao.findRecordsByFilter("budget_lines", "department = {:d} && gl_account = {:a} && funding_source = {:f} && fiscal_year = {:y} && status = 'active'", "", 10, 0, { d: department, a: account, f: fund, y: period.getString("fiscal_year") }) || [];
+  return rows.find((r) => r.getString("project") === (project || "")) || rows.find((r) => !r.getString("project")) || rows[0] || null;
+}
+
+/**
+ * A posted manual journal moves the actuals of the budget lines its expense lines belong to: an accrual adds to a
+ * line, a reclassification moves spending from one line to another — so budget against actual agrees with the
+ * ledger. Lines without a department or a matching budget line are unbudgeted. Never stopped by the budget.
+ */
+function journalBudget(dao, j, lines, actor) {
+  const budget = require("./budget.js");
+  const mc = (dao.findRecordsByFilter("funding_sources", "code = 'MC'", "", 1, 0) || [])[0];
+  const byLine = {};
+  for (const l of lines) {
+    const a = find(dao, "gl_accounts", l.getString("account"));
+    if (!a || a.getString("type") !== "expense") continue;
+    let lineId = l.getString("budget_line");
+    if (!lineId) {
+      const bl = budgetLineOf(dao, l.getString("department"), a.id, l.getString("funding_source") || (mc ? mc.id : ""), l.getString("project"), day(j.getString("date")));
+      if (!bl) continue;
+      lineId = bl.id;
+      l.set("budget_line", lineId);
+      dao.saveRecord(l);
+    }
+    byLine[lineId] = (byLine[lineId] || 0) + l.getInt("debit") - l.getInt("credit");
+  }
+  for (const [lineId, net] of Object.entries(byLine)) {
+    const line = find(dao, "budget_lines", lineId);
+    if (!line || !net) continue;
+    budget.post(dao, { line, type: net > 0 ? "actual" : "actual_reversal", amount: Math.abs(net), source: { type: "journal_entry", id: j.id, number: j.getString("number") }, description: j.getString("description"), actor, date: j.getString("date") });
+  }
+}
+
 /** Final approval: the journal is posted (the engine already set its status). */
 function onJournalApproved(dao, j, actor, meta) {
   require("./masterdata.js").requireOpenPeriod(dao, j.getString("date"), `journal ${j.getString("number")}`);
@@ -166,6 +203,7 @@ function onJournalApproved(dao, j, actor, meta) {
   j.set("posted_by", actor ? actor.id : "");
   j.set("posted_at", new Date().toISOString());
   dao.saveRecord(j);
+  journalBudget(dao, j, lines, actor);
   core.audit(dao, { actor, action: "journal_posted", collection: "gl_journals", recordId: j.id, label: j.getString("number"), comment: j.getString("description").slice(0, 300), meta });
   core.notify(dao, [j.getString("prepared_by")].filter((x) => x && (!actor || x !== actor.id)), { title: `${j.getString("number")} posted`, body: j.getString("description"), link: `/dashboard/finance/journals/${j.id}`, type: "success" });
 }
@@ -215,7 +253,16 @@ function reverseJournal(dao, auth, id, input, meta) {
   if (reason.length < 10) throw new BadRequestError("Explain the reversal (at least 10 characters).");
   const d = day(input.date) || todayStr();
   if (d < day(j.getString("date"))) throw new BadRequestError("A reversal cannot be dated before the journal it reverses.");
-  return ledger.reverse(dao, j.id, auth, reason, d, meta);
+  const rev = ledger.reverse(dao, j.id, auth, reason, d, meta);
+  // the budget actuals the journal moved go back
+  const budget = require("./budget.js");
+  for (const b of dao.findRecordsByFilter("budget_ledger", "source_type = 'journal_entry' && source_id = {:j}", "", 0, 0, { j: j.id }) || []) {
+    const line = find(dao, "budget_lines", b.getString("budget_line"));
+    const type = b.getString("type") === "actual" ? "actual_reversal" : b.getString("type") === "actual_reversal" ? "actual" : "";
+    if (!line || !type) continue;
+    budget.post(dao, { line, type, amount: b.getInt("amount"), source: { type: "journal_entry", id: rev.id, number: rev.getString("number") }, description: `Reversal of ${j.getString("number")}`, actor: auth, date: noon(d) });
+  }
+  return rev;
 }
 
 // ------------------------------------------------------------------ recurring journals

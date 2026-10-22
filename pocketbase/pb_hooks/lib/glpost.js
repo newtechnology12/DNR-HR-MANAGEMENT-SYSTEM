@@ -117,7 +117,10 @@ function voucherPaid(dao, v, account, entry, actor, meta) {
   if (gross <= 0) return null;
   const payee = v.getString("payee_name");
   const lines = [];
-  if (v.getString("voucher_type") === "invoice") {
+  if (v.getString("voucher_type") === "statutory") {
+    // what was withheld or contributed is paid over: each liability is cleared
+    for (const l of core.parseJson(v, "lines", []) || []) lines.push({ account: l.account, debit: r0(l.amount), description: `${payee} — ${l.name}${l.period ? ` ${l.period}` : ""}`.slice(0, 300) });
+  } else if (v.getString("voucher_type") === "invoice") {
     const numbers = (core.parseJson(v, "lines", []) || []).map((l) => l.supplier_invoice_number || l.number).filter(Boolean).join(", ");
     lines.push({ account: ledger.accountFor(dao, "payables.ap").id, debit: gross, department: v.getString("department"), funding_source: v.getString("funding_source"), description: `${payee} — ${numbers}`.slice(0, 300) });
   } else {

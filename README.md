@@ -19,7 +19,7 @@ Developed by Infinity Core Solutions Ltd.
 | 6 | Payroll (M6): Rwanda PAYE and RSSB from dated rates, grades and funding split of donor-funded staff, staff loans repaid through the payroll, comparison with the previous month, approval posts a balanced GL journal and budget actuals by department / funding source / project, payment from a chosen bank account (cash book + payment journal), payroll register, PAYE (RRA), RSSB and bank-file exports; general ledger core (journals, posting accounts) | **Done** |
 | 7 | Fixed assets & depreciation (M7): register with tags, custodians and locations; capitalisation of capital items received on a GRN (or bought outside a PO, or donated) posted to the GL; opening register at go-live; transfers approved by the DAF; maintenance log; monthly depreciation (straight line / reducing balance by category, Accountant → DAF, posted by department and funding source); disposals Store → DAF → SG with the gain or loss in the GL; physical counts and the reconciliation of the register with the GL; staff equipment requests; asset schedule and reports | **Done** |
 | 8 | General ledger, period close (M8): every module posts its own balanced journal (invoices, payments, receipts, transfers, statement charges, bank opening balances, payroll, assets), manual journals on posting accounts only (Accountant → DAF) with documents, reversals, recurring journals, trial balance and account ledgers by department / funding source / project, month-end checklist, close by the DAF in order, re-opening approved by the SG | **Done** |
-| 9 | Reports, financial statements, role dashboards (M9) | Planned |
+| 9 | Reports, financial statements, dashboards (M9): statements of financial position, financial performance and cash flow (direct method, IPSAS presentation) straight from the ledger with comparatives and filters by department / funding source / project, donor report by funding source (funds received, spending against budget, fund balance, restricted cash), executive dashboard (revenue, expenses and cash month by month, budget use by department, decisions waiting, lines to watch), statutory payment vouchers to RRA and RSSB, manual journals moving budget actuals | **Done** |
 | 10 | Data migration, tests, documentation | Planned |
 | + | Staff workspace: every staff member's own pages (attendance, leave, plans, payslips, requests, performance, documents), attendance corrections approved by HR, work planning and reporting (annual performance contract → quarter → month → week, supervisor approval, reports and assessment), Help & HR policies | **Done** |
 
@@ -60,7 +60,7 @@ npm run seed:ralga
 # 3. Frontend (http://localhost:5173, proxies /api to the backend)
 npm run dev:frontend
 
-# 4. API tests on a freshly seeded server (must stay green: 351 checks in 15 suites)
+# 4. API tests on a freshly seeded server (must stay green: 360 checks in 16 suites)
 npm run test:api
 ```
 
@@ -427,6 +427,8 @@ Cashier, heads of department).
   The member of staff is told when it is paid.
 - **Advances:** one at a time, at most half of the last net pay. Only an advance actually paid is deducted by the
   next payroll, once; approving that payroll credits staff advances and marks the advance recovered.
+- **By category** (the expense report): requests approved, paid or recovered in a period, by category, with what is
+  still waiting for payment; filters by department, category, type and date; each category opens its requests.
 - The previous system's floats, transactions and petty cash requests are history (read-only): money now moves only
   through the cash books, so the cash books, the ledger and the budget always agree.
 
@@ -467,6 +469,43 @@ decides re-openings. Nobody else reads the ledger (checked by the server).
   are shown before closing. A closed month takes no posting from any module; its checklist is kept with it.
 - **Re-opening a closed month:** asked by the DAF or the Accountant with what must be corrected and why, latest
   closed month first, and approved by the SG. The month then takes postings until the DAF closes it again.
+- **Manual journals and the budget:** a posted manual journal moves the actuals of the budget lines its expense lines
+  belong to (the line named on the journal line, or the department's line for that account, funding source and
+  project): an accrual adds to a line, a reclassification moves spending from one line to another, so budget against
+  actual always agrees with the ledger. Its reversal moves them back. Adjustments are never stopped by the budget.
+
+## Reports and financial statements
+
+Reports in the menu: *Executive dashboard*, *Financial statements*, *Donor report*. They show summary figures to the
+SG, the DAF, the Accountant, the Budget Officer, the Cashier, the Procurement Officer, the Internal Auditor and
+management viewers ("view_financial_reports"); the ledger detail (journals, trial balance, account ledgers) stays
+with the finance team. Everything is read from posted journal lines, so nothing is keyed in twice and the statements
+always agree with the trial balance.
+
+- **Statement of financial position** at any date, beside the start of the fiscal year: current and non-current
+  assets, liabilities, and net assets (the accumulated surplus brought forward plus the surplus of the year so far),
+  grouped under the chart-of-accounts headings. The page checks that assets = liabilities + net assets.
+- **Statement of financial performance** for any period, beside the year to date: revenue from non-exchange
+  transactions (member contributions, grants) and exchange transactions, expenses by nature, surplus or deficit; for
+  the whole of RALGA or one department, funding source or project.
+- **Cash flow statement** (direct method): every journal that moves a bank or cash account is split over its other
+  lines, so each receipt and payment is classified by what it was for (operating, investing, financing); withholding
+  tax reduces the supplier payment it was withheld from. Opening cash + net flow = closing cash, checked on the page.
+- **Donor report** for a funding source and period: opening fund balance (including unspent funds brought in at
+  go-live), funds received against what the fund expects this year, spending by budget line against its budget (used
+  %, green / amber / red; depreciation shown but not a budget item; spending outside the fund's lines flagged),
+  spending by project, closing fund balance and the cash held in the fund's accounts.
+- **Executive dashboard:** revenue and expenses month by month, closing cash, budget use by department, the decisions
+  waiting (approvals), the budget lines to watch (amber and red) and the year's key figures. Every chart has a table
+  view.
+- Negative figures are shown in brackets; every statement exports to Excel, PDF and CSV.
+
+**Statutory payments (RRA, RSSB):** a payment voucher of type *Statutory payment* pays what the payroll and withholding
+tax left in the liability accounts — PAYE 2104, withholding tax 2108 and VAT 2109 to RRA; pension 2105, maternity
+2106, CBHI 2107, occupational hazards 2112 and medical insurance 2113 to RSSB. Each line names the liability, the
+amount and the period it settles; a line cannot be more than what is owed less what other open vouchers already
+hold. There is no budget line and no withholding tax (the expense was charged when the payroll or the invoice was
+approved). A bank transfer needs the authority's bank details. Paid, it debits each liability and credits the bank.
 
 ## Testing
 
@@ -500,5 +539,9 @@ posts nothing twice) and staff expenses (requests only for oneself and only thro
 checks, head of department then DAF, the budget actual, payment by the Cashier from an account of the right kind with
 enough money, the cash book equal to the ledger, advances one at a time, posted to staff advances without names and
 deducted by the payroll only once paid, returned / withdrawn / cancelled requests, the old floats closed, categories
-set up by Finance). Run them on a freshly seeded server
+set up by Finance) and the reports (who reads the statements, the financial position and performance equal to the
+trial balance, the cash flow reconciling with the bank and cash accounts for the year and the month, the monthly trend
+adding up, the donor report equal to the fund's ledger lines, statutory vouchers limited to what is owed and posted
+to the liabilities, manual journals moving budget actuals and their reversal moving them back). Run them on a freshly
+seeded server
 (`npm run seed:ralga` first): some checks use the seeded documents.

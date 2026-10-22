@@ -57,6 +57,18 @@ routerAdd("POST", "/api/ims/vouchers/:id/:action", (c) => {
   return c.json(200, out);
 }, $apis.requireRecordAuth("users"));
 
+// GET /api/ims/vouchers/statutory-accounts?voucher= — PAYE, WHT, VAT and RSSB liabilities with what is owed and still free
+routerAdd("GET", "/api/ims/vouchers/statutory-accounts", (c) => {
+  const core = require(`${__hooks}/lib/core.js`);
+  const vouchers = require(`${__hooks}/lib/vouchers.js`);
+  const info = $apis.requestInfo(c);
+  const dao = $app.dao();
+  if (!info.admin && !core.can(dao, info.authRecord, "manage_payment_vouchers") && !vouchers.canView(dao, info.authRecord)) {
+    throw new ForbiddenError("You don't have permission to prepare payment vouchers.");
+  }
+  return c.json(200, { items: vouchers.statutoryAccounts(dao, c.queryParam("voucher") || "") });
+}, $apis.requireAdminOrRecordAuth());
+
 routerAdd("GET", "/api/ims/vouchers/payable", (c) => {
   const core = require(`${__hooks}/lib/core.js`);
   const vouchers = require(`${__hooks}/lib/vouchers.js`);

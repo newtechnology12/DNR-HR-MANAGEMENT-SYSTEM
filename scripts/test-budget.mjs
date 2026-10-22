@@ -163,7 +163,9 @@ await check("actuals reconcile: approved invoices, direct-expense vouchers, bank
   assert(payrolls.length > 0 && payroll > 0, "no posted payroll in the demo data");
   // Approved staff expense claims are charged to the requester's department line.
   const claims = await admin.collection("prepayments").getFullList({ filter: "actual_amount > 0" });
-  const expected = invoices.reduce((a, i) => a + i.actual_amount, 0) + vouchers.reduce((a, v) => a + v.actual_amount, 0) + charges.reduce((a, e) => a + (e.direction === "out" ? e.amount : -e.amount), 0) + payroll + claims.reduce((a, c) => a + c.actual_amount, 0);
+  // Posted manual journals move actuals between lines (accruals, reclassifications) and back when reversed.
+  const moved = (await admin.collection("budget_ledger").getFullList({ filter: 'source_type = "journal_entry"' })).reduce((t, b) => t + (b.type === "actual" ? b.amount : b.type === "actual_reversal" ? -b.amount : 0), 0);
+  const expected = invoices.reduce((a, i) => a + i.actual_amount, 0) + vouchers.reduce((a, v) => a + v.actual_amount, 0) + charges.reduce((a, e) => a + (e.direction === "out" ? e.amount : -e.amount), 0) + payroll + claims.reduce((a, c) => a + c.actual_amount, 0) + moved;
   assert(actual === expected, `ledger actual ${actual} ≠ invoices + vouchers + bank charges + payrolls + staff expenses ${expected}`);
   for (const i of u.items) assert(i.available === i.budget - i.committed - i.actual, `${i.code} does not reconcile`);
 });

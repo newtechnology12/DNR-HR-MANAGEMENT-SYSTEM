@@ -1,7 +1,8 @@
 /**
  * Payables → Staff expenses & advances: reimbursements and salary advances asked for by staff. Heads of department
  * and the Director of Finance approve them; the Cashier pays them from a cash book (petty cash, mobile money, bank);
- * advances are then recovered by the payroll.
+ * advances are then recovered by the payroll. "By category" totals what was approved in the period (the expense
+ * report).
  */
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -21,6 +22,8 @@ import {
 } from "@/components/ims";
 
 const sum = (rows: any[]) => rows.reduce((t, r) => t + Math.round(r.amount || 0), 0);
+type CategoryRow = { id: string; name: string; kind: string; requests: number; approved: number; paid: number; toPay: number };
+const total = (rows: CategoryRow[], k: "requests" | "approved" | "paid" | "toPay") => rows.reduce((t, r) => t + r[k], 0);
 
 export default function StaffExpenses() {
   const navigate = useNavigate();
@@ -33,6 +36,7 @@ export default function StaffExpenses() {
     paid: { label: "Paid", filter: 'status = "paid" || status = "recovered"' },
     advances: { label: "Advances", filter: 'kind = "advance"' },
     all: { label: "All", filter: "" },
+    categories: { label: "By category", filter: 'status = "approved" || status = "paid" || status = "recovered"' },
   };
   const [params, setParams] = useSearchParams();
   const fallback = cashier ? "pay" : "approve";
@@ -41,6 +45,7 @@ export default function StaffExpenses() {
   const [q] = useDebounce(search, 300);
   const [kind, setKind] = React.useState("");
   const [department, setDepartment] = React.useState("");
+  const [category, setCategory] = React.useState("");
   const [status, setStatus] = React.useState("");
   const [range, setRange] = React.useState<[string, string]>(["", ""]);
   const [sort, setSort] = React.useState("-created");
@@ -54,14 +59,31 @@ export default function StaffExpenses() {
     if (q.trim()) parts.push(["number", "description", "employee.name"].map((f) => `${f} ~ ${pbQuote(q.trim())}`).join(" || "));
     if (kind) parts.push(`kind = ${pbQuote(kind)}`);
     if (department) parts.push(`department = ${pbQuote(department)}`);
+    if (category) parts.push(`expenseCategory = ${pbQuote(category)}`);
     if (status) parts.push(`status = ${pbQuote(status)}`);
     if (range[0]) parts.push(`date >= ${pbQuote(`${range[0]} 00:00:00.000Z`)}`);
     if (range[1]) parts.push(`date <= ${pbQuote(`${range[1]} 23:59:59.999Z`)}`);
     return parts.filter(Boolean).map((p) => `(${p})`).join(" && ");
-  }, [view, q, kind, department, status, range]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, q, kind, department, category, status, range]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => setPage(1), [filter, sort]);
 
-  const list = useQuery(["staff-expenses", filter, sort, page, perPage], () => pocketbase.collection("prepayments").getList(page, perPage, { filter, sort: `${sort},-number`, expand: "employee,department,expenseCategory" }), { keepPreviousData: true });
+  const byCategory = view === "categories";
+  const list = useQuery(["staff-expenses", filter, sort, page, perPage], () => pocketbase.collection("prepayments").getList(page, perPage, { filter, sort: `${sort},-number`, expand: "employee,department,expenseCategory" }), { keepPreviousData: true, enabled: !byCategory });
+  // Approved requests (waiting for payment, paid, recovered) totalled by category, dated in the period.
+  const summary = useQuery(["staff-expense-categories", filter], async () => {
+    const rows: any[] = await pocketbase.collection("prepayments").getFullList({ filter, expand: "expenseCategory", batch: 1000 });
+    const by: Record<string, CategoryRow> = {};
+    for (const r of rows) {
+      const id = r.expenseCategory || "-";
+      const row = (by[id] = by[id] || { id, name: r.expand?.expenseCategory?.name || "No category", kind: r.kind, requests: 0, approved: 0, paid: 0, toPay: 0 });
+      const amount = Math.round(r.amount || 0);
+      row.requests += 1;
+      row.approved += amount;
+      if (r.status === "approved") row.toPay += amount;
+      else row.paid += amount;
+    }
+    return Object.values(by).sort((a, b) => b.approved - a.approved);
+  }, { enabled: byCategory, keepPreviousData: true });
   const kpis = useQuery(["staff-expense-kpis", user?.id], async () => {
     const rows = await pocketbase.collection("prepayments").getFullList({ filter: 'number != "" && (status = "pending_approval" || status = "approved" || status = "paid" || status = "recovered")', fields: "id,status,kind,amount,paid_at,pending_approvers", batch: 1000 });
     const month = new Date().toISOString().slice(0, 7);
@@ -73,15 +95,29 @@ export default function StaffExpenses() {
     return { waiting, mineToApprove, toPay, paidMonth, outstanding };
   });
   const departments = useQuery(["departments-list"], () => pocketbase.collection("departments").getFullList({ sort: "name", fields: "id,name" }), { staleTime: 300_000 });
+  const categories = useQuery(["expense-categories-list"], () => pocketbase.collection("expenses_categories").getFullList({ sort: "name", fields: "id,name" }), { staleTime: 300_000 });
 
   const chips: FilterChip[] = [
     kind && { key: "kind", label: `Type: ${EXPENSE_KIND[kind]}`, onRemove: () => setKind("") },
     department && { key: "department", label: `Department: ${(departments.data || []).find((d: any) => d.id === department)?.name || "…"}`, onRemove: () => setDepartment("") },
+    category && { key: "category", label: `Category: ${(categories.data || []).find((c: any) => c.id === category)?.name || "…"}`, onRemove: () => setCategory("") },
     status && { key: "status", label: `Status: ${EXPENSE_STATUS[status]?.note || EXPENSE_STATUS[status]?.label || status}`, onRemove: () => setStatus("") },
     (range[0] || range[1]) && { key: "range", label: `Date: ${range[0] ? fmtDate(range[0]) : "…"} – ${range[1] ? fmtDate(range[1]) : "…"}`, onRemove: () => setRange(["", ""]) },
   ].filter(Boolean) as FilterChip[];
 
   const doExport = async (format: ExportFormat) => {
+    if (byCategory) {
+      await exportReport({
+        title: "Staff expenses by category", subtitle: ["Approved requests", ...chips.map((c) => c.label), q && `Search: “${q}”`].filter(Boolean).join(" · "), rows: summary.data || [], format,
+        what: "prepayments", fileName: "staff-expenses-by-category", totals: ["Requests", "Approved", "Paid", "Waiting for payment"],
+        columns: [
+          { header: "Category", value: (r: CategoryRow) => r.name, width: 32 }, { header: "Type", value: (r: CategoryRow) => EXPENSE_KIND[r.kind] || "", width: 14 },
+          { header: "Requests", value: (r: CategoryRow) => r.requests, format: "number" }, { header: "Approved", value: (r: CategoryRow) => r.approved, format: "money" },
+          { header: "Paid", value: (r: CategoryRow) => r.paid, format: "money" }, { header: "Waiting for payment", value: (r: CategoryRow) => r.toPay, format: "money" },
+        ],
+      });
+      return;
+    }
     const rows: any[] = await pocketbase.collection("prepayments").getFullList({ filter, sort: `${sort},-number`, expand: "employee,department,expenseCategory,paid_from", batch: 500 });
     await exportReport({
       title: "Staff expenses and advances", subtitle: [VIEWS[view].label, ...chips.map((c) => c.label), q && `Search: “${q}”`].filter(Boolean).join(" · "), rows, format,
@@ -109,6 +145,15 @@ export default function StaffExpenses() {
     },
   ];
 
+  const cats = summary.data || [];
+  const categoryColumns: Column<CategoryRow>[] = [
+    { key: "name", header: "Category", cell: (r) => <span className="font-semibold text-ims-text">{r.name}</span>, sub: (r) => EXPENSE_KIND[r.kind], total: "Total" },
+    { key: "requests", header: "Requests", numeric: true, cell: (r) => <Num value={r.requests} />, total: <Num value={total(cats, "requests")} /> },
+    { key: "approved", header: "Approved (RWF)", numeric: true, cell: (r) => <span className="font-semibold"><Num value={r.approved} /></span>, total: <Num value={total(cats, "approved")} /> },
+    { key: "paid", header: "Paid (RWF)", numeric: true, cell: (r) => (r.paid ? <Num value={r.paid} /> : <span className="text-ims-faint">—</span>), total: <Num value={total(cats, "paid")} /> },
+    { key: "toPay", header: "Waiting for payment (RWF)", numeric: true, cell: (r) => (r.toPay ? <Num value={r.toPay} /> : <span className="text-ims-faint">—</span>), total: <Num value={total(cats, "toPay")} /> },
+  ];
+
   const k = kpis.data;
   const tabs = Object.entries(VIEWS).map(([key, v]) => ({ key, label: v.label, count: key === "approve" ? k?.mineToApprove.length : key === "pay" ? k?.toPay.length : undefined }));
   return (
@@ -133,14 +178,36 @@ export default function StaffExpenses() {
         <FilterBar
           search={{ value: search, onChange: setSearch, placeholder: "Search number, staff or description" }}
           chips={chips}
-          onClear={() => { setKind(""); setDepartment(""); setStatus(""); setRange(["", ""]); }}
+          onClear={() => { setKind(""); setDepartment(""); setCategory(""); setStatus(""); setRange(["", ""]); }}
           right={<ExportMenu permission={["view_expenses", "view_expense_reports"]} onExport={doExport} />}
         >
           <FilterSelect label="Type" value={kind} onChange={setKind} options={Object.entries(EXPENSE_KIND).map(([value, label]) => ({ value, label }))} />
           <FilterSelect label="Department" value={department} onChange={setDepartment} options={(departments.data || []).map((d: any) => ({ value: d.id, label: d.name }))} />
+          <FilterSelect label="Category" value={category} onChange={setCategory} options={(categories.data || []).map((c: any) => ({ value: c.id, label: c.name }))} />
           {view === "all" && <FilterSelect label="Status" value={status} onChange={setStatus} options={Object.entries(EXPENSE_STATUS).filter(([s]) => s !== "draft").map(([value, v]) => ({ value, label: v.note ? `${v.label} · ${v.note}` : v.label }))} />}
           <DateRangeFilter label="Date" from={range[0]} to={range[1]} onChange={(a, b) => setRange([a, b])} />
         </FilterBar>
+        {byCategory ? (
+          <DataTable
+            columns={categoryColumns}
+            rows={cats}
+            rowKey={(r) => r.id}
+            onRowClick={(r) => {
+              // the requests behind the figure
+              if (r.id === "-") return;
+              setCategory(r.id);
+              setParams({ view: "all" });
+            }}
+            loading={summary.isLoading}
+            fetching={summary.isFetching && !summary.isLoading}
+            error={summary.error}
+            onRetry={() => summary.refetch()}
+            minWidth={720}
+            caption="Approved staff expenses by category"
+            empty={<EmptyState icon={Receipt} text="No approved request matches these filters." />}
+            footer={<p className="border-t border-ims-divider px-5 py-3 text-t-small text-ims-muted">Requests approved, paid or recovered, by the date of the expense. Claims are charged to the department's budget line for the category's account; advances are recovered by the payroll.</p>}
+          />
+        ) : (
         <DataTable
           columns={columns}
           rows={(list.data?.items || []) as any[]}
@@ -160,6 +227,7 @@ export default function StaffExpenses() {
           empty={<EmptyState icon={Receipt} text={view === "approve" ? "Nothing is waiting for your approval." : view === "pay" ? "Nothing approved is waiting to be paid." : "No request matches these filters."} />}
           footer={<Pager page={page} perPage={perPage} total={list.data?.totalItems || 0} onPage={setPage} onPerPage={(n) => { setPerPage(n); setPage(1); }} />}
         />
+        )}
       </Card>
       <ExpenseRequestDialog open={asking} onClose={() => setAsking(false)} onSaved={() => { list.refetch(); kpis.refetch(); }} />
       {paying && <PayExpenseDialog request={paying} onClose={() => setPaying(null)} onPaid={() => { setPaying(null); list.refetch(); kpis.refetch(); }} />}

@@ -250,6 +250,45 @@ async function main() {
   }
   console.log(`  ✓ ${posted} receipts posted, ${moved} transfers, ${cashPaid} petty cash payments`);
 
+  // ---------------------------------------------------------------- statutory payments
+  // Each month's PAYE and RSSB contributions (from the payroll journal) and the withholding tax kept back on supplier
+  // payments are paid over on the 15th of the next month: one voucher to RRA, one to RSSB.
+  const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const RSSB = ["2105", "2106", "2107", "2112", "2113"];
+  let remitted = 0;
+  for (let k = 0; k < months.length; k++) {
+    const due = k + 1 < months.length ? at(k + 1, 15) : at("cur", 15);
+    if (!due) continue;
+    const y = Number(months[k].start.slice(0, 4));
+    const mo = Number(months[k].start.slice(5, 7));
+    const label = `${MONTH_NAMES[mo - 1]} ${y}`;
+    const pay = (await admin.collection("payrolls").getList(1, 1, { filter: `year = ${y} && month = ${mo} && (status = "approved" || status = "paid") && gl_journal != ""` })).items[0];
+    const credited = async (filter) => {
+      const ls = await admin.collection("gl_journal_lines").getFullList({ filter, fields: "account,credit,debit" });
+      const by = {};
+      for (const l of ls) by[l.account] = (by[l.account] || 0) + l.credit - l.debit;
+      return by;
+    };
+    const fromPayroll = pay ? await credited(`journal = "${pay.gl_journal}"`) : {};
+    const wht = await credited(`account = "${gl["2108"]}" && date >= "${months[k].start} 00:00:00.000Z" && date <= "${months[k].end} 23:59:59.999Z" && (status = "posted" || status = "reversed")`);
+    const rra = [["2104", fromPayroll[gl["2104"]] || 0, `PAYE ${label}`], ["2108", wht[gl["2108"]] || 0, `Withholding tax ${label}`]].filter(([, n]) => n > 0);
+    const rssb = RSSB.map((c) => [c, fromPayroll[gl[c]] || 0, label]).filter(([, n]) => n > 0);
+    for (const [payee, lines, ref] of [["Rwanda Revenue Authority (RRA)", rra, `RRA-${y}${pad(mo)}`], ["Rwanda Social Security Board (RSSB)", rssb, `RSSB-${y}${pad(mo)}`]]) {
+      if (!lines.length) continue;
+      const v = await acc.collection("payment_vouchers").create({
+        // the authority collection accounts are illustrative: Finance enters the real ones from the RRA / RSSB notices
+        voucher_type: "statutory", payee_name: payee, payee_bank: { bank_name: "Bank of Kigali", bank_account_name: `${payee.split(" (")[0]} — collection account (illustrative)`, bank_account_number: payee.includes("RRA") ? "000-0000-RRA-DEMO" : "000-0000-RSSB-DEMO" }, description: `${payee.split(" (")[0]} — ${lines.map(([, , p]) => p).filter((x, i, a) => a.indexOf(x) === i).join(", ")}`,
+        lines: lines.map(([c, amount, period]) => ({ account: gl[c], amount, period })),
+        notes: "Declared on the RRA / RSSB portal; payment reference from the declaration.",
+      });
+      await acc.send(`/api/ims/vouchers/${v.id}/submit`, { method: "POST" });
+      await approveAll(await approvalOf("payment_vouchers", v.id));
+      await cashier.send(`/api/ims/vouchers/${v.id}/pay`, { method: "POST", body: { method: "bank_transfer", account: A["BK-OPS"].id, reference: ref, payment_date: noon(due) } });
+      remitted++;
+    }
+  }
+  console.log(`  ✓ ${remitted} statutory payments: PAYE and withholding tax to RRA, contributions to RSSB, by the 15th of the next month`);
+
   // ---------------------------------------------------------------- statements
   const chargeLine = (await admin.collection("budget_lines").getFirstListItem('code ~ "FIN-5212" && status = "active"').catch(() => null))?.id || "";
   const bankExtras = (code) => {

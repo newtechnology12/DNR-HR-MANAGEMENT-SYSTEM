@@ -54,6 +54,50 @@ function heldBy(dao, invoiceId, excludeVoucherId) {
   return held;
 }
 
+// ------------------------------------------------------------------ statutory payments
+/** Liabilities paid by a statutory voucher, and to whom. */
+const STATUTORY = {
+  2104: "RRA", 2108: "RRA", 2109: "RRA",
+  2105: "RSSB", 2106: "RSSB", 2107: "RSSB", 2112: "RSSB", 2113: "RSSB",
+  2111: "Other",
+};
+const OPEN_VOUCHER = "(status = 'draft' || status = 'pending_approval' || status = 'approved' || status = 'returned')";
+
+function statutoryAccount(dao, id, row) {
+  let a;
+  try {
+    a = dao.findRecordById("gl_accounts", id);
+  } catch (_) {
+    throw new BadRequestError(`Line ${row}: choose what is paid.`);
+  }
+  if (!STATUTORY[a.getString("code")] || !a.getBool("is_posting") || !a.getBool("active")) {
+    throw new BadRequestError(`Line ${row}: ${a.getString("code")} ${a.getString("name")} is not paid with a statutory voucher (PAYE, withholding tax, VAT, social security contributions and other deductions only).`);
+  }
+  return a;
+}
+
+/** What is owed on each statutory liability (ledger balance) and what other open vouchers already hold. */
+function statutoryOwed(dao, excludeVoucherId) {
+  const codes = Object.keys(STATUTORY);
+  const accounts = (dao.findRecordsByFilter("gl_accounts", codes.map((c) => `code = '${c}'`).join(" || "), "code", 0, 0) || []);
+  const out = {};
+  for (const a of accounts) {
+    const m = new DynamicModel({ n: 0 });
+    dao.db().newQuery("SELECT COALESCE(SUM(credit - debit), 0) AS n FROM gl_journal_lines WHERE account = {:a} AND (status = 'posted' OR status = 'reversed')").bind({ a: a.id }).one(m);
+    out[a.id] = { id: a.id, code: a.getString("code"), name: a.getString("name"), authority: STATUTORY[a.getString("code")], owed: r0(m.n), held: 0 };
+  }
+  for (const v of dao.findRecordsByFilter("payment_vouchers", `voucher_type = 'statutory' && ${OPEN_VOUCHER}`, "", 5000, 0) || []) {
+    if (v.id === excludeVoucherId) continue;
+    for (const l of core.parseJson(v, "lines", []) || []) if (out[l.account]) out[l.account].held += r0(l.amount);
+  }
+  return out;
+}
+
+/** GET /api/ims/vouchers/statutory-accounts — what can be paid over, with what is owed and still free. */
+function statutoryAccounts(dao, excludeVoucherId) {
+  return Object.values(statutoryOwed(dao, excludeVoucherId || "")).map((x) => Object.assign(x, { available: Math.max(x.owed - x.held, 0) }));
+}
+
 /** Approved invoices of a supplier with what is still free to put on a voucher. */
 function payable(dao, supplierId, excludeVoucherId) {
   const invs = dao.findRecordsByFilter("supplier_invoices", "supplier = {:s} && (status = 'approved' || status = 'partially_paid')", "due_date", 500, 0, { s: supplierId }) || [];
@@ -73,7 +117,7 @@ function payable(dao, supplierId, excludeVoucherId) {
 /** Computes lines, payee, withholding tax and totals. Throws on anything that must not be paid. */
 function normalize(dao, v) {
   const type = v.getString("voucher_type") || "invoice";
-  if (["invoice", "direct"].indexOf(type) === -1) throw new BadRequestError("Choose the voucher type.");
+  if (["invoice", "direct", "statutory"].indexOf(type) === -1) throw new BadRequestError("Choose the voucher type.");
   v.set("voucher_type", type);
   v.set("currency", "RWF");
 
@@ -137,6 +181,50 @@ function normalize(dao, v) {
     v.set("expense_account", "");
     if (!String(v.getString("description")).trim()) v.set("description", `Payment of ${lines.map((l) => `${l.number} (${l.supplier_invoice_number})`).join(", ")}`);
     if (!v.getString("due_date")) v.set("due_date", lines.map((l) => l.due_date).filter(Boolean).sort()[0] ? `${lines.map((l) => l.due_date).filter(Boolean).sort()[0]} 00:00:00.000Z` : "");
+  } else if (type === "statutory") {
+    // PAYE, withholding tax and VAT to RRA, contributions to RSSB, other deductions: the liabilities are paid; no budget
+    if (code) throw new BadRequestError("A statutory payment has no withholding tax.");
+    const raw = core.parseJson(v, "lines", []);
+    if (!Array.isArray(raw) || !raw.length) throw new BadRequestError("Choose what is paid: PAYE, withholding tax, a social security contribution…");
+    const owed = statutoryOwed(dao, v.id);
+    const seen = {};
+    const payee = { RRA: "RRA", RSSB: "RSSB", Other: "another payee" };
+    let authority = "";
+    const lines = raw.map((x, i) => {
+      const a = statutoryAccount(dao, String((x && x.account) || ""), i + 1);
+      const label = `${a.getString("code")} ${a.getString("name")}`;
+      if (seen[a.id]) throw new BadRequestError(`${label} appears twice on the voucher.`);
+      seen[a.id] = true;
+      // one payee per voucher: RRA's taxes and RSSB's contributions are paid separately
+      const who = STATUTORY[a.getString("code")];
+      if (authority && who !== authority) throw new BadRequestError(`One voucher pays one authority: ${label} is paid to ${payee[who]}, the other lines to ${payee[authority]}. Prepare a voucher for each.`);
+      authority = who;
+      const amount = r0(x.amount);
+      if (amount <= 0) throw new BadRequestError(`${label}: enter the amount.`);
+      const o = owed[a.id] || { owed: 0, held: 0 };
+      const open = o.owed - o.held;
+      if (amount > open) throw new BadRequestError(`${label}: ${fmt(amount)} is more than the ${fmt(Math.max(open, 0))} still owed${o.held ? ` (${fmt(o.held)} is already on other vouchers)` : ""}.`);
+      gross += amount;
+      return { account: a.id, code: a.getString("code"), name: a.getString("name"), authority: STATUTORY[a.getString("code")], amount, period: String((x && x.period) || "").trim().slice(0, 60) };
+    });
+    if (v.getString("supplier")) {
+      const supplier = load(dao, "suppliers", v.getString("supplier"), "Supplier");
+      v.set("payee_name", supplier.getString("name"));
+      v.set("payee_bank", bankOf(supplier));
+    } else {
+      if (!String(v.getString("payee_name")).trim()) throw new BadRequestError("Enter who is paid (Rwanda Revenue Authority, Rwanda Social Security Board…).");
+      const given = core.parseJson(v, "payee_bank", {}) || {};
+      const bank = {};
+      for (const f of BANK_FIELDS) bank[f] = String(given[f] || "").trim();
+      v.set("payee_bank", bank);
+    }
+    if (!String(v.getString("description")).trim()) v.set("description", `${lines.map((l) => l.name).join(", ")}${lines[0].period ? ` — ${lines[0].period}` : ""}`.slice(0, 500));
+    v.set("lines", lines);
+    v.set("budget_line", "");
+    v.set("funding_source", "");
+    v.set("expense_account", "");
+    v.set("department", "");
+    base = 0;
   } else {
     if (!v.getString("budget_line")) throw new BadRequestError("Choose the budget line the payment is charged to.");
     const line = require("./budget.js").attachLine(dao, v, null);
@@ -503,4 +591,4 @@ function report(dao, actor, key, f) {
   return { key, title: def.title, filters: f, generated_at: new Date().toISOString(), columns: out.columns.map(([k, label, type]) => ({ key: k, label, type: type || "text" })), rows: out.rows, totals: out.totals, note: out.note || "" };
 }
 
-module.exports = { beforeCreate, beforeUpdate, beforeDelete, guardRead, submit, onApproved, execute, cancel, payable, report, canView, REPORTS };
+module.exports = { beforeCreate, beforeUpdate, beforeDelete, guardRead, submit, onApproved, execute, cancel, payable, report, canView, REPORTS, statutoryAccounts, STATUTORY };

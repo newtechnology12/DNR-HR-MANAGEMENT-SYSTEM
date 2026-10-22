@@ -17,7 +17,26 @@ export const VOUCHER_STATUS: Record<string, { label: string; tone: Tone; note?: 
 export const VOUCHER_TYPES: Record<string, { label: string; hint: string }> = {
   invoice: { label: "Supplier invoices", hint: "Pays approved invoices of one supplier (after the three-way match)" },
   direct: { label: "Direct expense", hint: "A payment without a purchase order, charged to a budget line" },
+  statutory: { label: "Statutory payment", hint: "PAYE, withholding tax and VAT to RRA, or contributions to RSSB" },
 };
+
+/** Who a statutory liability is paid to (one authority per voucher). */
+export const AUTHORITIES: Record<string, { label: string; payee: string }> = {
+  RRA: { label: "RRA", payee: "Rwanda Revenue Authority (RRA)" },
+  RSSB: { label: "RSSB", payee: "Rwanda Social Security Board (RSSB)" },
+  Other: { label: "Other", payee: "" },
+};
+
+/** A liability a statutory voucher can pay, with what the ledger says is owed and what other open vouchers hold. */
+export interface StatutoryAccount {
+  id: string;
+  code: string;
+  name: string;
+  authority: "RRA" | "RSSB" | "Other";
+  owed: number;
+  held: number;
+  available: number;
+}
 
 export const BANK_LABELS: [string, string][] = [
   ["bank_name", "Bank"],
@@ -56,6 +75,7 @@ const qs = (params: Record<string, unknown>) =>
 
 export const payablesApi = {
   payable: (supplier: string, voucher?: string) => pocketbase.send(`/api/ims/vouchers/payable?${qs({ supplier, voucher })}`, {}) as Promise<{ items: PayableInvoice[] }>,
+  statutory: (voucher?: string) => pocketbase.send(`/api/ims/vouchers/statutory-accounts?${qs({ voucher })}`, {}) as Promise<{ items: StatutoryAccount[] }>,
   action: (id: string, action: "submit" | "pay" | "cancel", body: Record<string, unknown> = {}) =>
     pocketbase.send(`/api/ims/vouchers/${id}/${action}`, { method: "POST", body }) as Promise<{ id?: string; status?: string; approval?: string; payments?: string[] }>,
   report: (key: string, f: Record<string, string>) => pocketbase.send(`/api/ims/payables/reports/${key}?${qs(f)}`, {}) as Promise<ServerReport>,

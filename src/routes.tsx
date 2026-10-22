@@ -34,7 +34,6 @@ import WeeklyPlans from "./pages/dashboard/WeeklyPlane";
 import RequestCash from "./pages/dashboard/RequestCash";
 import Reason from "./pages/dashboard/Reason";
 import ClientManagement from "./pages/dashboard/clients";
-import ExpensesReport from "./pages/dashboard/ExpensesReport";
 import EmployeeTimesheet from "./pages/dashboard/EmployeeTimesheet";
 import TimesheetReport from "./pages/dashboard/TimesheetReport";
 // import CarManagement from "./pages/dashboard/CarManagement";
@@ -97,7 +96,12 @@ const PostingAccounts = lazy(() => import("./pages/setup/PostingAccounts"));
 // Staff expenses and advances (paid from the cash books, posted to the ledger); replace the old petty-cash pages.
 const StaffExpenses = lazy(() => import("./pages/finance/StaffExpenses"));
 const StaffExpenseDetail = lazy(() => import("./pages/finance/StaffExpenseDetail"));
-const EXPENSE_USERS = ["view_expenses", "view_employee_prepayments", "record_payments", "approve_or_reject_expense"];
+const EXPENSE_USERS = ["view_expenses", "view_employee_prepayments", "record_payments", "approve_or_reject_expense", "view_expense_reports"];
+// Step 9: statements and management reporting from the general ledger.
+const FinancialStatements = lazy(() => import("./pages/reports/FinancialStatements"));
+const DonorReport = lazy(() => import("./pages/reports/DonorReport"));
+const ExecutiveDashboard = lazy(() => import("./pages/reports/ExecutiveDashboard"));
+const STATEMENT_USERS = ["view_financial_reports", "view_journals", "approve_journals", "close_periods", "export_ledger"];
 const SalaryPayments = lazy(() => import("./pages/treasury/SalaryPayments"));
 const AssetsOverview = lazy(() => import("./pages/assets/AssetsOverview"));
 const AssetRegister = lazy(() => import("./pages/assets/AssetRegister"));
@@ -584,14 +588,10 @@ const router = createBrowserRouter([
               {
                 path: "reports",
                 children: [
-                  {
-                    path: "expense-reports",
-                    element: (
-                      <ProtectedRoute entity="view_expense_reports">
-                        <ExpensesReport />
-                      </ProtectedRoute>
-                    ),
-                  },
+                  { path: "statements", element: <ProtectedRoute entity={STATEMENT_USERS}><FinancialStatements /></ProtectedRoute> },
+                  { path: "donor", element: <ProtectedRoute entity={STATEMENT_USERS}><DonorReport /></ProtectedRoute> },
+                  { path: "executive", element: <ProtectedRoute entity={STATEMENT_USERS}><ExecutiveDashboard /></ProtectedRoute> },
+                  { path: "expense-reports", element: <Navigate to="/dashboard/finance/staff-expenses?view=categories" replace /> },
                   {
                     path: "employee-timesheet",
                     element: (

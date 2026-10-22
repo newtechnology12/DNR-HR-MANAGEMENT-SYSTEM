@@ -95,6 +95,7 @@ cleanup.push(async () => {
     await admin.collection("gl_journals").delete(id);
   }
   for (const t of await admin.collection("gl_recurring_journals").getFullList({ filter: `name ~ "${tag}"`, fields: "id" })) await admin.collection("gl_recurring_journals").delete(t.id);
+  for (const j of [...reversals, ...mine]) for (const b of await admin.collection("budget_ledger").getFullList({ filter: `source_type = "journal_entry" && source_id = "${j.id}"`, fields: "id" })) await admin.collection("budget_ledger").delete(b.id);
 });
 
 console.log("Who reads the ledger");
@@ -185,6 +186,22 @@ await check("automatic journals are corrected from their document, not by hand",
   const auto = await admin.collection("gl_journals").getFirstListItem('status = "posted" && journal_type = "automatic" && source_type = "payroll"');
   await expectStatus(post(daf, `/api/ims/journals/${auto.id}/reverse`, { reason: what("Trying to reverse the payroll") }), 400, "correct it there");
   await expectStatus(post(acc, `/api/ims/journals/${auto.id}/update`, { date: today, description: what("Edit payroll"), lines: lines(1) }), 400);
+});
+
+await check("a posted reclassification moves the budget actual between lines; its reversal moves it back", async () => {
+  const line = (code) => admin.collection("budget_lines").getFirstListItem(`code = "${code}"`);
+  const to = await line("CBD-5209-MC");
+  const from = await line("CBD-5207-MC");
+  const usage = async () => Object.fromEntries((await daf.send(`/api/ims/budget/usage?department=${CBD.id}`, {})).items.map((i) => [i.code, i.actual]));
+  const before = await usage();
+  const j = await post(acc, "/api/ims/journals", { date: today, description: what("Workshop costs booked to travel by mistake"), lines: [{ account: to.gl_account, debit: 10000, department: CBD.id }, { account: from.gl_account, credit: 10000, department: CBD.id }] });
+  await post(acc, `/api/ims/journals/${j.id}/submit`);
+  await act(daf, (await admin.collection("gl_journals").getOne(j.id)).approval);
+  const after = await usage();
+  assert(after["CBD-5209-MC"] === before["CBD-5209-MC"] + 10000 && after["CBD-5207-MC"] === before["CBD-5207-MC"] - 10000, `actuals ${JSON.stringify([before["CBD-5209-MC"], after["CBD-5209-MC"], before["CBD-5207-MC"], after["CBD-5207-MC"]])}`);
+  await post(daf, `/api/ims/journals/${j.id}/reverse`, { reason: what("Reclassified twice"), date: today });
+  const back = await usage();
+  assert(back["CBD-5209-MC"] === before["CBD-5209-MC"] && back["CBD-5207-MC"] === before["CBD-5207-MC"], "the reversal did not move the actuals back");
 });
 
 await check("returned journals go back to the Accountant; rejected ones never reach the ledger", async () => {
