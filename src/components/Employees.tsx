@@ -1,30 +1,35 @@
-import displayDate from "@/utils/displayDate";
-import DataTable from "@/components/DataTable";
-import { ColumnDef, PaginationState } from "@tanstack/react-table";
-import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
-import DataTableRowActions from "@/components/datatable/DataTableRowActions";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useEffect, useState } from "react";
+import { useQuery } from "react-query";
+import { useNavigate } from "react-router-dom";
+import { useDebounce } from "use-debounce";
 import { z } from "zod";
-import { FileSpreadsheet, PlusCircle } from "lucide-react";
-import { cn } from "@/utils";
-import { Link, useNavigate } from "react-router-dom";
+import { ExternalLink, FileSpreadsheet, Pencil, Plus, Users } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
-import { useState } from "react";
-import { useQuery } from "react-query";
-import { addDays } from "date-fns";
-import { Button } from "@/components/ui/button";
+import formatFilter from "@/utils/formatFilter";
 import ExportMenu from "@/components/enterprise/ExportMenu";
 import { exportReport } from "@/lib/exporter";
 import Avatar from "@/components/shared/Avatar";
 import useModalState from "@/hooks/useModalState";
-import { EmployeeFormModal } from "@/components/modals/EmployeeFormModal";
 import useEditRow from "@/hooks/use-edit-row";
-import { ScrollArea, ScrollBar } from "./ui/scroll-area";
-import formatFilter from "@/utils/formatFilter";
-import { Badge } from "@/components/ui/badge";
-import StatCard from "@/components/StatCard";
-import { Building2, UserCheck, UserPlus, UserX, Users } from "lucide-react";
+import { EmployeeFormModal } from "@/components/modals/EmployeeFormModal";
+import {
+  Button,
+  Card,
+  Column,
+  DataTable,
+  EmptyState,
+  FilterBar,
+  FilterChip,
+  FilterSelect,
+  KpiBand,
+  PageHeader,
+  Pager,
+  StatusPill,
+  Tabs,
+  fmtDate,
+  fmtNumber,
+} from "@/components/ims";
 
 export const orderSchema = z.object({
   id: z.string(),
@@ -38,201 +43,65 @@ export const orderSchema = z.object({
 
 export type Order = z.infer<typeof orderSchema>;
 
-export default function Employees({ ...otherProps }) {
+type Row = {
+  id: string;
+  name: string;
+  avatar: string;
+  role: string;
+  email: string;
+  phone: string;
+  department: string;
+  status: string;
+  joined_at: string;
+  original: any;
+};
+
+const TABS = [
+  { key: "Active", label: "Active employees" },
+  { key: "Inactive", label: "Inactive employees" },
+];
+
+/** Small round photo, initials when there is none. */
+export function EmployeePhoto({ record, name, className }: { record?: any; name?: string; className?: string }) {
+  return (
+    <Avatar
+      className={className || "h-8 w-8"}
+      textClass="bg-ims-subtle text-t-hint font-bold text-ims-body"
+      path={record?.avatar ? pocketbase.files.getUrl(record, record.avatar) : ""}
+      name={(name || "").trim() || "?"}
+    />
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export default function Employees(_props: Record<string, unknown> = {}) {
   const navigate = useNavigate();
 
-  const columns: ColumnDef<Order>[] = [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          // @ts-ignore
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-          className="translate-y-[2px]"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-          className="translate-y-[2px]"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "name",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Name" />
-      ),
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <Avatar
-            className={"h-6 w-6 !text-[10px]"}
-            textClass={"!text-[8px]"}
-            path={
-              (row.original as any).avatar
-                ? pocketbase.files.getUrl(
-                    (row.original as any).original,
-                    (row.original as any).avatar
-                  )
-                : ""
-            }
-            name={row.getValue("name")}
-          />
-          <Link
-            to={`/dashboard/hr/employees/${row.original.id}`}
-            className="hover:underline flex truncate items-center gap-2 capitalize hover:text-slate-600"
-          >
-            {row.getValue("name")}
-          </Link>
-        </div>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
-
-    {
-      accessorKey: "email",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Email" />
-      ),
-      cell: ({ row }) => (
-        <div className="truncate">{row.getValue("email")}</div>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "role",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Role" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize truncate">{row.getValue("role")}</div>
-      ),
-      enableSorting: false,
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableHiding: true,
-    },
-
-    {
-      accessorKey: "department",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Department" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize truncate">
-          {row.getValue("department") || "N.A"}
-        </div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: false,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "phone",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Phone" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("phone")}</div>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Status" />
-      ),
-      cell: ({ row }) => {
-        const status = row.getValue("status") as string;
-        return (
-          <Badge variant={status === "Active" ? "success" : "secondary"} className="capitalize">
-            {status}
-          </Badge>
-        );
-      },
-      filterFn: (__, _, value) => {
-        return value;
-      },
-    },
-    {
-      accessorKey: "joined_at",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Joined at" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize truncate">{row.getValue("joined_at")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      id: "actions",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Actions" />
-      ),
-      cell: ({ row }) => (
-        <DataTableRowActions
-          actions={[
-            {
-              title: "view employee profile",
-              onClick: (e) => {
-                navigate(`/dashboard/hr/employees/${e.id}`);
-              },
-            },
-            {
-              title: "update employee",
-              onClick: (e) => {
-                editRow.edit(e?.original);
-              },
-            },
-          ]}
-          row={row}
-        />
-      ),
-    },
+  const [searchText, setsearchText] = useState("");
+  const [search] = useDebounce(searchText, 300);
+  const [role, setRole] = useState("");
+  const [department, setDepartment] = useState("");
+  // Same shape as the old table facets: [{ id, value: [ids] }], turned into a filter by formatFilter.
+  const columnFilters = [
+    ...(role ? [{ id: "role", value: [role] }] : []),
+    ...(department ? [{ id: "department", value: [department] }] : []),
   ];
 
-  const [searchText, setsearchText] = useState("");
+  const [sorting, setSorting] = useState<{ id: string; desc: boolean }[]>([{ id: "created", desc: true }]);
+  const sort = sorting.map((p) => `${p.desc ? "-" : ""}${p.id}`)[0];
 
-  const [columnFilters, setColumnFilters] = useState<any>([]);
-
-  const [sorting, setSorting] = useState<any>([
-    {
-      id: "created",
-      desc: true,
-    },
-  ]);
-
-  const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 10,
-  });
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(15);
 
   const [activeTab, setactiveTab] = useState("Active");
+
+  useEffect(() => setPageIndex(0), [search, role, department, activeTab, pageSize, sort]);
 
   const employeesQuery = useQuery({
     queryKey: [
       "employees",
       {
-        search: searchText,
+        search,
         filter: columnFilters,
         sort: sorting,
         pageIndex,
@@ -242,44 +111,39 @@ export default function Employees({ ...otherProps }) {
     ],
     keepPreviousData: true,
     queryFn: () => {
-      const searchQ = searchText
-        ? `name~"${searchText}" || department.name~"${searchText}" `
-        : "";
+      const searchQ = search ? `name~"${search}" || department.name~"${search}" ` : "";
 
       const filters = formatFilter(columnFilters);
 
-      const sorters = sorting
-        .map((p) => `${p.desc ? "-" : "+"}${p.id}`)
-        .join(" && ");
+      const sorters = sorting.map((p) => `${p.desc ? "-" : "+"}${p.id}`).join(" && ");
 
       return pocketbase
         .collection("users")
         .getList(pageIndex + 1, pageSize, {
           ...cleanObject({
-            filter: [searchQ, filters, `status="${activeTab}"`]
-              .filter((e) => e)
-              .join("&&"),
+            filter: [searchQ, filters, `status="${activeTab}"`].filter((e) => e).join("&&"),
             expand: "department,role",
             sort: sorters,
           }),
         })
         .then((e) => {
           return {
-            items: e?.items?.map((e) => {
-              return {
+            items: e?.items?.map(
+              (e): Row => ({
                 id: e.id,
                 name: e.name,
                 avatar: e.avatar,
-                role: e.expand?.role?.name || "---",
-                email: e.email || "---",
+                role: e.expand?.role?.name || "",
+                email: e.email || "",
                 phone: e.phone,
-                department: e.expand?.department?.name || "---",
+                department: e.expand?.department?.name || "",
                 status: e.status,
-                joined_at: displayDate(e.joined_at),
+                joined_at: e.joined_at,
                 original: e,
-              };
-            }),
+              })
+            ),
             totalPages: e.totalPages,
+            totalItems: e.totalItems,
           };
         });
     },
@@ -293,27 +157,14 @@ export default function Employees({ ...otherProps }) {
   const statsQuery = useQuery({
     queryKey: ["employees-stats"],
     queryFn: async () => {
-      const startOfMonth = new Date(
-        new Date().getFullYear(),
-        new Date().getMonth(),
-        1
-      ).toISOString();
+      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
       const [total, active, inactive, departments, newHires] = await Promise.all([
         pocketbase.collection("users").getList(1, 1, {}).then((e) => e.totalItems),
-        pocketbase
-          .collection("users")
-          .getList(1, 1, { filter: `status="Active"` })
-          .then((e) => e.totalItems),
-        pocketbase
-          .collection("users")
-          .getList(1, 1, { filter: `status="Inactive"` })
-          .then((e) => e.totalItems),
+        pocketbase.collection("users").getList(1, 1, { filter: `status="Active"` }).then((e) => e.totalItems),
+        pocketbase.collection("users").getList(1, 1, { filter: `status="Inactive"` }).then((e) => e.totalItems),
         pocketbase.collection("departments").getList(1, 1, {}).then((e) => e.totalItems),
-        pocketbase
-          .collection("users")
-          .getList(1, 1, { filter: `joined_at >= "${startOfMonth}"` })
-          .then((e) => e.totalItems),
+        pocketbase.collection("users").getList(1, 1, { filter: `joined_at >= "${startOfMonth}"` }).then((e) => e.totalItems),
       ]);
 
       return { total, active, inactive, departments, newHires };
@@ -321,171 +172,149 @@ export default function Employees({ ...otherProps }) {
     enabled: true,
   });
 
+  // Options of the role and department filters (the old facets loaded the same lists).
+  const roles = useQuery(["employee-filter-roles"], () => pocketbase.collection("roles").getFullList({ sort: "name" }), { staleTime: 5 * 60_000 });
+  const departments = useQuery(["employee-filter-departments"], () => pocketbase.collection("departments").getFullList({ sort: "name" }), { staleTime: 5 * 60_000 });
+  const roleOptions = (roles.data || []).map((e: any) => ({ label: e.name, value: e.id }));
+  const departmentOptions = (departments.data || []).map((e: any) => ({ label: e.name, value: e.id }));
+
+  const chips: FilterChip[] = [
+    ...(role ? [{ key: "role", label: `Role: ${roleOptions.find((o) => o.value === role)?.label || "selected"}`, onRemove: () => setRole("") }] : []),
+    ...(department ? [{ key: "department", label: `Department: ${departmentOptions.find((o) => o.value === department)?.label || "selected"}`, onRemove: () => setDepartment("") }] : []),
+  ];
+  const filtered = Boolean(search || chips.length);
+
+  const openProfile = (r: Row) => navigate(`/dashboard/hr/employees/${r.id}`);
+
+  const columns: Column<Row>[] = [
+    {
+      key: "name",
+      header: "Employee",
+      sortField: "name",
+      className: "max-w-[300px]",
+      cell: (r) => (
+        <span className="flex min-w-0 items-center gap-3">
+          <EmployeePhoto record={r.original} name={r.name} />
+          <span className="min-w-0">
+            <span className="block truncate font-semibold text-ims-text">{r.name || "—"}</span>
+            {r.email && <span className="block truncate text-t-small text-ims-muted">{r.email}</span>}
+          </span>
+        </span>
+      ),
+    },
+    { key: "department", header: "Department", clamp: true, cell: (r) => r.department || <span className="text-ims-faint">—</span> },
+    { key: "role", header: "Role", cell: (r) => r.role || <span className="text-ims-faint">—</span> },
+    { key: "phone", header: "Phone", sortField: "phone", nowrap: true, cell: (r) => <span className="tabular-nums">{r.phone || "—"}</span> },
+    { key: "status", header: "Status", cell: (r) => <StatusPill status={r.status} /> },
+    { key: "joined_at", header: "Joined", sortField: "joined_at", nowrap: true, cell: (r) => fmtDate(r.joined_at) },
+  ];
+
+  const data = employeesQuery.data;
+  const s = statsQuery.data;
   const statsLoading = statsQuery.status === "loading";
 
   return (
     <>
-      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard
-          title="Total Employees"
-          icon={Users}
-          tone="default"
-          loading={statsLoading}
-          value={statsQuery.data?.total}
-          description="All employees on record"
-        />
-        <StatCard
-          title="Active"
-          icon={UserCheck}
-          tone="success"
-          loading={statsLoading}
-          value={statsQuery.data?.active}
-          description="Currently active employees"
-        />
-        <StatCard
-          title="Inactive"
-          icon={UserX}
-          tone="danger"
-          loading={statsLoading}
-          value={statsQuery.data?.inactive}
-          description="Currently inactive employees"
-        />
-        <StatCard
-          title="Departments"
-          icon={Building2}
-          tone="info"
-          loading={statsLoading}
-          value={statsQuery.data?.departments}
-          description="Departments in the company"
-        />
-        <StatCard
-          title="New Hires"
-          icon={UserPlus}
-          tone="warning"
-          loading={statsLoading}
-          value={statsQuery.data?.newHires}
-          description="Joined this month"
-        />
-      </div>
-
-      <div className="rounded-t-card border-l border-r border-t border-slate-200 bg-white">
-        <ScrollArea className="w-full whitespace-nowrap">
-          <div className="flex items-center justify-start px-2">
-            {[
-              { title: "Active employees", name: "Active" },
-              { title: "Inactive employees", name: "Inactive" },
-            ].map((e, i) => {
-              return (
-                <button
-                  type="button"
-                  key={i}
-                  className={cn(
-                    "relative cursor-pointer px-6 py-3 text-center text-[13px] font-medium capitalize text-slate-500 sm:text-sm",
-                    {
-                      "text-primary": activeTab === e.name,
-                    }
-                  )}
-                  onClick={() => {
-                    setactiveTab(e.name);
-                  }}
-                >
-                  {activeTab === e.name && (
-                    <div className="absolute bottom-0 left-0 h-[3px] w-full rounded-t-md bg-primary" />
-                  )}
-                  <span>{e.title}</span>
-                </button>
-              );
-            })}
-          </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
-      </div>
-      <DataTable
-        className="rounded-t-none"
-        isFetching={employeesQuery.isFetching}
-        defaultColumnVisibility={{}}
-        isLoading={employeesQuery.status === "loading"}
-        data={employeesQuery?.data?.items || []}
-        columns={columns}
-        onSearch={(e) => {
-          setsearchText(e);
-        }}
-        sorting={sorting}
-        setSorting={setSorting}
-        pageCount={employeesQuery?.data?.totalPages}
-        setPagination={setPagination}
-        pageIndex={pageIndex}
-        pageSize={pageSize}
-        setColumnFilters={setColumnFilters}
-        columnFilters={columnFilters}
-        Action={() => {
-          return (
-            <div className="mr-3 flex items-center gap-2">
-              <ExportMenu
-                permission={["view_employees", "export_reports"]}
-                onExport={async (format) => {
-                  const rows = await pocketbase.collection("users").getFullList({ sort: "name", expand: "role,department,designation,branch" });
-                  await exportReport({
-                    title: "Staff list", fileName: "staff-list", what: "users", format, rows, orientation: "landscape",
-                    columns: [
-                      { header: "Name", value: (r: any) => r.name || r.names, width: 26 },
-                      { header: "E-mail", value: (r: any) => r.email || "", width: 26 },
-                      { header: "Phone", value: (r: any) => r.phone || "" },
-                      { header: "Department", value: (r: any) => r.expand?.department?.name || "", width: 24 },
-                      { header: "Designation", value: (r: any) => r.expand?.designation?.name || "", width: 24 },
-                      { header: "Office", value: (r: any) => r.expand?.branch?.name || "" },
-                      { header: "Role", value: (r: any) => r.expand?.role?.name || "" },
-                      { header: "Status", value: (r: any) => r.status || "" },
-                      { header: "Joined", value: (r: any) => r.joined_at || "", format: "date" },
-                    ],
-                  });
-                }}
-              />
-              <Button size="sm" variant="outline" onClick={() => navigate("/dashboard/hr/employees/import")}>
-                <FileSpreadsheet size={15} className="mr-1.5" />
-                <span>Import from Excel</span>
-              </Button>
-              <Button onClick={() => newEmployeeModal.open()} size="sm">
-                <PlusCircle size={16} className="mr-2" />
-                <span>Create new Employee</span>
-              </Button>
-            </div>
-          );
-        }}
-        facets={[
-          {
-            title: "Role",
-            loader: ({ search }) => {
-              return pocketbase
-                .collection("roles")
-                .getFullList(
-                  cleanObject({
-                    filter: search ? `name~"${search}"` : "",
-                  })
-                )
-                .then((e) => e.map((e) => ({ label: e.name, value: e.id })));
-            },
-            name: "role",
-            type: "async-options",
-          },
-          {
-            title: "Department",
-            loader: ({ search }) => {
-              return pocketbase
-                .collection("departments")
-                .getFullList(
-                  cleanObject({
-                    filter: search ? `name~"${search}"` : "",
-                  })
-                )
-                .then((e) => e.map((e) => ({ label: e.name, value: e.id })));
-            },
-            name: "department",
-            type: "async-options",
-          },
-        ]}
-        {...otherProps}
+      <PageHeader
+        breadcrumbs={[{ label: "HR & payroll" }, { label: "Employees" }]}
+        title="Employees"
+        subtitle="Staff records, with each person's department, role and contact details."
+        primary={{ label: "New employee", icon: Plus, onClick: () => newEmployeeModal.open() }}
+        secondary={[{ label: "Import from Excel", icon: FileSpreadsheet, onClick: () => navigate("/dashboard/hr/employees/import") }]}
       />
+
+      <KpiBand
+        loading={statsLoading}
+        items={[
+          { label: "All employees", value: fmtNumber(s?.total), sub: "On record" },
+          { label: "Active", value: fmtNumber(s?.active), onClick: () => setactiveTab("Active") },
+          { label: "Inactive", value: fmtNumber(s?.inactive), onClick: () => setactiveTab("Inactive") },
+          { label: "Departments", value: fmtNumber(s?.departments) },
+          { label: "New hires", value: fmtNumber(s?.newHires), sub: "Joined this month" },
+        ]}
+      />
+
+      {/* "relative" keeps the table's hidden Actions header inside the card on phones. */}
+      <Card padded={false} className="relative overflow-hidden">
+        <Tabs inset label="Employee status" active={activeTab} onChange={setactiveTab} tabs={TABS} />
+        <FilterBar
+          search={{ value: searchText, onChange: setsearchText, placeholder: "Search name or department" }}
+          chips={chips}
+          onClear={() => {
+            setRole("");
+            setDepartment("");
+          }}
+          right={
+            <ExportMenu
+              permission={["view_employees", "export_reports"]}
+              onExport={async (format) => {
+                const rows = await pocketbase.collection("users").getFullList({ sort: "name", expand: "role,department,designation,branch" });
+                await exportReport({
+                  title: "Staff list",
+                  fileName: "staff-list",
+                  what: "users",
+                  format,
+                  rows,
+                  orientation: "landscape",
+                  columns: [
+                    { header: "Name", value: (r: any) => r.name || r.names, width: 26 },
+                    { header: "E-mail", value: (r: any) => r.email || "", width: 26 },
+                    { header: "Phone", value: (r: any) => r.phone || "" },
+                    { header: "Department", value: (r: any) => r.expand?.department?.name || "", width: 24 },
+                    { header: "Designation", value: (r: any) => r.expand?.designation?.name || "", width: 24 },
+                    { header: "Office", value: (r: any) => r.expand?.branch?.name || "" },
+                    { header: "Role", value: (r: any) => r.expand?.role?.name || "" },
+                    { header: "Status", value: (r: any) => r.status || "" },
+                    { header: "Joined", value: (r: any) => r.joined_at || "", format: "date" },
+                  ],
+                });
+              }}
+            />
+          }
+        >
+          <FilterSelect label="Role" value={role} onChange={setRole} options={roleOptions} />
+          <FilterSelect label="Department" value={department} onChange={setDepartment} options={departmentOptions} />
+        </FilterBar>
+        <DataTable
+          caption={TABS.find((t) => t.key === activeTab)?.label}
+          columns={columns}
+          rows={data?.items || []}
+          rowKey={(r) => r.id}
+          onRowClick={openProfile}
+          rowActions={() => [
+            { label: "Open profile", icon: ExternalLink, onSelect: openProfile },
+            { label: "Edit", icon: Pencil, onSelect: (r) => editRow.edit(r.original) },
+          ]}
+          sort={sort}
+          onSort={(v) => setSorting([{ id: v.replace(/^-/, ""), desc: v.startsWith("-") }])}
+          loading={employeesQuery.status === "loading"}
+          fetching={employeesQuery.isFetching}
+          error={employeesQuery.isError ? employeesQuery.error : undefined}
+          onRetry={() => employeesQuery.refetch()}
+          empty={
+            <EmptyState
+              icon={Users}
+              text={
+                filtered
+                  ? "Nothing matches these filters. Change the search or clear the filters."
+                  : activeTab === "Active"
+                    ? "No active employees yet. Add one with New employee."
+                    : "No inactive employees."
+              }
+              action={
+                !filtered && activeTab === "Active" ? (
+                  <Button variant="primary" icon={Plus} onClick={() => newEmployeeModal.open()}>New employee</Button>
+                ) : undefined
+              }
+            />
+          }
+          footer={
+            data && data.totalItems > 0 ? (
+              <Pager page={pageIndex + 1} perPage={pageSize} total={data.totalItems} onPage={(p) => setPageIndex(p - 1)} onPerPage={setPageSize} />
+            ) : null
+          }
+        />
+      </Card>
 
       <EmployeeFormModal
         onComplete={() => {

@@ -1,16 +1,31 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "react-query";
-import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
-  AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Loader2, RotateCcw, Upload, XCircle,
+  AlertTriangle, Check, CheckCircle2, Download, FileSpreadsheet, Loader2, RotateCcw, Square, XCircle,
 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
-import { Badge, PageHeader, Panel } from "@/components/enterprise/ui";
 import { cn } from "@/utils";
+import {
+  Button,
+  Card,
+  Column,
+  DataTable,
+  EmptyState,
+  FormActions,
+  FormSection,
+  KpiBand,
+  Page,
+  PageHeader,
+  Pager,
+  Tabs,
+  fmtNumber,
+} from "@/components/ims";
+
+const LIST = "/dashboard/hr/employees";
+const STEPS = ["Download template", "Upload file", "Review and fix", "Import", "Results"];
 
 /**
  * Bulk employee import from an Excel template.
@@ -178,7 +193,6 @@ function validate(rows: Record<string, unknown>[], ref: Reference, canAssignRole
 }
 
 export default function EmployeeImport() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { canPerform } = useRoles();
   const canAssignRole = canPerform("access_general_settings");
@@ -297,8 +311,8 @@ export default function EmployeeImport() {
     await Promise.all([worker(), worker(), worker()]);
     setPhase("done");
     queryClient.invalidateQueries(["employee-import-reference"]);
-    if (cancelRef.current) toast.warning(`Import stopped: ${ok} created, ${failed} failed, ${total - done} not attempted.`);
-    else toast.success(`${ok} employee(s) imported${failed ? `, ${failed} failed` : ""}.`);
+    if (cancelRef.current) toast.warning(`Import stopped: ${ok} created, ${failed} failed, ${total - done} not attempted`);
+    else toast.success(`${ok} ${ok === 1 ? "employee" : "employees"} imported${failed ? `, ${failed} failed` : ""}`);
   };
 
   const downloadResults = () => {
@@ -330,146 +344,208 @@ export default function EmployeeImport() {
   const shown = rows.filter((r) => (filter === "errors" ? r.errors.length : filter === "warnings" ? !r.errors.length && r.warnings.length : true));
   const step = phase === "done" ? 5 : phase === "importing" ? 4 : rows.length ? 3 : fileName ? 2 : 1;
 
+  // The review table pages through every row (the report file still holds all of them).
+  const [page, setPage] = React.useState(1);
+  const [perPage, setPerPage] = React.useState(50);
+  React.useEffect(() => setPage(1), [filter, rows.length, perPage]);
+  const pageRows = shown.slice((page - 1) * perPage, page * perPage);
+  const plural = (n: number, one: string, many = `${one}s`) => `${fmtNumber(n)} ${n === 1 ? one : many}`;
+
+  const columns: Column<Row>[] = [
+    { key: "row", header: "Row", numeric: true, width: "72px", cell: (r) => <span className="text-ims-muted">{r.row}</span> },
+    { key: "name", header: "Name", cell: (r) => <span className="font-semibold">{r.data.name || "—"}</span> },
+    { key: "email", header: "Email", nowrap: true, cell: (r) => <span className="text-ims-body">{r.data.email || "—"}</span> },
+    { key: "department", header: "Department", cell: (r) => ref.data?.departments.find((d) => d.id === r.data.department)?.name || String(r.raw.department || "—") },
+    { key: "role", header: "Role", cell: (r) => ref.data?.roles.find((x) => x.id === r.data.role)?.name || String(r.raw.role || "—") },
+    {
+      key: "check",
+      header: "Check",
+      className: "min-w-[260px]",
+      cell: (r) =>
+        r.result ? (
+          r.result.ok ? (
+            <span className="inline-flex items-center gap-1.5 font-semibold text-ims-success"><CheckCircle2 size={15} aria-hidden /> Created</span>
+          ) : (
+            <span className="block text-ims-danger">
+              <span className="inline-flex items-center gap-1.5 font-semibold"><XCircle size={15} aria-hidden /> Failed</span>
+              <span className="mt-0.5 block text-t-small">{r.result.message}</span>
+            </span>
+          )
+        ) : r.errors.length ? (
+          <ul className="list-disc space-y-0.5 pl-4 text-t-small text-ims-danger">{r.errors.map((e) => <li key={e}>{e}</li>)}</ul>
+        ) : r.warnings.length ? (
+          <ul className="list-disc space-y-0.5 pl-4 text-t-small text-ims-warning">{r.warnings.map((e) => <li key={e}>{e}</li>)}</ul>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-ims-success"><CheckCircle2 size={15} aria-hidden /> Ready to import</span>
+        ),
+    },
+  ];
+
+  const busy = phase === "importing";
+
   return (
-    <div className="space-y-4 px-4 py-4 sm:px-6">
+    <Page>
       <PageHeader
-        title="Import employees from Excel"
-        description="Add many employees at once. Every row is checked before anything is saved."
-        breadcrumbs={[{ title: "Employees", link: "/dashboard/hr/employees" }, { title: "Import", link: "#" }]}
-        actions={<Button variant="outline" onClick={() => navigate("/dashboard/hr/employees")}>Back to employees</Button>}
+        breadcrumbs={[{ label: "HR & payroll" }, { label: "Employees", to: LIST }, { label: "Import" }]}
+        title="Import employees"
+        subtitle="Add many employees at once from Excel. Every row is checked before anything is saved."
+        secondary={[{ label: "Back to employees", to: LIST, disabled: busy }]}
       />
 
-      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {["Download template", "Upload file", "Review & fix", "Import", "Results"].map((label, i) => (
-          <li key={label} className={cn("flex items-center gap-2 rounded-md border px-3 py-2 text-[12.5px]", step === i + 1 ? "border-primary bg-primary/5 font-medium text-primaryDark" : step > i + 1 ? "border-slate-200 bg-white text-slate-500" : "border-slate-200 bg-white text-slate-400")}>
-            <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", step > i + 1 ? "bg-emerald-500 text-white" : step === i + 1 ? "bg-primary text-white" : "bg-slate-100 text-slate-500")}>
-              {step > i + 1 ? "✓" : i + 1}
-            </span>
-            {label}
-          </li>
-        ))}
+      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Import steps">
+        {STEPS.map((label, i) => {
+          const n = i + 1;
+          const state = step === n ? "current" : step > n ? "done" : "todo";
+          return (
+            <li
+              key={label}
+              aria-current={state === "current" ? "step" : undefined}
+              className={cn(
+                "flex items-center gap-2 rounded-control border px-3 py-2 text-t-small",
+                state === "current" ? "border-ims-link bg-ims-info-bg font-semibold text-ims-primary" : state === "done" ? "border-ims-border bg-ims-card text-ims-body" : "border-ims-border bg-ims-card text-ims-faint"
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-t-hint font-bold",
+                  state === "done" ? "bg-ims-success text-white" : state === "current" ? "bg-ims-primary text-white" : "bg-ims-subtle text-ims-muted"
+                )}
+              >
+                {state === "done" ? <Check size={12} aria-label="Done" /> : n}
+              </span>
+              {label}
+            </li>
+          );
+        })}
       </ol>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="1. Download the template" subtitle="Always use the latest template — it lists the departments, designations, branches and roles that exist right now">
+        <FormSection number={1} title="Download the template" description="Always use the latest template: it lists the departments, designations, branches and roles that exist now.">
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={downloadTemplate} disabled={!ref.data}><Download size={15} /> Download Excel template</Button>
-            <p className="text-[12.5px] text-slate-500">Sheets: Employees · Instructions · Lists</p>
+            <Button variant={step === 1 ? "primary" : "secondary"} icon={Download} onClick={downloadTemplate} disabled={!ref.data} loading={ref.isLoading}>Download Excel template</Button>
+            <p className="text-t-small text-ims-muted">Sheets: Employees · Instructions · Lists</p>
           </div>
-          <ul className="mt-3 list-disc space-y-1 pl-5 text-[12.5px] text-slate-600">
-            <li>Required: <b>First name</b>, <b>Last name</b>, <b>Email</b> (must be unique).</li>
+          <ul className="list-disc space-y-1 pl-5 text-t-small text-ims-body">
+            <li>Required: <b>First name</b>, <b>Last name</b> and <b>Email</b> (one email per employee).</li>
             <li>Dates as <b>YYYY-MM-DD</b> (Excel date cells also work).</li>
-            <li>Up to 2,000 employees per file; .xlsx, .xls or .csv.</li>
+            <li>Up to 2,000 employees per file, as .xlsx, .xls or .csv.</li>
           </ul>
-        </Panel>
-        <Panel title="2. Upload the completed file" subtitle={canAssignRole ? "Employees without a role get the “Employee” role" : "Your role cannot assign roles — leave the Role column empty"}>
+        </FormSection>
+
+        <FormSection
+          number={2}
+          title="Upload the completed file"
+          description={canAssignRole ? "Employees without a role get the Staff / Requester role." : "Your role cannot assign roles, so leave the Role column empty."}
+        >
           <label
-            className={cn("flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-4 py-6 text-center transition-colors", phase === "importing" ? "pointer-events-none opacity-50" : "border-slate-300 hover:border-primary hover:bg-primary/5")}
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-card border-2 border-dashed px-4 py-6 text-center transition-colors focus-within:ring-2 focus-within:ring-ims-focus",
+              busy || !ref.data ? "pointer-events-none border-ims-field bg-ims-thead opacity-60" : "border-ims-field bg-ims-thead hover:border-ims-link hover:bg-ims-info-bg"
+            )}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) readFile(f); }}
           >
-            <FileSpreadsheet size={26} className="text-slate-400" />
-            <span className="text-[13px] font-medium text-slate-700">{fileName || "Drop the Excel file here, or click to choose"}</span>
-            <span className="text-[12px] text-slate-500">.xlsx, .xls or .csv · max 10 MB</span>
+            <FileSpreadsheet size={24} className="text-ims-link" aria-hidden />
+            <span className="text-t-body font-bold text-ims-text">{fileName || "Drop the Excel file here, or click to choose"}</span>
+            <span className="text-t-hint text-ims-muted">{fileName ? "Click to choose another file" : ".xlsx, .xls or .csv · max 10 MB"}</span>
             <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} disabled={!ref.data} />
           </label>
-          {readError && <p className="mt-3 flex items-start gap-2 rounded-md bg-red-50 px-3 py-2 text-[13px] text-red-800"><XCircle size={15} className="mt-0.5 shrink-0" />{readError}</p>}
-        </Panel>
+          {readError && (
+            <p role="alert" className="flex items-start gap-2 rounded-control border border-ims-danger/30 bg-ims-danger-bg px-3 py-2.5 text-t-body text-ims-danger">
+              <XCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
+              {readError}
+            </p>
+          )}
+        </FormSection>
       </div>
 
       {rows.length > 0 && (
-        <Panel
-          title={phase === "idle" ? "3. Review" : phase === "importing" ? "4. Importing…" : "5. Results"}
-          subtitle={`${fileName} · ${rows.length} row(s)`}
-          action={
-            <div className="flex flex-wrap gap-2">
-              {phase !== "importing" && <Button size="sm" variant="ghost" onClick={reset}><RotateCcw size={14} /> Start over</Button>}
-              {(phase === "done" || withErrors.length > 0) && <Button size="sm" variant="outline" onClick={downloadResults}><Download size={14} /> {phase === "done" ? "Download results & passwords" : "Download error report"}</Button>}
-            </div>
-          }
-          bodyClassName="px-0"
-        >
-          <div className="grid grid-cols-2 gap-px border-y border-slate-100 bg-slate-100 sm:grid-cols-4">
-            {[
-              ["Rows in file", rows.length, "text-slate-900"],
-              ["Ready to import", valid.length, "text-emerald-700"],
-              ["With warnings", withWarnings.length, "text-amber-700"],
-              ["With errors (skipped)", withErrors.length, withErrors.length ? "text-red-600" : "text-slate-900"],
-            ].map(([k, v, c]) => (
-              <div key={k as string} className="bg-white px-4 py-2.5">
-                <p className="text-[11.5px] text-slate-500">{k}</p>
-                <p className={cn("text-[18px] font-semibold tabular-nums", c as string)}>{v}</p>
-              </div>
-            ))}
-          </div>
+        <>
+          <KpiBand
+            items={[
+              { label: "Rows in file", value: fmtNumber(rows.length) },
+              { label: "Ready to import", value: fmtNumber(valid.length), tone: valid.length ? "success" : "default" },
+              { label: "With warnings", value: fmtNumber(withWarnings.length), tone: withWarnings.length ? "warning" : "default", sub: "Imported, but check them" },
+              { label: "With errors", value: fmtNumber(withErrors.length), tone: withErrors.length ? "danger" : "default", sub: "Skipped" },
+            ]}
+          />
 
-          {phase !== "idle" && (
-            <div className="border-b border-slate-100 px-4 py-3" aria-live="polite">
-              <div className="mb-1.5 flex items-center justify-between text-[13px]">
-                <span className="flex items-center gap-2 font-medium text-slate-800">
-                  {phase === "importing" ? <Loader2 size={15} className="animate-spin text-primary" /> : <CheckCircle2 size={15} className="text-emerald-600" />}
-                  {phase === "importing" ? `Importing ${progress.done} of ${progress.total}…` : "Import finished"}
-                </span>
-                <span className="tabular-nums text-slate-600">{pct}% · {progress.ok} created · {progress.failed} failed</span>
+          <Card padded={false} className="relative overflow-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-[18px] pt-[18px] sm:px-5 sm:pt-5">
+              <div className="min-w-0">
+                <h2 className="text-t-section text-ims-text">
+                  {phase === "idle" ? 3 : phase === "importing" ? 4 : 5}
+                  <span className="px-1.5 text-ims-faint">·</span>
+                  {phase === "idle" ? "Review" : phase === "importing" ? "Importing" : "Results"}
+                </h2>
+                <p className="mt-0.5 break-all text-t-small text-ims-muted">{fileName} · {plural(rows.length, "row")}</p>
               </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
+              <div className="flex flex-wrap gap-2">
+                {phase !== "importing" && <Button size="sm" variant="ghost" icon={RotateCcw} onClick={reset}>Start over</Button>}
+                {(phase === "done" || withErrors.length > 0) && (
+                  <Button size="sm" variant={phase === "done" ? "primary" : "secondary"} icon={Download} onClick={downloadResults}>
+                    {phase === "done" ? "Download results and passwords" : "Download error report"}
+                  </Button>
+                )}
               </div>
-              {phase === "importing" && <Button size="sm" variant="ghost" className="mt-2" onClick={() => { cancelRef.current = true; }}>Stop after current rows</Button>}
-              {phase === "done" && progress.ok > 0 && (
-                <p className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
-                  <AlertTriangle size={15} className="mt-0.5 shrink-0" /> Download the results file now — it contains each new employee's temporary password, which is not stored anywhere else. Share passwords privately.
-                </p>
-              )}
             </div>
-          )}
 
-          <div className="flex gap-1 px-4 pt-3" role="tablist">
-            {([["all", `All (${rows.length})`], ["errors", `Errors (${withErrors.length})`], ["warnings", `Warnings (${withWarnings.length})`]] as const).map(([k, label]) => (
-              <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)} className={cn("rounded-md px-3 py-1.5 text-[12.5px] font-medium", filter === k ? "bg-ralga-navy text-white" : "text-slate-600 hover:bg-slate-100")}>{label}</button>
-            ))}
-          </div>
-          <div className="max-h-[520px] overflow-auto px-4 py-3">
-            <table className="dnr-grid w-full min-w-[820px]">
-              <thead className="sticky top-0 z-10">
-                <tr><th>Row</th><th>Name</th><th>Email</th><th>Department</th><th>Role</th><th>Check</th></tr>
-              </thead>
-              <tbody>
-                {shown.slice(0, 500).map((r) => (
-                  <tr key={r.row}>
-                    <td className="tabular-nums text-slate-500">{r.row}</td>
-                    <td className="font-medium text-slate-800">{r.data.name || "—"}</td>
-                    <td className="text-slate-600">{r.data.email || "—"}</td>
-                    <td className="text-slate-600">{ref.data?.departments.find((d) => d.id === r.data.department)?.name || String(r.raw.department || "—")}</td>
-                    <td className="text-slate-600">{ref.data?.roles.find((x) => x.id === r.data.role)?.name || String(r.raw.role || "—")}</td>
-                    <td className="text-[12.5px]">
-                      {r.result ? (
-                        r.result.ok ? <Badge tone="success">Created</Badge> : <span className="text-red-700"><Badge tone="danger">Failed</Badge> {r.result.message}</span>
-                      ) : r.errors.length ? (
-                        <ul className="space-y-0.5 text-red-700">{r.errors.map((e) => <li key={e}>• {e}</li>)}</ul>
-                      ) : r.warnings.length ? (
-                        <ul className="space-y-0.5 text-amber-700">{r.warnings.map((e) => <li key={e}>• {e}</li>)}</ul>
-                      ) : (
-                        <Badge tone="success">Ready</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {shown.length > 500 && <p className="mt-2 text-[12px] text-slate-500">Showing the first 500 rows; the downloaded report contains all of them.</p>}
-          </div>
+            {phase !== "idle" && (
+              <div className="mx-[18px] mt-4 space-y-2 sm:mx-5" aria-live="polite">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-t-body">
+                  <span className="flex items-center gap-2 font-semibold text-ims-text">
+                    {phase === "importing" ? <Loader2 size={16} className="animate-spin text-ims-link" aria-hidden /> : <CheckCircle2 size={16} className="text-ims-success" aria-hidden />}
+                    {phase === "importing" ? `Importing ${fmtNumber(progress.done)} of ${fmtNumber(progress.total)}…` : "Import finished"}
+                  </span>
+                  <span className="tabular-nums text-ims-muted">{pct}% · {fmtNumber(progress.ok)} created · {fmtNumber(progress.failed)} failed</span>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-pill bg-ims-subtle" role="progressbar" aria-label="Import progress" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full rounded-pill bg-ims-primary transition-all duration-300" style={{ width: `${pct}%` }} />
+                </div>
+                {phase === "importing" && <Button size="sm" icon={Square} onClick={() => { cancelRef.current = true; }}>Stop after the current rows</Button>}
+                {phase === "done" && progress.ok > 0 && (
+                  <p role="status" className="flex items-start gap-2 rounded-control border border-ims-warning/30 bg-ims-warning-bg px-3 py-2.5 text-t-small text-ims-warning">
+                    <AlertTriangle size={15} className="mt-px shrink-0" aria-hidden />
+                    Download the results file now. It holds each new employee's temporary password, which is not stored anywhere else. Share the passwords privately.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <Tabs
+              inset
+              className="mt-3"
+              label="Rows to show"
+              active={filter}
+              onChange={(k) => setFilter(k as typeof filter)}
+              tabs={[
+                { key: "all", label: "All rows", count: rows.length },
+                { key: "errors", label: "Errors", count: withErrors.length },
+                { key: "warnings", label: "Warnings", count: withWarnings.length },
+              ]}
+            />
+            <DataTable
+              caption="Rows in the file"
+              columns={columns}
+              rows={pageRows}
+              rowKey={(r) => String(r.row)}
+              minWidth={860}
+              empty={<EmptyState compact icon={CheckCircle2} text={filter === "errors" ? "No rows with errors." : filter === "warnings" ? "No rows with warnings." : "No rows."} />}
+              footer={shown.length > 0 ? <Pager page={page} perPage={perPage} total={shown.length} onPage={setPage} onPerPage={setPerPage} sizes={[25, 50, 100]} /> : null}
+            />
+          </Card>
 
           {phase === "idle" && (
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 px-4 pt-3">
-              {withErrors.length > 0 && <p className="text-[12.5px] text-slate-500">Rows with errors will be skipped. Fix them in Excel and upload again, or import the valid rows now.</p>}
-              <Button disabled={!valid.length || !canPerform("create_employee")} onClick={runImport}>
-                <Upload size={15} /> Import {valid.length} employee{valid.length === 1 ? "" : "s"}
-              </Button>
-            </div>
+            <FormActions
+              submitLabel={`Import ${plural(valid.length, "employee")}`}
+              onSubmit={runImport}
+              disabled={!valid.length || !canPerform("create_employee")}
+              cancelTo={LIST}
+              note={withErrors.length > 0 ? "Rows with errors are skipped. Fix them in Excel and upload the file again, or import the valid rows now." : "Each new employee gets a temporary password, listed in the results file."}
+            />
           )}
-        </Panel>
+        </>
       )}
-    </div>
+    </Page>
   );
 }

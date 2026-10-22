@@ -1,148 +1,76 @@
-import DataTable from "@/components/DataTable";
-import TableTools from "@/components/enterprise/TableTools";
-import { IMPORTS } from "@/lib/importConfigs";
-import { ColumnDef, PaginationState } from "@tanstack/react-table";
-import DataTableColumnHeader from "@/components/datatable/DataTableColumnHeader";
-import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle } from "lucide-react";
+import { ChangeEvent, useEffect, useState } from "react";
+import { useQuery } from "react-query";
+import { useDebounce } from "use-debounce";
+import { toast } from "sonner";
+import { Briefcase, Pencil, Plus, Trash2 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import cleanObject from "@/utils/cleanObject";
-import { useState } from "react";
-import { useQuery } from "react-query";
-import { Button } from "@/components/ui/button";
+import formatFilter from "@/utils/formatFilter";
+import { useAuth } from "@/context/auth.context";
+import TableTools from "@/components/enterprise/TableTools";
+import { IMPORTS } from "@/lib/importConfigs";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
-import DataTableRowActions from "@/components/datatable/DataTableRowActions";
-import ConfirmModal from "@/components/modals/ConfirmModal";
-import useConfirmModal from "@/hooks/useConfirmModal";
-import { toast } from "sonner";
-import BreadCrumb from "@/components/breadcrumb";
-import { DesignationFormModal } from "@/components/modals/DesignationFormModal";
-import formatFilter from "@/utils/formatFilter";
-import StatCard from "@/components/StatCard";
-import { Briefcase, Building2, UserCheck } from "lucide-react";
+import {
+  Button,
+  Card,
+  Column,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  Field,
+  FilterBar,
+  FilterChip,
+  FilterSelect,
+  Input,
+  KpiBand,
+  Modal,
+  Page,
+  PageHeader,
+  Pager,
+  Select,
+  Textarea,
+  fmtDate,
+  fmtNumber,
+} from "@/components/ims";
+
+type Row = { id: string; name: string; department?: string; created: string; original: any };
 
 export default function Designations() {
-  const columns: ColumnDef<any>[] = [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          // @ts-ignore
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-          className="translate-y-[2px]"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-          className="translate-y-[2px]"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "name",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Name" />
-      ),
-      cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => editRow.edit(row.original)}
-          className="capitalize hover:text-primary hover:underline"
-        >
-          {row.getValue("name")}
-        </button>
-      ),
-      enableSorting: true,
-      enableHiding: true,
-    },
-
-    {
-      accessorKey: "department",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Department" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("department")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      accessorKey: "created",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created at" />
-      ),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("created")}</div>
-      ),
-      filterFn: (__, _, value) => {
-        return value;
-      },
-      enableSorting: true,
-      enableHiding: true,
-    },
-    {
-      id: "actions",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Actions" />
-      ),
-      cell: ({ row }) => (
-        <DataTableRowActions
-          actions={[
-            {
-              title: "Edit Designations",
-              onClick: (e) => {
-                editRow.edit(e.original);
-              },
-            },
-            {
-              title: "Delete Designations",
-              onClick: (e) => {
-                confirmModal.open({ meta: e });
-              },
-            },
-          ]}
-          row={row}
-        />
-      ),
-    },
-  ];
-
   const [searchText, setsearchText] = useState("");
+  const [search] = useDebounce(searchText, 300);
 
-  const [columnFilters, setColumnFilters] = useState([]);
+  const [department, setDepartment] = useState("");
+  // Same shape as the old table facet, turned into a filter by formatFilter.
+  const columnFilters = department ? [{ id: "department", value: [department] }] : [];
+
   const [sorting, setSorting] = useState([
     {
       id: "created",
       desc: true,
     },
   ]);
+  const sort = sorting.map((p) => `${p.desc ? "-" : ""}${p.id}`)[0];
 
-  const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 10,
-  });
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(15);
+  useEffect(() => setPageIndex(0), [search, department, sort, pageSize]);
+
+  // Options of the department filter (the old facet loaded the same list).
+  const departments = useQuery(["designation-filter-departments"], () => pocketbase.collection("departments").getFullList({ sort: "name" }), { staleTime: 5 * 60_000 });
+  const departmentOptions = (departments.data || []).map((e: any) => ({ label: e.name, value: e.id }));
+  // A designation stores its department id as text, so "department.name" cannot be searched or
+  // expanded on the server: the search matches department names here and filters on their ids.
+  const matchingDepartments = search ? departmentOptions.filter((o) => o.label.toLowerCase().includes(search.toLowerCase())).map((o) => o.value) : [];
+  const departmentName = (id?: string) => departmentOptions.find((o) => o.value === id)?.label;
 
   const recordsQuery = useQuery({
     queryKey: [
       "designations",
       {
         columnFilters,
-        search: searchText,
+        search,
+        matchingDepartments,
         sort: sorting,
         pageIndex,
         pageSize,
@@ -150,15 +78,11 @@ export default function Designations() {
     ],
     keepPreviousData: true,
     queryFn: () => {
-      const searchQ = searchText
-        ? `name~"${searchText}" || department.name~"${searchText}" `
-        : "";
+      const searchQ = search ? `(name~"${search}"${matchingDepartments.map((id) => ` || department="${id}"`).join("")})` : "";
 
       const filters = formatFilter(columnFilters);
 
-      const sorters = sorting
-        .map((p) => `${p.desc ? "-" : "+"}${p.id}`)
-        .join(" && ");
+      const sorters = sorting.map((p) => `${p.desc ? "-" : "+"}${p.id}`).join(" && ");
 
       return pocketbase
         .collection("designations")
@@ -171,20 +95,17 @@ export default function Designations() {
         })
         .then((e) => {
           return {
-            items: e?.items?.map((e) => {
-              return {
+            items: e?.items?.map(
+              (e): Row => ({
                 id: e.id,
                 name: e.name,
                 department: e.expand?.department?.name,
-                created: new Date(e.created).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
+                created: e.created,
                 original: e,
-              };
-            }),
+              })
+            ),
             totalPages: e.totalPages,
+            totalItems: e.totalItems,
           };
         });
     },
@@ -210,72 +131,77 @@ export default function Designations() {
   });
   const statsLoading = statsQuery.status === "loading";
 
+  const chips: FilterChip[] = department
+    ? [{ key: "department", label: `Department: ${departmentOptions.find((o) => o.value === department)?.label || "selected"}`, onRemove: () => setDepartment("") }]
+    : [];
+  const filtered = Boolean(search || department);
+
   const newRecordModal = useModalState();
 
   const editRow = useEditRow();
 
-  const confirmModal = useConfirmModal();
+  const [deleting, setDeleting] = useState<any>(null);
 
-  const handleDelete = (e) => {
-    confirmModal.setIsLoading(true);
-    return pocketbase
-      .collection("designations")
-      .delete(e.id)
-      .then(() => {
-        recordsQuery.refetch();
-        confirmModal.close();
-        toast.success("Designation deleted successfully");
-      })
-      .catch((e) => {
-        confirmModal.setIsLoading(false);
-        toast.error(e.message);
-      });
+  const handleDelete = async () => {
+    try {
+      await pocketbase.collection("designations").delete(deleting.id);
+      recordsQuery.refetch();
+      toast.success(`${deleting.name} deleted`);
+    } catch (e: any) {
+      toast.error(e.message);
+      throw e;
+    }
   };
 
+  const columns: Column<Row>[] = [
+    {
+      key: "name",
+      header: "Designation",
+      sortField: "name",
+      clamp: true,
+      cell: (r) => <span className="font-semibold">{r.name}</span>,
+      sub: (r) => r.original.description,
+    },
+    { key: "department", header: "Department", sortField: "department", clamp: true, cell: (r) => r.department || departmentName(r.original.department) || <span className="text-ims-faint">—</span> },
+    { key: "created", header: "Created", sortField: "created", nowrap: true, cell: (r) => fmtDate(r.created) },
+  ];
+
+  const data = recordsQuery.data;
+  const s = statsQuery.data;
+
   return (
-    <>
-      <div className="space-y-4 px-4 py-4 sm:px-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Designations"
-            icon={Briefcase}
-            tone="default"
-            loading={statsLoading}
-            value={statsQuery.data?.total}
-            description="Job designations defined"
-          />
-          <StatCard
-            title="Departments Covered"
-            icon={Building2}
-            tone="info"
-            loading={statsLoading}
-            value={statsQuery.data?.departmentsCovered}
-            description={`Out of ${statsQuery.data?.departmentsTotal ?? 0} departments`}
-          />
-          <StatCard
-            title="Employees Assigned"
-            icon={UserCheck}
-            tone="success"
-            loading={statsLoading}
-            value={statsQuery.data?.assigned}
-            description="Employees with a designation set"
-          />
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col items-start gap-1">
-            <h2 className="text-xl font-bold tracking-tight text-slate-900">
-              All Designations
-            </h2>
-            <BreadCrumb
-              items={[{ title: "View Designations", link: "/dashboard" }]}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+    <Page>
+      <PageHeader
+        breadcrumbs={[{ label: "HR & payroll" }, { label: "Designations" }]}
+        title="Designations"
+        subtitle="Job titles, each belonging to a department."
+        primary={{ label: "New designation", icon: Plus, onClick: () => newRecordModal.open() }}
+      />
+
+      <KpiBand
+        loading={statsLoading}
+        items={[
+          { label: "Designations", value: fmtNumber(s?.total), sub: "Job titles defined" },
+          { label: "Departments covered", value: fmtNumber(s?.departmentsCovered), sub: `Out of ${fmtNumber(s?.departmentsTotal ?? 0)} departments` },
+          { label: "Employees assigned", value: fmtNumber(s?.assigned), sub: "With a designation set" },
+        ]}
+      />
+
+      {/* "relative" keeps the table's hidden Actions header inside the card on phones. */}
+      <Card padded={false} className="relative overflow-hidden">
+        <FilterBar
+          search={{ value: searchText, onChange: setsearchText, placeholder: "Search designation or department" }}
+          chips={chips}
+          onClear={() => setDepartment("")}
+          right={
             <TableTools
               importConfig={IMPORTS.designations}
               onImported={() => recordsQuery.refetch()}
               exportConfig={{
-                title: "Designations", fileName: "designations", what: "designations", permission: ["view_designations", "create_designations"],
+                title: "Designations",
+                fileName: "designations",
+                what: "designations",
+                permission: ["view_designations", "create_designations"],
                 rows: async () => {
                   const [rows, deps] = await Promise.all([
                     pocketbase.collection("designations").getFullList({ sort: "name" }),
@@ -291,70 +217,156 @@ export default function Designations() {
                 ],
               }}
             />
-            <Button onClick={() => newRecordModal.open()} size="sm">
-              <PlusCircle size={16} />
-              <span>Create Designation</span>
-            </Button>
-          </div>
-        </div>
+          }
+        >
+          <FilterSelect label="Department" value={department} onChange={setDepartment} options={departmentOptions} />
+        </FilterBar>
         <DataTable
-          isFetching={recordsQuery.isFetching}
-          defaultColumnVisibility={{}}
-          isLoading={recordsQuery.status === "loading"}
-          data={recordsQuery?.data?.items || []}
+          caption="Designations"
           columns={columns}
-          onSearch={(e) => {
-            setsearchText(e);
-          }}
-          sorting={sorting}
-          setSorting={setSorting}
-          pageCount={recordsQuery?.data?.totalPages}
-          setPagination={setPagination}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          setColumnFilters={setColumnFilters}
-          columnFilters={columnFilters}
-          facets={[
-            {
-              title: "Department",
-              loader: ({ search }) => {
-                return pocketbase
-                  .collection("departments")
-                  .getFullList(
-                    cleanObject({
-                      filter: search ? `name~"${search}"` : "",
-                    })
-                  )
-                  .then((e) => e.map((e) => ({ label: e.name, value: e.id })));
-              },
-              name: "department",
-              type: "async-options",
-            },
+          rows={data?.items || []}
+          rowKey={(r) => r.id}
+          onRowClick={(r) => editRow.edit(r.original)}
+          rowActions={() => [
+            { label: "Edit", icon: Pencil, onSelect: (r) => editRow.edit(r.original) },
+            { label: "Delete", icon: Trash2, danger: true, onSelect: (r) => setDeleting(r.original) },
           ]}
+          sort={sort}
+          onSort={(v) => setSorting([{ id: v.replace(/^-/, ""), desc: v.startsWith("-") }])}
+          loading={recordsQuery.status === "loading"}
+          fetching={recordsQuery.isFetching}
+          error={recordsQuery.isError ? recordsQuery.error : undefined}
+          onRetry={() => recordsQuery.refetch()}
+          empty={
+            <EmptyState
+              icon={Briefcase}
+              text={filtered ? "Nothing matches these filters. Change the search or clear the filters." : "No designations yet. Add one with New designation."}
+              action={!filtered ? <Button variant="primary" icon={Plus} onClick={() => newRecordModal.open()}>New designation</Button> : undefined}
+            />
+          }
+          footer={
+            data && data.totalItems > 0 ? (
+              <Pager page={pageIndex + 1} perPage={pageSize} total={data.totalItems} onPage={(p) => setPageIndex(p - 1)} onPerPage={setPageSize} />
+            ) : null
+          }
         />
-      </div>
+      </Card>
 
-      <DesignationFormModal
+      <DesignationDialog
         onComplete={() => {
           recordsQuery.refetch();
           newRecordModal.close();
           editRow.close();
         }}
         record={editRow.row}
-        setOpen={editRow.isOpen ? editRow.setOpen : newRecordModal.setisOpen}
+        onClose={() => (editRow.isOpen ? editRow.close() : newRecordModal.close())}
         open={newRecordModal.isOpen || editRow.isOpen}
       />
-      <ConfirmModal
-        title={"Delete this designation?"}
-        description={
-          "This will permanently remove the designation. Employees assigned to it will keep their record but lose this designation reference. This action cannot be undone."
-        }
-        meta={confirmModal.meta}
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        title={`Delete ${deleting?.name || "this designation"}?`}
+        description="The designation is removed for good. Employees who hold it keep their record but lose this designation. This cannot be undone."
+        confirmLabel="Delete"
+        danger
         onConfirm={handleDelete}
-        isLoading={confirmModal.isLoading}
-        open={confirmModal.isOpen}
-        onClose={() => confirmModal.close()}
       />
-    </>
+    </Page>
+  );
+}
+
+const EMPTY = { name: "", department: "", description: "" };
+
+/** Create or edit a designation: name, department and description are all required. */
+function DesignationDialog({ open, onClose, record, onComplete }: { open: boolean; onClose: () => void; record?: any; onComplete: () => void }) {
+  const { user } = useAuth();
+  const [v, setV] = useState({ ...EMPTY });
+  const [touched, setTouched] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setV({ name: record?.name || "", description: record?.description || "", department: record?.department || "" });
+      setTouched(false);
+    }
+  }, [open, record]);
+
+  const departments = useQuery(
+    ["designation-department-options"],
+    () => pocketbase.collection("departments").getFullList({ sort: "name" }).then((e) => e.map((e) => ({ label: e.names || e.name, value: e.id }))),
+    { enabled: open, staleTime: 60_000 }
+  );
+
+  const errors = {
+    name: !v.name.trim() ? "Enter the designation name." : null,
+    department: !v.department ? "Choose the department this designation belongs to." : null,
+    description: !v.description.trim() ? "Describe the designation in a few words." : null,
+  };
+  const shown = (k: keyof typeof errors) => (touched ? errors[k] : null);
+  const set = (k: keyof typeof EMPTY) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setV((x) => ({ ...x, [k]: e.target.value }));
+
+  async function onSubmit() {
+    setTouched(true);
+    const first = (Object.keys(errors) as (keyof typeof errors)[]).find((k) => errors[k]);
+    if (first) {
+      document.getElementById(`des-${first}`)?.focus();
+      return;
+    }
+    const data = {
+      ...v,
+      name: v.name.trim(),
+    };
+    setBusy(true);
+    try {
+      if (!record) await pocketbase.collection("designations").create({ ...data, created_by: user.id });
+      else await pocketbase.collection("designations").update(record.id, data);
+      onComplete();
+      toast.success(record ? `${data.name} updated` : `${data.name} created`);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={busy ? () => undefined : onClose}
+      size="sm"
+      title={record ? `Edit ${record.name}` : "New designation"}
+      description="A job title within one department."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" type="submit" form="designation-form" loading={busy}>{record ? "Save changes" : "Create designation"}</Button>
+        </>
+      }
+    >
+      <form
+        id="designation-form"
+        noValidate
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit();
+        }}
+      >
+        <Field label="Designation name" required htmlFor="des-name" error={shown("name")}>
+          <Input id="des-name" value={v.name} onChange={set("name")} placeholder="e.g. Senior Accountant" invalid={Boolean(shown("name"))} aria-describedby={shown("name") ? "des-name-error" : undefined} />
+        </Field>
+        <Field label="Department" required htmlFor="des-department" error={shown("department")}>
+          <Select id="des-department" value={v.department} onChange={set("department")} invalid={Boolean(shown("department"))} aria-describedby={shown("department") ? "des-department-error" : undefined}>
+            <option value="">{departments.isLoading ? "Loading departments…" : "Choose a department"}</option>
+            {(departments.data || []).map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Description" required htmlFor="des-description" error={shown("description")} hint="What the role does, in one or two lines.">
+          <Textarea id="des-description" className="min-h-[88px]" value={v.description} onChange={set("description")} invalid={Boolean(shown("description"))} aria-describedby={shown("description") ? "des-description-error" : "des-description-hint"} />
+        </Field>
+      </form>
+    </Modal>
   );
 }

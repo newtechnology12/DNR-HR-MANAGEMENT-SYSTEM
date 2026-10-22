@@ -1,31 +1,64 @@
-import displayDate from "@/utils/displayDate";
-import { Camera } from "react-feather";
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
+import { useQuery } from "react-query";
+import { useParams, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import { Camera, Pencil, UserX } from "lucide-react";
+import { differenceInMonths } from "date-fns";
 import pocketbase from "@/lib/pocketbase";
-import Loader from "@/components/icons/Loader";
-import Avatar from "@/components/shared/Avatar";
-import BreadCrumb from "@/components/breadcrumb";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import useSettings from "@/hooks/useSettings";
+import calculateRemainingLeaves from "@/utils/calculateRemainingLeaves";
+import { EMPLOYMENT_TYPES } from "@/lib/hr";
+import { EmployeePhoto } from "@/components/Employees";
+import { EmployeeFormModal } from "@/components/modals/EmployeeFormModal";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  DetailHeader,
+  Details,
+  EmptyState,
+  KpiBand,
+  Page,
+  Tabs,
+  fmtDate,
+  fmtMoney,
+  fmtNumber,
+  sentence,
+  toDate,
+} from "@/components/ims";
 import EmployeeAttendances from "./EmployeeAttendances";
 import EmployeeLeaves from "./EmployeeLeaves";
 import EmployeePayslips from "./EmployeePayslips";
-// import EmployeeAssets from "./EmployeeAssets";
 import EmployeeDocuments from "./EmployeeDocuments";
-import { toast } from "sonner";
-import { useParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Edit } from "lucide-react";
-// import { EmployeFormModal } from "@/components/modals/EmployeeFormModal";
-import { cn } from "@/utils/cn";
-import { useQuery } from "react-query";
-import LeavesTakenVsRemaining from "@/components/LeavesTakenVsRemaining";
 import EmployeePrePayments from "./EmployeePrePayments";
-import { EmployeeFormModal } from "@/components/modals/EmployeeFormModal";
+
+const LIST = "/dashboard/hr/employees";
+/** Five tabs: payslips and expense claims share one tab. */
+const TABS = ["details", "attendance", "leave", "pay", "documents"] as const;
+type TabKey = (typeof TABS)[number];
+
+const days = (n?: number | null) => (n === null || n === undefined ? "—" : `${fmtNumber(n)} ${Number(n) === 1 ? "day" : "days"}`);
+
+/** "3 years 2 months" since the joining date. */
+function serviceLength(joined?: string) {
+  const d = toDate(joined);
+  if (!d) return null;
+  const months = Math.max(0, differenceInMonths(new Date(), d));
+  const y = Math.floor(months / 12);
+  const m = months % 12;
+  const part = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  if (!y) return part(m, "month");
+  return m ? `${part(y, "year")} ${part(m, "month")}` : part(y, "year");
+}
 
 export default function EmployeeProfile() {
-  const [activeTab, setactiveTab] = useState("Attendance Log");
-
   const employeeId = useParams().employeeId;
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("tab") || "details";
+  const tab: TabKey = (TABS as readonly string[]).includes(raw) ? (raw as TabKey) : "details";
+  const setTab = (t: string) => setParams(t === "details" ? {} : { tab: t });
 
   const getEmployeeProfile = async () => {
     const data = await pocketbase.collection("users").getOne(employeeId, {
@@ -44,125 +77,112 @@ export default function EmployeeProfile() {
 
   const [showUpdateModal, setshowUpdateModal] = useState(undefined);
 
+  // Annual leave balance: the same calculation (and cache) as the leave chart it replaces.
+  const { settings, isLoading: settingsLoading } = useSettings();
+  const leaves_per_year = settings?.leaves_per_year || 0;
+  const leaveQuery = useQuery(
+    ["my-leaves-analytics", employee?.id],
+    () => calculateRemainingLeaves({ employee: employee as any, leaves_per_year }),
+    {
+      keepPreviousData: true,
+      retry: false,
+      staleTime: Infinity,
+      enabled: Boolean(employee?.id) && Boolean(leaves_per_year),
+    }
+  );
+
+  if (isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </Page>
+    );
+  }
+  if (!employee) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState icon={UserX} text="This employee is not available. The record may have been removed." action={<ButtonLink to={LIST}>Back to employees</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
+
+  const e: any = employee;
+  const leave = leaveQuery.data;
+  const service = serviceLength(e.joined_at);
+
   return (
-    <>
-      <div className="px-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2 flex-col">
-            <h2 className="text-lg font-semibold tracking-tight">
-              Employee Profile
-            </h2>
-            <BreadCrumb
-              items={[{ title: "Employee Profile", link: "/dashboard" }]}
-            />
-          </div>
-        </div>
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to employees", to: LIST }}
+        type="Employee"
+        status={e.status}
+        title={e.name}
+        facts={[e.expand?.designation?.name, e.expand?.department?.name, e.expand?.branch?.name]}
+        actions={
+          <Button variant="primary" icon={Pencil} onClick={() => setshowUpdateModal(true)}>
+            Edit employee
+          </Button>
+        }
+      />
 
-        <div className="grid mt-2- grid-cols-1 lg:grid-cols-8 gap-2">
-          <div className="col-span-1 lg:col-span-6">
-            <Card className="h-full !shadow-none">
-              <CardHeader className="pt-2">
-                <CardTitle className="text-[15px] flex items-center justify-between">
-                  <span>Profile Information</span>
-                  <Button
-                    onClick={() => {
-                      setshowUpdateModal(true);
-                    }}
-                    variant="secondary"
-                    className="text-primary"
-                    size="sm"
-                  >
-                    <Edit size={14} className="mr-2" />
-                    <span>Update Employee</span>
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="h-full">
-                {employee && (
-                  <ProfileInformation refetch={refetch} employee={employee} />
-                )}
-                {isLoading && (
-                  <div className="w-full min-h-[250px] flex items-center justify-center">
-                    {isLoading && (
-                      <Loader className="mr-2 h-4 w-4 text-primary animate-spin" />
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-          <div className="col-span-1 lg:col-span-2">
-            <Card className="h-full !shadow-none flex flex-col">
-              <CardTitle className="text-[15px] px-4 py-3 flex items-center justify-between">
-                <span>Leaves taken vs remaining</span>
-              </CardTitle>
-              <LeavesTakenVsRemaining employee={employee} />
-            </Card>
-          </div>
-        </div>
+      <KpiBand
+        loading={settingsLoading || (leaveQuery.isLoading && Boolean(leaves_per_year))}
+        items={[
+          { label: "Annual leave taken", value: leaves_per_year ? days(leave?.taken) : "—", sub: "This year" },
+          { label: "Annual leave remaining", value: leaves_per_year ? days(leave?.remaining) : "—", sub: "Accrued to date" },
+          { label: "Annual entitlement", value: leaves_per_year ? days(leaves_per_year) : "—", sub: leaves_per_year ? "Per year" : "Not set in leave settings" },
+          { label: "Length of service", value: service || "—", sub: e.joined_at ? `Joined ${fmtDate(e.joined_at)}` : "No joining date" },
+        ]}
+      />
 
-        <div className="mt-3">
-          <Card>
-            <div className="flex px-2 gap-1 sm:gap-4 w-full border-b items-center justify-start overflow-x-auto">
-              {[
-                "Attendance Log",
-                "Documents",
-                "Leaves",
-                "Payslips",
-                "Expenses",
-              ].map((e, i) => {
-                return (
-                  <a
-                    key={i}
-                    className={cn(
-                      "cursor-pointer px-3 sm:px-6 capitalize text-center relative whitespace-nowrap text-slate-700 text-[13px] sm:text-sm py-3  font-medium",
-                      {
-                        "text-primary ": activeTab === e,
-                      }
-                    )}
-                    onClick={() => {
-                      setactiveTab(e);
-                    }}
-                  >
-                    {activeTab === e && (
-                      <div className="h-[3px] left-0 rounded-t-md bg-primary absolute bottom-0 w-full"></div>
-                    )}
-                    <span className=""> {e}</span>
-                  </a>
-                );
-              })}
-            </div>
-            <div>
-              {isLoading && (
-                <div className="w-full min-h-[250px] flex items-center justify-center">
-                  {isLoading && (
-                    <Loader className="mr-2 h-4 w-4 text-primary animate-spin" />
-                  )}
-                </div>
-              )}
-              {employee && (
-                <>
-                  {activeTab === "Attendance Log" && (
-                    <EmployeeAttendances employeeId={employee?.id} />
-                  )}
-                  {activeTab === "Leaves" && (
-                    <EmployeeLeaves employeeId={employee?.id} />
-                  )}
-                  {activeTab === "Payslips" && (
-                    <EmployeePayslips employeeId={employee?.id} />
-                  )}
-                  {activeTab === "Documents" && (
-                    <EmployeeDocuments employeeId={employee?.id} />
-                  )}
-                  {activeTab === "Expenses" && (
-                    <EmployeePrePayments employeeId={employee.id} />
-                  )}
-                </>
-              )}
-            </div>
+      <Tabs
+        label="Employee sections"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "attendance", label: "Attendance" },
+          { key: "leave", label: "Leave" },
+          { key: "pay", label: "Pay and expenses" },
+          { key: "documents", label: "Documents" },
+        ]}
+      />
+
+      {tab === "details" && <ProfileInformation refetch={refetch} employee={e} />}
+
+      {tab === "attendance" && (
+        <Card padded={false} className="relative overflow-hidden">
+          <EmployeeAttendances employeeId={e.id} />
+        </Card>
+      )}
+      {tab === "leave" && (
+        <Card padded={false} className="relative overflow-hidden">
+          <EmployeeLeaves employeeId={e.id} />
+        </Card>
+      )}
+      {tab === "pay" && (
+        <>
+          <Card className="relative overflow-hidden">
+            <CardHeader title="Payslips" subtitle="Monthly payslips from approved payrolls." />
+            <EmployeePayslips employeeId={e.id} />
           </Card>
-        </div>
-      </div>
+          <Card className="relative overflow-hidden">
+            <CardHeader title="Expenses" subtitle="Expense claims and advances requested by this employee." />
+            <EmployeePrePayments employeeId={e.id} />
+          </Card>
+        </>
+      )}
+      {tab === "documents" && (
+        <Card padded={false} className="relative overflow-hidden">
+          <EmployeeDocuments employeeId={e.id} />
+        </Card>
+      )}
+
       <EmployeeFormModal
         onComplete={() => {
           refetch();
@@ -171,14 +191,18 @@ export default function EmployeeProfile() {
         setOpen={setshowUpdateModal}
         open={showUpdateModal}
       />
-    </>
+    </Page>
   );
 }
 
-function ProfileInformation({ employee, refetch }) {
+/**
+ * The fields shown before, grouped. Personal fields arrive empty for viewers without
+ * "view_employee_profile" (the server blanks them); they then read "—".
+ */
+function ProfileInformation({ employee, refetch }: { employee: any; refetch: () => void }) {
   const [uploading, setuploading] = useState(false);
 
-  const uploadRef = useRef<any>();
+  const uploadRef = useRef<HTMLInputElement>(null);
 
   const updateProfile = async (e: any) => {
     const file = e.target.files[0];
@@ -189,130 +213,78 @@ function ProfileInformation({ employee, refetch }) {
       });
       setuploading(false);
       refetch();
+      toast.success(`Photo of ${employee.name} updated`);
     } catch (error) {
       setuploading(false);
       toast.error(error.message);
     }
   };
 
+  const [first, ...rest] = String(employee?.name || "").split(" ");
+  const employmentType = EMPLOYMENT_TYPES.find((t) => t.value === employee?.employment_type)?.label || sentence(employee?.employment_type);
+
   return (
-    <div className="h-full">
-      <div className="flex mt-1 gap-3 mb-1 items-center">
-        <div className="relative group overflow-hidden rounded-full">
-          <input
-            disabled={uploading}
-            type="file"
-            className="hidden"
-            ref={uploadRef}
-            onChange={updateProfile}
-          />
-          <div
-            className={cn(
-              "absolute z-30 group-hover:opacity-100 transition-all overflow-hidden flex items-center justify-center h-full w-full bg-black bg-opacity-30",
-              {
-                "opacity-0": !uploading,
-                "opacity-100": uploading,
-              }
-            )}
-          >
-            <a
-              onClick={() => {
-                uploadRef.current.click();
-              }}
-              className="h-7 w-7 cursor-pointer flex items-center justify-center bg-white rounded-full"
-            >
-              {uploading ? (
-                <Loader className="mr-2- h-4 w-4 text-primary animate-spin" />
-              ) : (
-                <Camera size={14} className="text-slate-600" />
-              )}
-            </a>
-          </div>
-          <Avatar
-            className="!h-10 !w-10 border"
-            path={pocketbase.files.getUrl(employee, employee?.avatar)}
-            name={employee?.name || "G"}
-          />
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h4 className="text-[12.5px] capitalize font-semibold text-slate-700">
-              {employee?.name}
-            </h4>
-          </div>
-          <p className="text-[12.5px] capitalize mt-1 font-medium text-slate-500">
-            {employee?.expand?.role?.name}
-          </p>
-        </div>
-      </div>
-      <div className="grid px-[6px] gap-3 sm:gap-6 my-2 pt-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {[
-          { key: "First name", value: employee?.name?.split(" ")[0] },
-          { key: "Last name", value: employee?.name?.split(" ")[1] },
-          { key: "Email", value: employee.email || "N.A" },
-          { key: "Gender", value: employee.gender || "N.A" },
-          {
-            key: "Birth",
-            value: displayDate(employee.birth),
-          },
-          { key: "National Id", value: employee.national_id || "N.A" },
-          { key: "Phone", value: employee.phone || "N.A" },
-          { key: "Country", value: employee?.country || "N.A" },
-          {
-            key: "Address",
-            value: employee?.address || "N.A",
-          },
-          {
-            key: "Salary",
-            value: Number(employee?.salary).toLocaleString("en-US", {
-              style: "currency",
-              currency: "RWF",
-            }),
-          },
-          {
-            key: "Department",
-            value: employee?.expand?.department?.name || "N.A",
-          },
-          {
-            key: "Designation",
-            value: employee?.expand?.designation?.name || "N.A",
-          },
-          {
-            key: "Employment type",
-            value: employee?.employment_type || "N.A",
-          },
-          {
-            key: "Branch",
-            value: employee?.expand?.branch?.name || "N.A",
-          },
-          {
-            key: "Bank name",
-            value: employee?.bank_name || "N.A",
-          },
-          {
-            key: "Bank account number",
-            value: employee?.bank_account_number || "N.A",
-          },
-          {
-            key: "Role",
-            value: employee?.expand?.role?.name || "N.A",
-          },
-          {
-            key: "Joined at",
-            value: displayDate(employee?.joined_at),
-          },
-        ].map((e, i) => {
-          return (
-            <div className="flex  items-center gap-4" key={i}>
-              <span className="text-[12.5px] font-medium- capitalize text-slate-500">
-                {e.key}:
-              </span>
-              <span className="text-[12.5px] truncate font-semibold capitalize text-slate-700">
-                {e.value}
-              </span>
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
+      <div className="flex flex-col gap-4">
+        <Card>
+          <CardHeader title="Personal" />
+          <div className="mb-5 flex items-center gap-4">
+            <EmployeePhoto record={employee} name={employee?.name} className="h-16 w-16" />
+            <div className="min-w-0">
+              <p className="truncate text-t-body font-semibold text-ims-text">{employee?.name}</p>
+              <input disabled={uploading} type="file" accept="image/*" className="hidden" ref={uploadRef} onChange={updateProfile} aria-label="Choose a photo" />
+              <Button size="sm" className="mt-1.5" icon={Camera} loading={uploading} onClick={() => uploadRef.current?.click()}>
+                {employee?.avatar ? "Change photo" : "Add photo"}
+              </Button>
             </div>
-          );
-        })}
+          </div>
+          <Details
+            items={[
+              { label: "First name", value: first },
+              { label: "Last name", value: rest.join(" ") },
+              { label: "Gender", value: employee?.gender },
+              { label: "Date of birth", value: employee?.birth ? fmtDate(employee.birth) : null },
+              { label: "National ID", value: employee?.national_id && <span className="tabular-nums">{employee.national_id}</span> },
+              { label: "Country", value: employee?.country },
+              { label: "Address", value: employee?.address, wide: true },
+            ]}
+          />
+        </Card>
+        <Card>
+          <CardHeader title="Contact" />
+          <Details
+            items={[
+              { label: "Email", value: employee?.email && <a className="break-all text-ims-link hover:underline" href={`mailto:${employee.email}`}>{employee.email}</a> },
+              { label: "Phone", value: employee?.phone && <span className="tabular-nums">{employee.phone}</span> },
+            ]}
+          />
+        </Card>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <Card>
+          <CardHeader title="Employment" />
+          <Details
+            items={[
+              { label: "Department", value: employee?.expand?.department?.name },
+              { label: "Designation", value: employee?.expand?.designation?.name },
+              { label: "Employment type", value: employmentType },
+              { label: "Office", value: employee?.expand?.branch?.name },
+              { label: "System role", value: employee?.expand?.role?.name },
+              { label: "Joined", value: employee?.joined_at ? fmtDate(employee.joined_at) : null },
+            ]}
+          />
+        </Card>
+        <Card>
+          <CardHeader title="Pay and bank" />
+          <Details
+            items={[
+              { label: "Gross salary", value: employee?.salary ? fmtMoney(employee.salary) : null },
+              { label: "Bank", value: employee?.bank_name },
+              { label: "Bank account number", value: employee?.bank_account_number && <span className="font-mono">{employee.bank_account_number}</span> },
+            ]}
+          />
+        </Card>
       </div>
     </div>
   );
