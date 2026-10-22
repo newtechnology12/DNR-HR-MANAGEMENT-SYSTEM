@@ -1,28 +1,46 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "react-query";
 import { toast } from "sonner";
-import { Calculator, Landmark, Plus, Percent, Trash2 } from "lucide-react";
+import { Info, Plus, Trash2 } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Panel } from "@/components/enterprise/ui";
 import { errorMessage } from "@/lib/procurement";
-import { CONTRIBUTION_BASES, payrollApi, rwf } from "@/lib/hr";
-import { Field, inputCls } from "@/components/portal/kit";
+import { CONTRIBUTION_BASES, payrollApi } from "@/lib/hr";
+import {
+  Button,
+  Card,
+  CardHeader,
+  Checkbox,
+  Column,
+  DataTable,
+  Field,
+  Input,
+  MoneyInput,
+  Num,
+  Select,
+  checkboxClass,
+  fmtMoney,
+  fmtNumber,
+  inputClass,
+} from "@/components/ims";
 import { cn } from "@/utils";
 
-const cell = "h-9 w-full rounded-md border border-slate-200 px-2 text-right text-[13px] tabular-nums focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50";
+const cell = cn(inputClass, "h-9 text-right tabular-nums");
 
+/** Shown as a tab of Settings (Payroll & taxes): the Settings page carries the page header. */
 export default function PayrollTaxSettings() {
   const { canPerform } = useRoles();
   const canEdit = canPerform("manage_payroll_settings");
   return (
-    <div className="space-y-4">
-      <p className="rounded-lg border border-sky-100 bg-sky-50 px-3.5 py-2.5 text-[12.5px] text-sky-900">
-        Pre-filled with the Rwanda rates in force when the system was set up (PAYE per Law N° 027/2022 on income tax; RSSB pension 6% + 6%, maternity 0.3% + 0.3%, occupational hazards 2% employer, CBHI 0.5% of net salary). Check them against the latest RRA and RSSB notices before each financial year — every rate here can be changed without development, and each payroll keeps the rates it was calculated with.
-        {!canEdit && " Changing them requires the “Configure PAYE bands and statutory contributions” permission."}
+    <div className="flex flex-col gap-4 p-4">
+      <p className="flex items-start gap-2 rounded-card border border-ims-info/30 bg-ims-info-bg px-4 py-3 text-t-body text-ims-info">
+        <Info size={16} className="mt-0.5 shrink-0" aria-hidden />
+        <span>
+          Pre-filled with the Rwanda rates in force when the system was set up (PAYE per Law N° 027/2022 on income tax; RSSB pension 6% + 6%, maternity 0.3% + 0.3%, occupational hazards 2% employer, CBHI 0.5% of net salary). Check them against the latest RRA and RSSB notices before each financial year. Every rate here can be changed without development, and each payroll keeps the rates it was calculated with.
+        </span>
       </p>
+      {!canEdit && <p className="text-t-small text-ims-muted">You can view these settings. Changing them needs the “Configure PAYE bands and statutory contributions” permission.</p>}
       <Bands canEdit={canEdit} />
       <Contributions canEdit={canEdit} />
       <Options canEdit={canEdit} />
@@ -65,31 +83,40 @@ function Bands({ canEdit }: { canEdit: boolean }) {
   }
   if (!rows) return <Skeleton className="h-48 w-full" />;
   const up = (i: number, k: string, v: any) => setRows((xs) => xs!.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const label = (t: string) => (t === "regular" ? "Employees" : "Casual workers");
+  const columns = (t: string): Column<{ r: any; i: number }>[] => [
+    { key: "min", header: "From (RWF)", cell: ({ r, i }) => <input disabled={!canEdit} type="number" min={0} className={cell} value={r.min_amount} onChange={(e) => up(i, "min_amount", e.target.value)} aria-label={`${label(t)} band ${i + 1}: from`} /> },
+    { key: "max", header: "To (RWF), 0 = no limit", cell: ({ r, i }) => <input disabled={!canEdit} type="number" min={0} className={cell} value={r.max_amount} onChange={(e) => up(i, "max_amount", e.target.value)} aria-label={`${label(t)} band ${i + 1}: to`} /> },
+    { key: "rate", header: "Rate (%)", width: "110px", cell: ({ r, i }) => <input disabled={!canEdit} type="number" min={0} max={100} step={0.5} className={cell} value={r.rate} onChange={(e) => up(i, "rate", e.target.value)} aria-label={`${label(t)} band ${i + 1}: rate`} /> },
+    ...(canEdit
+      ? [{
+          key: "remove", header: <span className="sr-only">Remove</span>, width: "56px", align: "center" as const,
+          cell: ({ r, i }: { r: any; i: number }) => <Button variant="ghost" size="icon-sm" icon={Trash2} aria-label={`Remove ${label(t).toLowerCase()} band ${i + 1}`} onClick={() => { if (r.id) setRemoved((x) => [...x, r.id]); setRows((xs) => xs!.filter((_, j) => j !== i)); }} />,
+        }]
+      : []),
+  ];
   return (
-    <Panel title={<span className="flex items-center gap-2"><Percent size={16} className="text-slate-400" /> PAYE tax bands (monthly taxable income)</span>} subtitle="Progressive: each rate applies only to the part of the income inside its band.">
-      <div className="grid gap-4 lg:grid-cols-2">
+    <Card>
+      <CardHeader title="PAYE tax bands" subtitle="Monthly taxable income. Progressive: each rate applies only to the part of the income inside its band." />
+      <div className="grid gap-5 lg:grid-cols-2">
         {(["regular", "casual"] as const).map((t) => (
-          <div key={t}>
-            <p className="mb-2 text-[13px] font-semibold">{t === "regular" ? "Employees" : "Casual workers"}</p>
-            <table className="w-full text-[13px]">
-              <thead><tr className="text-left text-[11px] uppercase tracking-wide text-slate-500"><th className="pb-1">From (RWF)</th><th className="pb-1">To (0 = no limit)</th><th className="pb-1">Rate %</th><th /></tr></thead>
-              <tbody>
-                {rows.map((r, i) => r.employment_type !== t ? null : (
-                  <tr key={r.id || `new-${i}`}>
-                    <td className="py-1 pr-2"><input disabled={!canEdit} type="number" min={0} className={cell} value={r.min_amount} onChange={(e) => up(i, "min_amount", e.target.value)} /></td>
-                    <td className="py-1 pr-2"><input disabled={!canEdit} type="number" min={0} className={cell} value={r.max_amount} onChange={(e) => up(i, "max_amount", e.target.value)} /></td>
-                    <td className="py-1 pr-2"><input disabled={!canEdit} type="number" min={0} max={100} step={0.5} className={cell} value={r.rate} onChange={(e) => up(i, "rate", e.target.value)} /></td>
-                    <td className="py-1">{canEdit && <button type="button" onClick={() => { if (r.id) setRemoved((x) => [...x, r.id]); setRows((xs) => xs!.filter((_, j) => j !== i)); }} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove band"><Trash2 size={14} /></button>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {canEdit && <Button size="sm" variant="outline" className="mt-2" onClick={() => setRows((xs) => [...xs!, { employment_type: t, min_amount: 0, max_amount: 0, rate: 0, active: true }])}><Plus size={14} /> Add band</Button>}
+          <div key={t} className="min-w-0">
+            <h3 className="mb-2 text-t-body font-bold text-ims-text">{label(t)}</h3>
+            <div className="overflow-hidden rounded-card border border-ims-border">
+              <DataTable
+                minWidth={420}
+                columns={columns(t)}
+                rows={rows.map((r, i) => ({ r, i })).filter((x) => x.r.employment_type === t)}
+                rowKey={({ r, i }) => r.id || `new-${i}`}
+                caption={`PAYE bands for ${label(t).toLowerCase()}`}
+              />
+            </div>
+            {canEdit && <Button size="sm" icon={Plus} className="mt-3" onClick={() => setRows((xs) => [...xs!, { employment_type: t, min_amount: 0, max_amount: 0, rate: 0, active: true }])}>Add band</Button>}
           </div>
         ))}
       </div>
-      {canEdit && <div className="mt-4 flex justify-end"><Button disabled={busy} onClick={save}>Save bands</Button></div>}
-    </Panel>
+      {canEdit && <div className="mt-4 flex justify-end border-t border-ims-divider pt-4"><Button variant="primary" loading={busy} onClick={save}>Save bands</Button></div>}
+    </Card>
   );
 }
 
@@ -120,34 +147,37 @@ function Contributions({ canEdit }: { canEdit: boolean }) {
   }
   if (!rows) return <Skeleton className="h-48 w-full" />;
   const up = (i: number, k: string, v: any) => setRows((xs) => xs!.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const name = (r: any, i: number) => r.name || `Contribution ${i + 1}`;
+  const columns: Column<any>[] = [
+    { key: "code", header: "Code", width: "150px", cell: (r, i) => <input disabled={!canEdit || Boolean(r.id)} className={cn(cell, "text-left")} value={r.code || ""} onChange={(e) => up(i, "code", e.target.value)} aria-label={`${name(r, i)}: code`} /> },
+    {
+      key: "name", header: "Name", className: "min-w-[270px]",
+      cell: (r, i) => <input disabled={!canEdit} className={cn(cell, "text-left")} value={r.name || ""} onChange={(e) => up(i, "name", e.target.value)} aria-label={`Contribution ${i + 1}: name`} />,
+      sub: (r) => r.description,
+    },
+    { key: "ee", header: "Employee (%)", width: "110px", cell: (r, i) => <input disabled={!canEdit} type="number" min={0} step={0.1} className={cell} value={r.employee_rate} onChange={(e) => up(i, "employee_rate", e.target.value)} aria-label={`${name(r, i)}: employee rate`} /> },
+    { key: "er", header: "Employer (%)", width: "110px", cell: (r, i) => <input disabled={!canEdit} type="number" min={0} step={0.1} className={cell} value={r.employer_rate} onChange={(e) => up(i, "employer_rate", e.target.value)} aria-label={`${name(r, i)}: employer rate`} /> },
+    {
+      key: "base", header: "Calculated on", className: "min-w-[230px]",
+      cell: (r, i) => <Select disabled={!canEdit} className="h-9" value={r.base} onChange={(e) => up(i, "base", e.target.value)} aria-label={`${name(r, i)}: calculated on`}>{Object.entries(CONTRIBUTION_BASES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>,
+    },
+    { key: "cap", header: "Ceiling (RWF), 0 = none", width: "140px", cell: (r, i) => <input disabled={!canEdit} type="number" min={0} className={cell} value={r.cap_amount || 0} onChange={(e) => up(i, "cap_amount", e.target.value)} aria-label={`${name(r, i)}: ceiling, 0 for no ceiling`} /> },
+    { key: "to", header: "Paid to", width: "110px", cell: (r, i) => <input disabled={!canEdit} className={cn(cell, "text-left")} value={r.remit_to || ""} onChange={(e) => up(i, "remit_to", e.target.value)} aria-label={`${name(r, i)}: paid to`} /> },
+    { key: "active", header: "Active", width: "72px", align: "center", cell: (r, i) => <input disabled={!canEdit} type="checkbox" className={checkboxClass} checked={Boolean(r.active)} onChange={(e) => up(i, "active", e.target.checked)} aria-label={`${name(r, i)}: active`} /> },
+  ];
   return (
-    <Panel title={<span className="flex items-center gap-2"><Landmark size={16} className="text-slate-400" /> Statutory contributions</span>} subtitle="Employee part is deducted from the salary; employer part is added to the cost of employment." bodyClassName="px-0">
-      <div className="overflow-x-auto">
-        <table className="dnr-grid w-full min-w-[980px] text-[13px]">
-          <thead><tr className="border-y border-slate-100 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"><th className="px-3 py-2">Code</th><th className="px-3 py-2">Name</th><th className="w-24 px-3 py-2">Employee %</th><th className="w-24 px-3 py-2">Employer %</th><th className="px-3 py-2">Calculated on</th><th className="w-28 px-3 py-2">Ceiling</th><th className="w-24 px-3 py-2">Paid to</th><th className="px-3 py-2">Active</th></tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((r, i) => (
-              <tr key={r.id || `new-${i}`}>
-                <td className="px-3 py-1.5"><input disabled={!canEdit || Boolean(r.id)} className={cn(cell, "text-left uppercase")} value={r.code || ""} onChange={(e) => up(i, "code", e.target.value)} /></td>
-                <td className="px-3 py-1.5"><input disabled={!canEdit} className={cn(cell, "text-left")} value={r.name || ""} onChange={(e) => up(i, "name", e.target.value)} /><p className="mt-0.5 text-[11px] text-slate-500">{r.description}</p></td>
-                <td className="px-3 py-1.5"><input disabled={!canEdit} type="number" min={0} step={0.1} className={cell} value={r.employee_rate} onChange={(e) => up(i, "employee_rate", e.target.value)} /></td>
-                <td className="px-3 py-1.5"><input disabled={!canEdit} type="number" min={0} step={0.1} className={cell} value={r.employer_rate} onChange={(e) => up(i, "employer_rate", e.target.value)} /></td>
-                <td className="px-3 py-1.5"><select disabled={!canEdit} className={cn(cell, "text-left")} value={r.base} onChange={(e) => up(i, "base", e.target.value)}>{Object.entries(CONTRIBUTION_BASES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></td>
-                <td className="px-3 py-1.5"><input disabled={!canEdit} type="number" min={0} className={cell} value={r.cap_amount || 0} onChange={(e) => up(i, "cap_amount", e.target.value)} title="0 = no ceiling" /></td>
-                <td className="px-3 py-1.5"><input disabled={!canEdit} className={cn(cell, "text-left")} value={r.remit_to || ""} onChange={(e) => up(i, "remit_to", e.target.value)} /></td>
-                <td className="px-3 py-1.5 text-center"><input disabled={!canEdit} type="checkbox" className="h-4 w-4" checked={Boolean(r.active)} onChange={(e) => up(i, "active", e.target.checked)} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <Card padded={false} className="overflow-hidden">
+      <div className="px-5 pt-5">
+        <CardHeader title="Statutory contributions" subtitle="The employee part is deducted from the salary; the employer part is added to the cost of employment." />
       </div>
+      <DataTable columns={columns} rows={rows} rowKey={(r, i) => r.id || `new-${i}`} minWidth={1180} caption="Statutory contributions" />
       {canEdit && (
-        <div className="flex justify-between px-4 pt-3">
-          <Button size="sm" variant="outline" onClick={() => setRows((xs) => [...xs!, { code: "", name: "", employee_rate: 0, employer_rate: 0, base: "gross", cap_amount: 0, remit_to: "", active: true }])}><Plus size={14} /> Add contribution</Button>
-          <Button disabled={busy} onClick={save}>Save contributions</Button>
+        <div className="flex flex-wrap justify-between gap-3 border-t border-ims-divider px-5 py-4">
+          <Button size="sm" icon={Plus} onClick={() => setRows((xs) => [...xs!, { code: "", name: "", employee_rate: 0, employer_rate: 0, base: "gross", cap_amount: 0, remit_to: "", active: true }])}>Add contribution</Button>
+          <Button variant="primary" loading={busy} onClick={save}>Save contributions</Button>
         </div>
       )}
-    </Panel>
+    </Card>
   );
 }
 
@@ -170,15 +200,16 @@ function Options({ canEdit }: { canEdit: boolean }) {
   }
   const set = (k: string) => (e: any) => setV((x: any) => ({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
   return (
-    <Panel title="Employer details and options">
-      <fieldset disabled={!canEdit} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Employer TIN"><input className={inputCls} value={v.payroll_employer_tin || ""} onChange={set("payroll_employer_tin")} /></Field>
-        <Field label="Employer RSSB number"><input className={inputCls} value={v.payroll_rssb_number || ""} onChange={set("payroll_rssb_number")} /></Field>
-        <Field label="Paying bank"><input className={inputCls} value={v.payroll_bank_name || ""} onChange={set("payroll_bank_name")} /></Field>
-        <label className="flex items-center gap-2 text-[13px] sm:col-span-3"><input type="checkbox" className="h-4 w-4" checked={Boolean(v.payroll_pension_deductible)} onChange={set("payroll_pension_deductible")} /> Deduct the employee pension contribution before calculating PAYE</label>
+    <Card>
+      <CardHeader title="Employer details and options" subtitle="Printed on payslips and on the RRA and RSSB schedules." />
+      <fieldset disabled={!canEdit} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Field label="Employer TIN" htmlFor="po-tin"><Input id="po-tin" value={v.payroll_employer_tin || ""} onChange={set("payroll_employer_tin")} /></Field>
+        <Field label="Employer RSSB number" htmlFor="po-rssb"><Input id="po-rssb" value={v.payroll_rssb_number || ""} onChange={set("payroll_rssb_number")} /></Field>
+        <Field label="Paying bank" htmlFor="po-bank"><Input id="po-bank" value={v.payroll_bank_name || ""} onChange={set("payroll_bank_name")} /></Field>
+        <Checkbox className="sm:col-span-3" label="Deduct the employee pension contribution before calculating PAYE" checked={Boolean(v.payroll_pension_deductible)} onChange={(c) => setV((x: any) => ({ ...x, payroll_pension_deductible: c }))} />
       </fieldset>
-      {canEdit && <div className="mt-3 flex justify-end"><Button onClick={save}>Save</Button></div>}
-    </Panel>
+      {canEdit && <div className="mt-4 flex justify-end border-t border-ims-divider pt-4"><Button variant="primary" onClick={save}>Save</Button></div>}
+    </Card>
   );
 }
 
@@ -186,29 +217,44 @@ function Tester() {
   const [v, setV] = React.useState({ basic_salary: 500000, transport_allowance: 50000, housing_allowance: 0, employment_type: "permanent" });
   const q = useQuery(["tax-tester", v], () => payrollApi.preview(v), { keepPreviousData: true });
   const p = q.data;
+  const lines: { key: string; label: string; detail?: string; amount: number | null; bold?: boolean }[] = p
+    ? [
+        { key: "gross", label: "Gross", amount: p.gross, bold: true },
+        { key: "paye", label: "PAYE", detail: (p.paye_breakdown || []).map((b: any) => `${b.rate}% × ${fmtNumber(b.amount)}`).join(" + "), amount: -p.paye },
+        ...(p.contributions || []).map((c: any) => ({ key: c.code, label: c.name, detail: `Base ${fmtNumber(c.base)} · employer ${fmtNumber(c.er)}`, amount: c.ee ? -c.ee : null })),
+      ]
+    : [];
   return (
-    <Panel title={<span className="flex items-center gap-2"><Calculator size={16} className="text-slate-400" /> Check a salary</span>} subtitle="Test the settings on any salary">
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Basic salary"><input type="number" className={inputCls} value={v.basic_salary} onChange={(e) => setV((x) => ({ ...x, basic_salary: Number(e.target.value) }))} /></Field>
-          <Field label="Transport allowance"><input type="number" className={inputCls} value={v.transport_allowance} onChange={(e) => setV((x) => ({ ...x, transport_allowance: Number(e.target.value) }))} /></Field>
-          <Field label="Housing allowance"><input type="number" className={inputCls} value={v.housing_allowance} onChange={(e) => setV((x) => ({ ...x, housing_allowance: Number(e.target.value) }))} /></Field>
-          <Field label="Type"><select className={inputCls} value={v.employment_type} onChange={(e) => setV((x) => ({ ...x, employment_type: e.target.value }))}><option value="permanent">Employee</option><option value="casual">Casual worker</option></select></Field>
+    <Card>
+      <CardHeader title="Check a salary" subtitle="Test the settings on any salary. Nothing is saved." />
+      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <div className="grid h-fit grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Basic salary" htmlFor="tt-basic"><MoneyInput id="tt-basic" value={v.basic_salary} onChange={(n) => setV((x) => ({ ...x, basic_salary: Number(n) }))} /></Field>
+          <Field label="Transport allowance" htmlFor="tt-transport"><MoneyInput id="tt-transport" value={v.transport_allowance} onChange={(n) => setV((x) => ({ ...x, transport_allowance: Number(n) }))} /></Field>
+          <Field label="Housing allowance" htmlFor="tt-housing"><MoneyInput id="tt-housing" value={v.housing_allowance} onChange={(n) => setV((x) => ({ ...x, housing_allowance: Number(n) }))} /></Field>
+          <Field label="Type" htmlFor="tt-type"><Select id="tt-type" value={v.employment_type} onChange={(e) => setV((x) => ({ ...x, employment_type: e.target.value }))}><option value="permanent">Employee</option><option value="casual">Casual worker</option></Select></Field>
         </div>
         {p && (
-          <table className="w-full text-[13px]">
-            <tbody className="divide-y divide-slate-100">
-              <tr className="font-semibold"><td className="py-1">Gross</td><td className="py-1 text-right tabular-nums">{rwf(p.gross)}</td></tr>
-              <tr><td className="py-1">PAYE<span className="block text-[11px] text-slate-500">{(p.paye_breakdown || []).map((b: any) => `${b.rate}% × ${rwf(b.amount)}`).join(" + ")}</span></td><td className="py-1 text-right tabular-nums">−{rwf(p.paye)}</td></tr>
-              {(p.contributions || []).map((c: any) => (
-                <tr key={c.code}><td className="py-1">{c.name}<span className="block text-[11px] text-slate-500">base {rwf(c.base)} · employer {rwf(c.er)}</span></td><td className="py-1 text-right tabular-nums">{c.ee ? `−${rwf(c.ee)}` : "—"}</td></tr>
-              ))}
-              <tr className="text-[14px] font-bold"><td className="py-1.5">Net pay</td><td className="py-1.5 text-right tabular-nums">{rwf(p.net)}</td></tr>
-              <tr className="text-slate-600"><td className="py-1">Total cost to employer</td><td className="py-1 text-right tabular-nums">{rwf(p.employer_cost)}</td></tr>
-            </tbody>
-          </table>
+          <div className="min-w-0 overflow-hidden rounded-card border border-ims-border">
+            <DataTable
+              minWidth={0}
+              rows={lines}
+              rowKey={(x) => x.key}
+              caption="Payslip of the tested salary"
+              rowClassName={(x) => (x.bold ? "font-semibold" : undefined)}
+              totalLabel="Net pay"
+              columns={[
+                { key: "label", header: "Line", cell: (x) => x.label, sub: (x) => x.detail },
+                { key: "amount", header: "Amount (RWF)", numeric: true, cell: (x) => (x.amount === null ? <span className="text-ims-faint">—</span> : <Num value={x.amount} />), total: <Num value={p.net} /> },
+              ]}
+            />
+            <p className="flex justify-between gap-3 border-t border-ims-divider px-3.5 py-3 text-t-body text-ims-body">
+              <span>Total cost to the employer</span>
+              <span className="font-semibold tabular-nums text-ims-text">{fmtMoney(p.employer_cost)}</span>
+            </p>
+          </div>
         )}
       </div>
-    </Panel>
+    </Card>
   );
 }

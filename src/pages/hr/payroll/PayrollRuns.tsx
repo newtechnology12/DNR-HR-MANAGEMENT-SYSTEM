@@ -1,15 +1,17 @@
 import * as React from "react";
 import { useQuery } from "react-query";
 import { useNavigate } from "react-router-dom";
-import { Banknote, Plus, Settings2, Users, Wallet } from "lucide-react";
+import { Banknote, ExternalLink, Plus, Settings2, Users } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
-import { Button } from "@/components/ui/button";
-import RecordTable, { RecordColumn } from "@/components/enterprise/RecordTable";
-import { MetricGroup, PageHeader, StatusBadge } from "@/components/enterprise/ui";
-import { compactMoney } from "@/lib/procurement";
-import { MONTHS, PAYROLL_STATUS, rwf } from "@/lib/hr";
+import RecordTable, { RecordColumn, RecordFilter } from "@/components/enterprise/RecordTable";
+import { StatusBadge } from "@/components/enterprise/ui";
+import { WithPeople } from "@/components/enterprise/WithCell";
+import { Button, DocNo, KpiBand, Num, Page, PageHeader, Person, fmtMoneyShort, statusText } from "@/components/ims";
+import { MONTHS, PAYROLL_STATUS } from "@/lib/hr";
 import PayrollPreviewDialog from "./PayrollPreview";
+
+const LIST = "/dashboard/hr/payroll";
 
 export default function PayrollRuns() {
   const navigate = useNavigate();
@@ -22,43 +24,55 @@ export default function PayrollRuns() {
   const sum = (xs: any[], k: string) => xs.reduce((a, p) => a + (Number(p.totals?.[k]) || 0), 0);
   const inApproval = rows.filter((p) => p.status === "pending_approval");
 
-  const columns: RecordColumn<any>[] = [
-    { key: "number", header: "Payroll", sortField: "number", cell: (r) => <span className="whitespace-nowrap font-medium">{r.number || "—"}</span> },
-    { key: "period", header: "Period", sortField: "year", cell: (r) => <span className="whitespace-nowrap">{r.period_label || `${MONTHS[(r.month || 1) - 1]} ${r.year}`}</span>, csv: (r) => r.period_label },
-    { key: "branch", header: "Office", cell: (r) => <span className="whitespace-nowrap text-slate-600">{r.expand?.branch?.name || "All offices"}</span>, csv: (r) => r.expand?.branch?.name || "All" },
-    { key: "staff", header: "Staff", align: "right", cell: (r) => <span className="tabular-nums">{r.headcount || "—"}</span>, csv: (r) => r.headcount },
-    { key: "gross", header: "Gross", sortField: "total_gross", align: "right", cell: (r) => <span className="whitespace-nowrap tabular-nums">{rwf(r.total_gross)}</span>, csv: (r) => r.total_gross },
-    { key: "paye", header: "PAYE (RRA)", align: "right", cell: (r) => <span className="whitespace-nowrap tabular-nums text-slate-600">{rwf(r.totals?.paye)}</span>, csv: (r) => r.totals?.paye },
-    { key: "rssb", header: "RSSB", align: "right", cell: (r) => <span className="whitespace-nowrap tabular-nums text-slate-600">{rwf(r.totals?.rssb)}</span>, csv: (r) => r.totals?.rssb },
-    { key: "net", header: "Net pay", sortField: "total_net", align: "right", cell: (r) => <span className="whitespace-nowrap font-semibold tabular-nums">{rwf(r.total_net)}</span>, csv: (r) => r.total_net },
-    { key: "cost", header: "Employer cost", sortField: "total_employer_cost", align: "right", cell: (r) => <span className="whitespace-nowrap tabular-nums">{rwf(r.total_employer_cost)}</span>, csv: (r) => r.total_employer_cost },
-    { key: "status", header: "Status", sortField: "status", cell: (r) => <StatusBadge status={r.status || "draft"} map={PAYROLL_STATUS} />, csv: (r) => PAYROLL_STATUS[r.status]?.label },
+  const filters: RecordFilter[] = [
+    { field: "status", label: "Status", options: Object.entries(PAYROLL_STATUS).map(([value, m]) => ({ value, label: statusText(m) })) },
+    { field: "branch", label: "Office", collection: "branches" },
   ];
 
+  /** Who must act now: the approvers while it is in approval, HR while it is prepared, Finance once approved. */
+  const withCell = (r: any) => {
+    if (r.status === "pending_approval") return <WithPeople ids={r.pending_approvers} />;
+    if (["draft", "computed", "returned"].includes(r.status)) return <Person name="HR & payroll" detail={r.status === "draft" ? "To calculate" : "To submit for approval"} />;
+    if (r.status === "approved") return <Person name="Finance" detail="To record the payment" />;
+    return <span className="text-ims-faint">—</span>;
+  };
+
+  const columns: RecordColumn<any>[] = [
+    { key: "number", header: "Payroll", sortField: "number", nowrap: true, cell: (r) => <DocNo value={r.number} />, sub: (r) => r.expand?.branch?.name || "All offices" },
+    { key: "period", header: "Period", sortField: "year", nowrap: true, cell: (r) => r.period_label || `${MONTHS[(r.month || 1) - 1]} ${r.year}`, csv: (r) => r.period_label },
+    { key: "branch", header: "Office", exportOnly: true, cell: (r) => r.expand?.branch?.name || "All offices", csv: (r) => r.expand?.branch?.name || "All" },
+    { key: "staff", header: "Staff", align: "right", cell: (r) => <Num value={r.headcount || null} />, csv: (r) => r.headcount },
+    { key: "gross", header: "Gross pay (RWF)", sortField: "total_gross", align: "right", sum: "total_gross", format: "money", cell: (r) => <Num value={r.total_gross} />, csv: (r) => r.total_gross },
+    { key: "paye", header: "PAYE (RWF)", exportOnly: true, format: "money", cell: (r) => <Num value={r.totals?.paye} />, csv: (r) => r.totals?.paye },
+    { key: "rssb", header: "RSSB (RWF)", exportOnly: true, format: "money", cell: (r) => <Num value={r.totals?.rssb} />, csv: (r) => r.totals?.rssb },
+    { key: "net", header: "Net pay (RWF)", sortField: "total_net", align: "right", sum: "total_net", format: "money", cell: (r) => <span className="font-semibold"><Num value={r.total_net} /></span>, csv: (r) => r.total_net },
+    { key: "cost", header: "Employer cost (RWF)", sortField: "total_employer_cost", align: "right", sum: "total_employer_cost", format: "money", cell: (r) => <Num value={r.total_employer_cost} />, csv: (r) => r.total_employer_cost },
+    { key: "status", header: "Status", sortField: "status", cell: (r) => <StatusBadge status={r.status || "draft"} map={PAYROLL_STATUS} />, csv: (r) => statusText(PAYROLL_STATUS[r.status], r.status) },
+    { key: "with", header: "With", className: "max-w-[180px]", cell: withCell },
+  ];
+
+  const canCreate = canPerform("create_payroll");
+  const open = (r: any) => navigate(`${LIST}/${r.id}`);
+
   return (
-    <div className="space-y-4 px-4 py-4 sm:px-6">
+    <Page>
       <PageHeader
+        breadcrumbs={[{ label: "HR & payroll" }, { label: "Payroll" }]}
         title="Payroll"
-        description="Monthly payroll calculated with Rwanda PAYE and RSSB contributions, approved in several steps — the preparer never approves."
-        breadcrumbs={[{ title: "HR", link: "/dashboard/hr/employees" }, { title: "Payroll", link: "/dashboard/hr/payroll" }]}
-        actions={
-          <>
-            {canPerform("manage_salaries") && <Button size="sm" variant="outline" onClick={() => navigate("/dashboard/hr/payroll/salaries")}><Users size={14} /> Salary structures</Button>}
-            {canPerform("manage_payroll_settings") && <Button size="sm" variant="outline" onClick={() => navigate("/dashboard/settings/general-settings/payroll")}><Settings2 size={14} /> Tax settings</Button>}
-            {canPerform("create_payroll") && <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} /> New payroll</Button>}
-          </>
-        }
+        subtitle="Monthly payroll with Rwanda PAYE and RSSB, approved in several steps before it is paid."
+        secondary={[
+          ...(canPerform("manage_salaries") ? [{ label: "Salary structures", icon: Users, to: `${LIST}/salaries` }] : []),
+          ...(canPerform("manage_payroll_settings") ? [{ label: "Tax settings", icon: Settings2, to: "/dashboard/settings/general-settings/payroll" }] : []),
+        ]}
+        primary={canCreate ? { label: "New payroll", icon: Plus, onClick: () => setCreating(true) } : undefined}
       />
-      <MetricGroup
-        title={`Year ${year}`}
-        icon={Wallet}
-        columns={4}
+      <KpiBand
         loading={all.isLoading}
-        metrics={[
-          { label: "Net salaries paid", value: compactMoney(sum(paid, "net")), sub: `${paid.length} payroll${paid.length === 1 ? "" : "s"} paid` },
-          { label: "PAYE to RRA", value: compactMoney(sum(paid, "paye")), sub: "Declared and due by the 15th of the following month" },
-          { label: "Contributions to RSSB", value: compactMoney(sum(paid, "rssb")), sub: "Pension, maternity, occupational hazards, CBHI" },
-          { label: "In approval", value: inApproval.length, sub: inApproval.map((p) => p.period_label).join(", ") || "Nothing waiting", tone: inApproval.length ? "warning" : "default" },
+        items={[
+          { label: `Net salaries paid in ${year}`, value: fmtMoneyShort(sum(paid, "net")), sub: `${paid.length} payroll${paid.length === 1 ? "" : "s"} paid` },
+          { label: "PAYE to RRA", value: fmtMoneyShort(sum(paid, "paye")), sub: "Due by the 15th of the next month" },
+          { label: "Contributions to RSSB", value: fmtMoneyShort(sum(paid, "rssb")), sub: "Pension, maternity, hazards, CBHI" },
+          { label: "Pending approval", value: inApproval.length, sub: inApproval.map((p) => p.period_label).join(", ") || "None", tone: inApproval.length ? "warning" : "default" },
         ]}
       />
       <RecordTable
@@ -67,11 +81,20 @@ export default function PayrollRuns() {
         expand="branch"
         defaultSort="-year,-month"
         searchFields={["number", "period_label"]}
+        searchPlaceholder="Search payroll number or period"
+        filters={filters}
         exportName="payrolls"
-        onRowClick={(r) => navigate(`/dashboard/hr/payroll/${r.id}`)}
-        empty={{ icon: Banknote, title: "No payroll yet", text: "Create the first payroll for a month; it is calculated from the salary structures and the tax settings." }}
+        exportTitle="Payrolls"
+        onRowClick={open}
+        rowActions={() => [{ label: "Open", icon: ExternalLink, onSelect: open }]}
+        empty={{
+          icon: Banknote,
+          title: "No payroll yet.",
+          text: canCreate ? "No payroll yet. Create one with New payroll; it is calculated from the salary structures and the tax settings." : "No payroll to show.",
+          action: canCreate ? <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>New payroll</Button> : undefined,
+        }}
       />
       {creating && <PayrollPreviewDialog onClose={() => setCreating(false)} />}
-    </div>
+    </Page>
   );
 }

@@ -4,41 +4,81 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { ArrowUpRight, Ban, Banknote, BookOpen, Calculator, Check, Clock, CornerUpLeft, Download, FileDown, Landmark, MessageSquare, Send, UserPlus, Users, Wallet, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Ban, Banknote, Calculator, Check, Clock, CornerUpLeft, Download, FileDown, MessageSquare, Send, UserPlus, Wallet, XCircle } from "lucide-react";
 import pocketbase from "@/lib/pocketbase";
 import { useRoles } from "@/context/roles.context";
 import { usePermissions } from "@/context/auth.context";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState, Panel, StatusBadge } from "@/components/enterprise/ui";
-import { ActionDialog, ActionKind, ApprovalTracker } from "@/components/enterprise/Approval";
-import { Chatter, ControlBar, DocumentPage, FieldGrid, Notebook, Sheet, SheetTitle, SmartButtons, toChatter } from "@/components/enterprise/DocumentLayout";
-import { compactMoney, errorMessage, procurementApi } from "@/lib/procurement";
-import { CONTRIBUTION_BASES, PAYROLL_STATUS, payrollApi, rwf } from "@/lib/hr";
+import { ActionDialog, ActionKind, Activity, ApprovalTracker } from "@/components/enterprise/Approval";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CardHeader,
+  Column,
+  DataTable,
+  DatePicker,
+  DetailHeader,
+  Details,
+  DocNo,
+  EmptyState,
+  Field,
+  Input,
+  KpiBand,
+  MenuItem,
+  Modal,
+  MoreMenu,
+  Num,
+  Page,
+  Person,
+  SearchBox,
+  Select,
+  Tabs,
+  fmtDate,
+  fmtDateTime,
+  fmtMoney,
+  fmtMoneyShort,
+  fmtNumber,
+  statusWord,
+} from "@/components/ims";
+import { errorMessage, procurementApi } from "@/lib/procurement";
+import { CONTRIBUTION_BASES, PAYROLL_STATUS, payrollApi } from "@/lib/hr";
 import { exportReport, ExportFormat } from "@/lib/exporter";
 import ExportMenu from "@/components/enterprise/ExportMenu";
 import useSettings from "@/hooks/useSettings";
 import { cn } from "@/utils";
-import { Field, inputCls } from "@/components/portal/kit";
 import { PayslipDialog } from "./Payslip";
 
-const STEPS = [
-  { key: "draft", label: "Draft" },
-  { key: "computed", label: "Calculated" },
-  { key: "pending_approval", label: "In approval" },
-  { key: "approved", label: "Approved" },
-  { key: "paid", label: "Paid" },
-];
-const stepOf = (s: string) => (s === "returned" ? "computed" : ["rejected", "cancelled"].includes(s) ? "draft" : s);
-const th = "whitespace-nowrap px-2.5 py-2";
-const td = "whitespace-nowrap px-2.5 py-2 text-right tabular-nums";
+type TabKey = "details" | "employees" | "statutory" | "approvals" | "activity";
+const TAB_KEYS: TabKey[] = ["details", "employees", "statutory", "approvals", "activity"];
+/** Links from before the tabs were grouped (?tab=register, ?tab=bank…) still land on the right tab. */
+const OLD_TABS: Record<string, TabKey> = { register: "employees", bank: "statutory", loans: "statutory", posting: "details", reconciliation: "details", rates: "details", approval: "approvals" };
+const LIST = "/dashboard/hr/payroll";
+
+/** A money column header with a muted second line ("Employer", "Staff") where the same word appears twice. */
+const twoLine = (label: string, who: string) => (
+  <span className="inline-flex flex-col items-end leading-tight">
+    <span>{label}</span>
+    <span className="text-t-hint font-normal text-ims-faint">{who}</span>
+  </span>
+);
+const sumOf = (xs: any[], f: (x: any) => number) => xs.reduce((a, x) => a + (Number(f(x)) || 0), 0);
+
+function Notice({ tone, icon: Icon, children }: { tone: "warning" | "orange"; icon: typeof Clock; children: React.ReactNode }) {
+  return (
+    <p role="status" className={cn("flex items-start gap-2 rounded-card border px-4 py-3 text-t-body", tone === "warning" ? "border-ims-warning/30 bg-ims-warning-bg text-ims-warning" : "border-ims-orange/30 bg-ims-orange-bg text-ims-orange")}>
+      <Icon size={16} className="mt-0.5 shrink-0" aria-hidden />
+      <span>{children}</span>
+    </p>
+  );
+}
 
 export default function PayrollRun() {
   const { payrollId } = useParams();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") || "register";
-  const setTab = (t: string) => setParams(t === "register" ? {} : { tab: t }, { replace: true });
+  const rawTab = params.get("tab") || "details";
+  const tab: TabKey = OLD_TABS[rawTab] || (TAB_KEYS.includes(rawTab as TabKey) ? (rawTab as TabKey) : "details");
+  const setTab = (t: string) => setParams(t === "details" ? {} : { tab: t }, { replace: true });
   const queryClient = useQueryClient();
   const { canPerform } = useRoles();
   const me = pocketbase.authStore.model as any;
@@ -64,7 +104,8 @@ export default function PayrollRun() {
   };
   const run = useMutation((action: "compute" | "submit") => payrollApi.action(payrollId!, action), {
     onSuccess: (_, action) => {
-      toast.success(action === "compute" ? "Payroll recalculated" : "Sent for approval");
+      const number = q.data?.p?.number || "The payroll";
+      toast.success(action === "compute" ? `${number} recalculated` : `${number} sent for approval`);
       refresh();
     },
     onError: (e) => {
@@ -72,8 +113,24 @@ export default function PayrollRun() {
     },
   });
 
-  if (q.isLoading) return <div className="space-y-4 px-4 py-4 sm:px-6"><Skeleton className="h-12 w-80" /><Skeleton className="h-[480px] w-full" /></div>;
-  if (!q.data) return <div className="p-4"><Panel><EmptyState icon={Wallet} title="Payroll not available" text="It may be outside what your role can see." /></Panel></div>;
+  if (q.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-16 w-full max-w-2xl" />
+        <Skeleton className="h-[480px] w-full" />
+      </Page>
+    );
+  }
+  if (!q.data) {
+    return (
+      <Page>
+        <Card>
+          <EmptyState icon={Wallet} text="This payroll is not available. It may be outside what your role can see." action={<ButtonLink to={LIST}>Back to payroll</ButtonLink>} />
+        </Card>
+      </Page>
+    );
+  }
   const { p, slips, actions, audit } = q.data;
   const T = p.totals || {};
   const approval = p.expand?.approval;
@@ -154,246 +211,297 @@ export default function PayrollRun() {
     ],
   });
 
-  const actionsBar = (
+  // ---------------------------------------------------------------- actions: the next step is the primary button
+  const stepName = approval?.status === "pending" ? approval.steps?.[approval.current_level]?.name : null;
+  const returnNote = [...((actions as any[]) || [])].reverse().find((a: any) => a.action === "return")?.comment;
+  const canCalculate = canPrepare && ["draft", "computed", "returned"].includes(status);
+  const canSubmit = canPrepare && ["computed", "returned"].includes(status);
+  const canPay = canPerform("mark_payroll_paid") && status === "approved";
+  const canCancel = canPrepare && !["paid", "cancelled", "approved"].includes(status);
+  const excelButton = <Button key="excel" icon={Download} onClick={exportExcel} disabled={!slips.length}>Export to Excel</Button>;
+
+  const primary = isApprover ? (
+    <Button variant="primary" icon={Check} onClick={() => setDecision("approve")}>Approve</Button>
+  ) : canSubmit ? (
+    <Button variant="primary" icon={Send} loading={run.isLoading && run.variables === "submit"} disabled={run.isLoading} onClick={() => run.mutate("submit")}>Submit for approval</Button>
+  ) : canCalculate ? (
+    <Button variant="primary" icon={Calculator} loading={run.isLoading} onClick={() => run.mutate("compute")}>Calculate</Button>
+  ) : canPay ? (
+    <Button variant="primary" icon={Banknote} onClick={() => setPaying(true)}>Record payment</Button>
+  ) : null;
+  const secondary = isApprover ? (
     <>
-      {isApprover && (
-        <>
-          <Button size="sm" onClick={() => setDecision("approve")}><Check size={14} /> Approve</Button>
-          <Button size="sm" variant="outline" onClick={() => setDecision("return")}><CornerUpLeft size={14} /> Send back</Button>
-          <Button size="sm" variant="outline" className="text-red-700" onClick={() => setDecision("reject")}><XCircle size={14} /> Reject</Button>
-          <Button size="sm" variant="ghost" onClick={() => setDecision("delegate")}><UserPlus size={14} /> Delegate</Button>
-          <Button size="sm" variant="ghost" onClick={() => setDecision("escalate")}><ArrowUpRight size={14} /> Escalate</Button>
-        </>
-      )}
-      {canPrepare && ["draft", "computed", "returned"].includes(status) && <Button size="sm" variant={status === "draft" ? "default" : "outline"} disabled={run.isLoading} onClick={() => run.mutate("compute")}><Calculator size={14} /> {status === "draft" ? "Calculate" : "Recalculate"}</Button>}
-      {canPrepare && ["computed", "returned"].includes(status) && <Button size="sm" disabled={run.isLoading} onClick={() => run.mutate("submit")}><Send size={14} /> Submit for approval</Button>}
-      {canPerform("mark_payroll_paid") && status === "approved" && <Button size="sm" onClick={() => setPaying(true)}><Banknote size={14} /> Record payment</Button>}
-      <Button size="sm" variant="outline" onClick={exportExcel} disabled={!slips.length}><Download size={14} /> Excel (all sheets)</Button>
-      {canPrepare && !["paid", "cancelled", "approved"].includes(status) && <Button size="sm" variant="ghost" onClick={() => setDecision("cancel")}><Ban size={14} /> Cancel</Button>}
-      {approval && <Button size="sm" variant="ghost" onClick={() => setDecision("comment")}><MessageSquare size={14} /> Comment</Button>}
+      <Button icon={CornerUpLeft} onClick={() => setDecision("return")}>Return</Button>
+      <Button icon={XCircle} onClick={() => setDecision("reject")}>Reject</Button>
     </>
+  ) : canSubmit ? (
+    <>
+      <Button icon={Calculator} loading={run.isLoading && run.variables === "compute"} disabled={run.isLoading} onClick={() => run.mutate("compute")}>Recalculate</Button>
+      {excelButton}
+    </>
+  ) : (
+    excelButton
   );
+  const more: MenuItem[] = [
+    { label: "Export to Excel", icon: Download, onSelect: exportExcel, disabled: !slips.length, hidden: !isApprover },
+    { label: "Delegate", icon: UserPlus, onSelect: () => setDecision("delegate"), hidden: !isApprover },
+    { label: "Escalate", icon: ArrowUpRight, onSelect: () => setDecision("escalate"), hidden: !isApprover },
+    { label: "Comment", icon: MessageSquare, onSelect: () => setDecision("comment"), hidden: !approval },
+    { label: "Cancel payroll", icon: Ban, danger: true, onSelect: () => setDecision("cancel"), hidden: !canCancel },
+  ];
+
+  // ---------------------------------------------------------------- register columns
+  const otherOf = (s: any) => (s.other_deductions || []).reduce((a: number, d: any) => a + d.amount, 0) + (s.advances || 0);
+  const money = (key: string, header: React.ReactNode, value: (s: any) => number, total: number, opts: Partial<Column<any>> = {}): Column<any> => ({
+    key, header, numeric: true, cell: (s) => <Num value={value(s)} />, total: <Num value={total} />, ...opts,
+  });
+  const registerColumns: Column<any>[] = [
+    {
+      key: "employee", header: "Employee",
+      className: "sticky left-0 z-[1] min-w-[220px] bg-ims-card group-hover:bg-ims-hover [th&]:bg-ims-thead",
+      cell: (s) => <Person name={s.employee_name} detail={`${s.department_name || ""}${s.employment_type === "casual" ? " · casual" : ""}`} />,
+    },
+    money("basic", "Basic (RWF)", (s) => s.basic, T.basic),
+    money("allowances", "Allowances (RWF)", (s) => s.gross - s.basic, T.allowances),
+    money("gross", "Gross (RWF)", (s) => s.gross, T.gross, { cell: (s) => <span className="font-semibold"><Num value={s.gross} /></span> }),
+    money("paye", "PAYE (RWF)", (s) => s.paye, T.paye),
+    money("pension_ee", twoLine("Pension (RWF)", "Staff"), (s) => s.pension_ee, T.pension_ee),
+    money("maternity_ee", twoLine("Maternity (RWF)", "Staff"), (s) => s.maternity_ee, T.maternity_ee),
+    money("cbhi", "CBHI (RWF)", (s) => s.cbhi, T.cbhi),
+    money("medical_ee", "Medical (RWF)", (s) => s.medical_ee, T.medical_ee, { cell: (s) => (s.medical_ee ? <Num value={s.medical_ee} /> : <span className="text-ims-faint">—</span>) }),
+    money("other", twoLine("Other (RWF)", "Incl. advances"), otherOf, (T.other_deductions || 0) + (T.advances || 0), { cell: (s) => (otherOf(s) ? <Num value={otherOf(s)} /> : <span className="text-ims-faint">—</span>) }),
+    money("deductions", "Total deductions (RWF)", (s) => s.total_deductions, T.gross - T.net),
+    money("net", "Net pay (RWF)", (s) => s.net, T.net, { cell: (s) => <span className="font-bold"><Num value={s.net} /></span> }),
+    money("pension_er", twoLine("Pension (RWF)", "Employer"), (s) => s.pension_er, T.pension_er),
+    money("maternity_er", twoLine("Maternity (RWF)", "Employer"), (s) => s.maternity_er, T.maternity_er),
+    money("occ_hazard_er", twoLine("Hazards (RWF)", "Employer"), (s) => s.occ_hazard_er, T.occ_hazard_er),
+    money("employer_cost", "Employer cost (RWF)", (s) => s.employer_cost, T.employer_cost, { cell: (s) => <span className="font-semibold"><Num value={s.employer_cost} /></span> }),
+  ];
+
+  const loanRows = (slips as any[]).filter((x) => x.loans > 0);
+  const hasLoans = (T.loans || 0) > 0;
+  const gl = p.expand?.gl_journal;
 
   return (
-    <DocumentPage chatter={<Chatter items={toChatter(actions, audit)} />}>
-      <ControlBar breadcrumbs={[{ title: "Payroll", link: "/dashboard/hr/payroll" }, { title: p.number || "Payroll" }]} actions={actionsBar} steps={STEPS} current={stepOf(status)} />
+    <Page>
+      <DetailHeader
+        back={{ label: "Back to payroll", to: LIST }}
+        number={p.number}
+        type="Payroll"
+        status={PAYROLL_STATUS[status]?.label || status}
+        statusNote={stepName ? `At “${stepName}”` : PAYROLL_STATUS[status]?.note}
+        title={p.period_label || p.number}
+        facts={[
+          p.expand?.branch?.name || "All offices",
+          { label: "Prepared by", value: p.expand?.prepared_by?.name || "—" },
+          p.computed_at ? { label: "Calculated", value: fmtDateTime(p.computed_at) } : null,
+          p.paid_at ? { label: "Paid", value: fmtDate(p.paid_at) } : null,
+        ]}
+        actions={
+          <>
+            <MoreMenu items={more} />
+            {secondary}
+            {primary}
+          </>
+        }
+      />
+
       {isApprover && (
-        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900">
-          <Clock size={15} /> Waiting for your approval at step “{approval.steps?.[approval.current_level]?.name}”. Check the register and the statutory totals below.
-        </div>
+        <Notice tone="warning" icon={Clock}>
+          Waiting for your decision{stepName ? ` at step “${stepName}”` : ""}. Check the register and the RRA and RSSB totals, then approve it, return it for changes, or reject it.
+        </Notice>
+      )}
+      {status === "returned" && canPrepare && (
+        <Notice tone="orange" icon={CornerUpLeft}>
+          Returned for changes{returnNote ? `: “${returnNote}”` : ""}. Recalculate it if needed and submit it again.
+        </Notice>
       )}
       {(T.skipped || []).length > 0 && ["draft", "computed", "returned"].includes(status) && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] text-amber-900">
+        <Notice tone="warning" icon={AlertTriangle}>
           {T.skipped.length} active employee{T.skipped.length > 1 ? "s were" : " was"} not included: {T.skipped.map((s: any) => `${s.name} (${s.reason})`).join(", ")}. Add their salary structure and recalculate.
-        </div>
+        </Notice>
       )}
 
-      <SmartButtons
+      <KpiBand
         items={[
-          { icon: Users, label: "Employees", value: p.headcount || 0 },
-          { icon: Wallet, label: "Gross", value: compactMoney(p.total_gross) },
-          { icon: Banknote, label: "Net pay", value: compactMoney(p.total_net) },
-          { icon: Landmark, label: "Employer cost", value: compactMoney(p.total_employer_cost) },
+          { label: "Employees", value: fmtNumber(p.headcount || 0) },
+          { label: "Gross pay", value: fmtMoneyShort(p.total_gross) },
+          { label: "Net pay", value: fmtMoneyShort(p.total_net) },
+          { label: "Employer cost", value: fmtMoneyShort(p.total_employer_cost) },
         ]}
       />
 
-      <Sheet ribbon={status === "paid" ? { label: "Paid", tone: "success" } : status === "cancelled" ? { label: "Cancelled", tone: "neutral" } : status === "rejected" ? { label: "Rejected", tone: "danger" } : undefined}>
-        <SheetTitle kicker="Payroll" title={p.period_label || p.number} badges={<StatusBadge status={status} map={PAYROLL_STATUS} />} />
-        <FieldGrid
-          left={[
-            { label: "Reference", value: p.number },
-            { label: "Office", value: p.expand?.branch?.name || "All offices" },
-            { label: "Prepared by", value: p.expand?.prepared_by?.name, hint: p.computed_at ? `Calculated ${format(new Date(p.computed_at.replace(" ", "T")), "d MMM yyyy, HH:mm")}` : undefined },
-            { label: "Notes", value: p.notes },
-          ]}
-          right={[
-            { label: "Approval", value: approval ? `${approval.workflow_name} — ${approval.status}` : "Not submitted" },
-            { label: "Paid", value: p.paid_at ? `${format(new Date(p.paid_at.replace(" ", "T")), "d MMM yyyy")} by ${p.expand?.paid_by?.name || "—"}` : "" , hint: [p.expand?.payment_account ? `from ${p.expand.payment_account.code}` : "", p.payment_reference ? `reference ${p.payment_reference}` : ""].filter(Boolean).join(" · ") || undefined },
-            { label: "General ledger", value: p.expand?.gl_journal ? (["view_journals", "export_ledger", "approve_journals"].some((x) => canPerform(x)) ? <Link className="font-medium text-primaryDark hover:underline" to={`/dashboard/finance/journals/${p.gl_journal}`}>{p.expand.gl_journal.number}</Link> : p.expand.gl_journal.number) : <span className="text-slate-500">Posted when approved</span>, hint: p.expand?.payment_journal ? `Payment journal ${p.expand.payment_journal.number}` : undefined },
-            { label: "PAYE due to RRA", value: <span className="font-semibold">RWF {rwf(T.paye)}</span> },
-            { label: "Due to RSSB", value: <span className="font-semibold">RWF {rwf(T.rssb)}</span>, hint: "Employee and employer contributions" },
-          ]}
-        />
+      <Tabs
+        label="Payroll sections"
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "details", label: "Details" },
+          { key: "employees", label: "Employees", count: slips.length },
+          { key: "statutory", label: "RRA, RSSB and bank" },
+          ...(approval ? [{ key: "approvals", label: "Approvals" }] : []),
+          { key: "activity", label: "Activity" },
+        ]}
+      />
 
-        <Notebook
-          active={tab}
-          onChange={setTab}
-          tabs={[
-            { key: "register", label: "Payroll register", count: slips.length },
-            { key: "statutory", label: "RRA & RSSB" },
-            { key: "bank", label: "Bank transfers" },
-            ...((T.loans || 0) > 0 ? [{ key: "loans", label: "Loans", count: (slips as any[]).filter((x) => x.loans > 0).length }] : []),
-            ...(p.posting ? [{ key: "posting", label: "GL & budget" }] : []),
-            { key: "reconciliation", label: "Against last month" },
-            ...(approval ? [{ key: "approval", label: "Approval" }] : []),
-            { key: "rates", label: "Rates used" },
-          ]}
-        />
-        <div className="pt-4">
-          {tab === "register" && (
-            <>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <input type="search" className={cn(inputCls, "sm:w-72")} placeholder="Search employee or department" value={search} onChange={(e) => setSearch(e.target.value)} />
-                <ExportMenu label="Payroll register" permission={["export_payroll", "view_payroll_details"]} disabled={!slips.length} onExport={exportRegister} />
-              </div>
-              <div className="overflow-x-auto rounded-md border border-slate-200">
-                <table className="dnr-grid w-full min-w-[1500px] border-separate border-spacing-0 text-[12.5px]">
-                  <thead>
-                    <tr className="bg-slate-100 text-center text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">
-                      <th className="sticky left-0 z-10 bg-slate-100 px-2.5 py-1.5" />
-                      <th colSpan={3} className="px-2.5 py-1.5">Earnings</th>
-                      <th colSpan={7} className="bg-red-50/70 px-2.5 py-1.5 text-red-800">Employee deductions</th>
-                      <th className="bg-emerald-50 px-2.5 py-1.5 text-emerald-800">Pay</th>
-                      <th colSpan={4} className="bg-sky-50 px-2.5 py-1.5 text-sky-800">Employer contributions</th>
-                    </tr>
-                    <tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">
-                      <th className={cn(th, "sticky left-0 z-10 min-w-[200px] bg-slate-50")}>Employee</th>
-                      <th className={cn(th, "text-right")}>Basic</th>
-                      <th className={cn(th, "text-right")}>Allowances</th>
-                      <th className={cn(th, "text-right")}>Gross</th>
-                      <th className={cn(th, "text-right")}>PAYE</th>
-                      <th className={cn(th, "text-right")}>Pension</th>
-                      <th className={cn(th, "text-right")}>Maternity</th>
-                      <th className={cn(th, "text-right")}>CBHI</th>
-                      <th className={cn(th, "text-right")}>Medical</th>
-                      <th className={cn(th, "text-right")}>Other / adv.</th>
-                      <th className={cn(th, "text-right")}>Total</th>
-                      <th className={cn(th, "text-right")}>Net pay</th>
-                      <th className={cn(th, "text-right")}>Pension</th>
-                      <th className={cn(th, "text-right")}>Maternity</th>
-                      <th className={cn(th, "text-right")}>Occ. hazards</th>
-                      <th className={cn(th, "text-right")}>Total cost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {shown.map((s: any) => {
-                      const other = (s.other_deductions || []).reduce((a: number, d: any) => a + d.amount, 0) + (s.advances || 0);
-                      return (
-                        <tr key={s.id} onClick={() => setSlip(s)} className="group cursor-pointer hover:bg-slate-50">
-                          <td className="sticky left-0 z-[1] border-b border-slate-100 bg-white px-2.5 py-2 group-hover:bg-slate-50">
-                            <span className="block font-medium text-slate-900">{s.employee_name}</span>
-                            <span className="block text-[11px] text-slate-500">{s.department_name}{s.employment_type === "casual" ? " · casual" : ""}</span>
-                          </td>
-                          <td className={cn(td, "border-b border-slate-100")}>{rwf(s.basic)}</td>
-                          <td className={cn(td, "border-b border-slate-100")}>{rwf(s.gross - s.basic)}</td>
-                          <td className={cn(td, "border-b border-slate-100 font-semibold")}>{rwf(s.gross)}</td>
-                          <td className={cn(td, "border-b border-slate-100")}>{rwf(s.paye)}</td>
-                          <td className={cn(td, "border-b border-slate-100")}>{rwf(s.pension_ee)}</td>
-                          <td className={cn(td, "border-b border-slate-100")}>{rwf(s.maternity_ee)}</td>
-                          <td className={cn(td, "border-b border-slate-100")}>{rwf(s.cbhi)}</td>
-                          <td className={cn(td, "border-b border-slate-100 text-slate-400")}>{s.medical_ee ? rwf(s.medical_ee) : "—"}</td>
-                          <td className={cn(td, "border-b border-slate-100")}>{other ? rwf(other) : "—"}</td>
-                          <td className={cn(td, "border-b border-slate-100 font-medium text-red-700")}>{rwf(s.total_deductions)}</td>
-                          <td className={cn(td, "border-b border-slate-100 bg-emerald-50/40 font-bold text-emerald-900")}>{rwf(s.net)}</td>
-                          <td className={cn(td, "border-b border-slate-100")}>{rwf(s.pension_er)}</td>
-                          <td className={cn(td, "border-b border-slate-100")}>{rwf(s.maternity_er)}</td>
-                          <td className={cn(td, "border-b border-slate-100")}>{rwf(s.occ_hazard_er)}</td>
-                          <td className={cn(td, "border-b border-slate-100 font-semibold")}>{rwf(s.employer_cost)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-ralga-ink text-[12px] font-semibold text-white">
-                      <td className="sticky left-0 bg-ralga-ink px-2.5 py-2">Total ({slips.length})</td>
-                      {[T.basic, T.allowances, T.gross, T.paye, T.pension_ee, T.maternity_ee, T.cbhi, T.medical_ee, (T.other_deductions || 0) + (T.advances || 0), T.gross - T.net, T.net, T.pension_er, T.maternity_er, T.occ_hazard_er, T.employer_cost].map((v, i) => (
-                        <td key={i} className={td}>{rwf(v)}</td>
-                      ))}
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-              <p className="mt-2 text-[12px] text-slate-500">Click an employee to open the payslip.</p>
-            </>
-          )}
-
-          {tab === "statutory" && (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="flex flex-wrap gap-2 lg:col-span-2">
-                <ExportMenu label="PAYE schedule (RRA)" permission={["export_payroll", "view_payroll_details"]} disabled={!slips.length} onExport={exportPaye} />
-                <ExportMenu label="RSSB schedule" permission={["export_payroll", "view_payroll_details"]} disabled={!slips.length} onExport={exportRssb} />
-              </div>
-              <div className="rounded-lg border border-slate-200 p-4">
-                <p className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Rwanda Revenue Authority</p>
-                <p className="mt-1 text-[24px] font-bold tabular-nums">RWF {rwf(T.paye)}</p>
-                <p className="text-[12.5px] text-slate-600">PAYE withheld from {slips.length} employees on a taxable total of RWF {rwf((slips as any[]).reduce((a, s) => a + s.taxable_income, 0))}. Declare and pay by the 15th of the following month.</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 p-4">
-                <p className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Rwanda Social Security Board</p>
-                <p className="mt-1 text-[24px] font-bold tabular-nums">RWF {rwf(T.rssb)}</p>
-                <table className="mt-2 w-full text-[12.5px]">
-                  <thead><tr className="text-left text-[11px] uppercase tracking-wide text-slate-500"><th className="py-1">Scheme</th><th className="py-1 text-right">Employee</th><th className="py-1 text-right">Employer</th><th className="py-1 text-right">Total</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {contribTotals.map((c: any) => (
-                      <tr key={c.code}><td className="py-1.5">{c.name}<span className="block text-[11px] text-slate-500">{c.ee}% + {c.er}%</span></td><td className="py-1.5 text-right tabular-nums">{rwf(c.eeTotal)}</td><td className="py-1.5 text-right tabular-nums">{rwf(c.erTotal)}</td><td className="py-1.5 text-right font-medium tabular-nums">{rwf(c.eeTotal + c.erTotal)}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {tab === "bank" && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <ExportMenu label="Bank file (all banks)" permission={["export_payroll", "view_payroll_details"]} disabled={!bankRows.length} onExport={(fmt) => exportBank(fmt)} />
-                <span className="text-[12px] text-slate-500">Reference on every transfer: <b className="font-mono">{payRef}</b></span>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {byBank.map(([bank, v]) => (
-                  <div key={bank} className="rounded-lg border border-slate-200 px-3 py-2.5">
-                    <p className="text-[12.5px] font-medium">{bank}</p>
-                    <p className="text-[16px] font-semibold tabular-nums">RWF {rwf(v.total)}</p>
-                    <p className="flex items-center justify-between text-[11.5px] text-slate-500">{v.n} transfer{v.n === 1 ? "" : "s"}
-                      <button type="button" onClick={() => exportBank("csv", bank)} className="inline-flex items-center gap-1 font-medium text-primaryDark hover:underline"><FileDown size={12} /> CSV for this bank</button>
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <div className="overflow-x-auto rounded-md border border-slate-200">
-                <table className="dnr-grid w-full min-w-[640px] text-[12.5px]">
-                  <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Employee</th><th className={th}>Bank</th><th className={th}>Account</th><th className={cn(th, "text-right")}>Amount</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(slips as any[]).map((s) => (
-                      <tr key={s.id}><td className="px-2.5 py-1.5">{s.employee_name}</td><td className="px-2.5 py-1.5">{s.bank_name || <span className="text-red-600">missing</span>}</td><td className="px-2.5 py-1.5 tabular-nums">{s.bank_account || <span className="text-red-600">missing</span>}</td><td className={td}>{rwf(s.net)}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {tab === "loans" && <LoansTab slips={slips as any[]} />}
-          {tab === "posting" && <PostingTab payroll={p} />}
-          {tab === "reconciliation" && <ReconciliationTab payrollId={p.id} />}
-          {tab === "approval" && <ApprovalTracker approval={approval} actions={actions} />}
-
-          {tab === "rates" && (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div>
-                <h3 className="mb-2 text-[13px] font-semibold">PAYE bands (monthly)</h3>
-                {(["regular", "casual"] as const).map((t) => (snap.bands?.[t] || []).length > 0 && (
-                  <table key={t} className="mb-3 w-full text-[12.5px]">
-                    <caption className="pb-1 text-left text-[11.5px] font-medium capitalize text-slate-500">{t === "regular" ? "Employees" : "Casual workers"}</caption>
-                    <tbody className="divide-y divide-slate-100">
-                      {snap.bands[t].map((b: any, i: number) => <tr key={i}><td className="py-1">{rwf(b.min)} – {b.max ? rwf(b.max) : "and above"}</td><td className="py-1 text-right font-medium">{b.rate}%</td></tr>)}
-                    </tbody>
-                  </table>
-                ))}
-              </div>
-              <div>
-                <h3 className="mb-2 text-[13px] font-semibold">Contributions</h3>
-                <table className="w-full text-[12.5px]">
-                  <tbody className="divide-y divide-slate-100">
-                    {(snap.contributions || []).map((c: any) => <tr key={c.code}><td className="py-1">{c.name}<span className="block text-[11px] text-slate-500">{CONTRIBUTION_BASES[c.base] || c.base}</span></td><td className="py-1 text-right">{c.ee}% + {c.er}%</td></tr>)}
-                  </tbody>
-                </table>
-                <p className="mt-2 text-[12px] text-slate-500">These rates were frozen when the payroll was calculated{snap.computed_by ? ` by ${snap.computed_by}` : ""}.</p>
-              </div>
-            </div>
-          )}
+      {tab === "details" && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="min-w-0 space-y-4 xl:col-span-2">
+            <Card>
+              <CardHeader title="Payroll" />
+              <Details
+                items={[
+                  { label: "Period", value: p.period_label },
+                  { label: "Office", value: p.expand?.branch?.name || "All offices" },
+                  { label: "Prepared by", value: p.expand?.prepared_by?.name, hint: p.computed_at ? `Calculated ${fmtDateTime(p.computed_at)}` : undefined },
+                  { label: "Approval", value: approval ? approval.workflow_name : "Not submitted", hint: approval ? statusWord(approval.status) || approval.status : undefined },
+                  {
+                    label: "Paid",
+                    value: p.paid_at ? `${fmtDate(p.paid_at)} by ${p.expand?.paid_by?.name || "—"}` : null,
+                    hint: [p.expand?.payment_account ? `From ${p.expand.payment_account.code}` : "", p.payment_reference ? `reference ${p.payment_reference}` : ""].filter(Boolean).join(" · ") || undefined,
+                  },
+                  {
+                    label: "General ledger",
+                    value: gl ? (["view_journals", "export_ledger", "approve_journals"].some((x) => canPerform(x)) ? <Link className="whitespace-nowrap font-semibold text-ims-link hover:underline" to={`/dashboard/finance/journals/${p.gl_journal}`}>{gl.number}</Link> : <DocNo value={gl.number} />) : <span className="text-ims-muted">Posted when approved</span>,
+                    hint: p.expand?.payment_journal ? `Payment journal ${p.expand.payment_journal.number}` : undefined,
+                  },
+                  ...(p.notes ? [{ label: "Notes", value: <span className="whitespace-pre-line">{p.notes}</span>, wide: true }] : []),
+                ]}
+              />
+            </Card>
+            <ReconciliationCard payrollId={p.id} />
+            {p.posting && <PostingCards payroll={p} />}
+          </div>
+          <RatesCard snap={snap} />
         </div>
-      </Sheet>
+      )}
+
+      {tab === "employees" && (
+        <Card padded={false} className="overflow-hidden">
+          <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <SearchBox value={search} onChange={setSearch} placeholder="Search employee or department" />
+            <ExportMenu label="Payroll register" permission={["export_payroll", "view_payroll_details"]} disabled={!slips.length} onExport={exportRegister} />
+          </div>
+          <DataTable
+            columns={registerColumns}
+            rows={shown}
+            rowKey={(s) => s.id}
+            onRowClick={(s) => setSlip(s)}
+            rowClassName={() => "group"}
+            minWidth={1860}
+            caption="Payroll register"
+            totalLabel={`Total (${slips.length})`}
+            empty={<EmptyState compact text={search ? "No employee matches this search." : "No payslips yet. Calculate the payroll to create them."} />}
+          />
+          <p className="border-t border-ims-divider px-5 py-3 text-t-small text-ims-muted">Select an employee to open the payslip.</p>
+        </Card>
+      )}
+
+      {tab === "statutory" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader
+                title="PAYE to the Rwanda Revenue Authority"
+                subtitle="Declare and pay by the 15th of the following month."
+                action={<ExportMenu label="PAYE schedule" permission={["export_payroll", "view_payroll_details"]} disabled={!slips.length} onExport={exportPaye} />}
+              />
+              <Details
+                items={[
+                  { label: "PAYE withheld", value: <span className="text-t-section">{fmtMoney(T.paye)}</span>, wide: true },
+                  { label: "Employees", value: fmtNumber(slips.length) },
+                  { label: "Taxable income", value: fmtMoney((slips as any[]).reduce((a, s) => a + s.taxable_income, 0)) },
+                ]}
+              />
+            </Card>
+            <Card padded={false} className="overflow-hidden">
+              <div className="px-5 pt-5">
+                <CardHeader
+                  title="Contributions to RSSB"
+                  subtitle={`${fmtMoney(T.rssb)} due, employee and employer parts.`}
+                  action={<ExportMenu label="RSSB schedule" permission={["export_payroll", "view_payroll_details"]} disabled={!slips.length} onExport={exportRssb} />}
+                />
+              </div>
+              <DataTable
+                minWidth={480}
+                rows={contribTotals}
+                rowKey={(c: any) => c.code}
+                caption="Contributions to RSSB"
+                columns={[
+                  { key: "name", header: "Scheme", cell: (c: any) => c.name, sub: (c: any) => `${c.ee}% + ${c.er}%` },
+                  { key: "ee", header: "Employee (RWF)", numeric: true, cell: (c: any) => <Num value={c.eeTotal} />, total: <Num value={sumOf(contribTotals, (c) => c.eeTotal)} /> },
+                  { key: "er", header: "Employer (RWF)", numeric: true, cell: (c: any) => <Num value={c.erTotal} />, total: <Num value={sumOf(contribTotals, (c) => c.erTotal)} /> },
+                  { key: "total", header: "Total (RWF)", numeric: true, cell: (c: any) => <span className="font-semibold"><Num value={c.eeTotal + c.erTotal} /></span>, total: <Num value={sumOf(contribTotals, (c) => c.eeTotal + c.erTotal)} /> },
+                ]}
+                empty={<EmptyState compact text="No contribution rates were recorded with this payroll." />}
+              />
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="min-w-0 space-y-4 self-start">
+              <Card padded={false} className="overflow-hidden">
+                <div className="px-5 pt-5">
+                  <CardHeader title="By bank" subtitle={`Reference on every transfer: ${payRef}`} />
+                </div>
+                <DataTable
+                  minWidth={0}
+                  rows={byBank}
+                  rowKey={([bank]) => bank}
+                  caption="Transfers by bank"
+                  rowActions={([bank]) => [{ label: "Download CSV for this bank", icon: FileDown, onSelect: () => exportBank("csv", bank) }]}
+                  columns={[
+                    { key: "bank", header: "Bank", cell: ([bank]) => bank, sub: ([, v]) => `${v.n} transfer${v.n === 1 ? "" : "s"}` },
+                    { key: "total", header: "Amount (RWF)", numeric: true, cell: ([, v]) => <Num value={v.total} />, total: <Num value={sumOf(byBank, ([, v]) => v.total)} /> },
+                  ]}
+                />
+              </Card>
+              {hasLoans && (
+                <Card padded={false} className="overflow-hidden">
+                  <div className="px-5 pt-5">
+                    <CardHeader title="Staff loan instalments" subtitle="Loan balances go down when the payment of this payroll is recorded." link={{ label: "All staff loans", to: `${LIST}/loans` }} />
+                  </div>
+                  <DataTable
+                    minWidth={0}
+                    rows={loanRows.flatMap((x) => (x.loan_deductions || []).map((d: any) => ({ ...d, employee_name: x.employee_name, key: `${x.id}-${d.loan}` })))}
+                    rowKey={(d: any) => d.key}
+                    caption="Staff loan instalments"
+                    totalLabel="Total recovered"
+                    columns={[
+                      { key: "employee", header: "Employee", cell: (d: any) => <span className="font-semibold">{d.employee_name}</span>, sub: (d: any) => <DocNo value={d.number} /> },
+                      { key: "amount", header: "Instalment (RWF)", numeric: true, cell: (d: any) => <Num value={d.amount} />, total: <Num value={loanRows.reduce((a, x) => a + x.loans, 0)} /> },
+                    ]}
+                  />
+                </Card>
+              )}
+            </div>
+            <Card padded={false} className="overflow-hidden xl:col-span-2">
+              <div className="px-5 pt-5">
+                <CardHeader
+                  title="Bank transfers"
+                  subtitle="Net pay of each employee, as it goes in the bank file."
+                  action={<ExportMenu label="Bank file (all banks)" permission={["export_payroll", "view_payroll_details"]} disabled={!bankRows.length} onExport={(fmt) => exportBank(fmt)} />}
+                />
+              </div>
+              <DataTable
+                minWidth={600}
+                rows={slips as any[]}
+                rowKey={(s) => s.id}
+                caption="Bank transfers"
+                columns={[
+                  { key: "employee", header: "Employee", cell: (s) => <span className="font-semibold">{s.employee_name}</span> },
+                  { key: "bank", header: "Bank", cell: (s) => s.bank_name || <span className="font-semibold text-ims-danger">Missing</span> },
+                  { key: "account", header: "Account", nowrap: true, cell: (s) => (s.bank_account ? <span className="tabular-nums">{s.bank_account}</span> : <span className="font-semibold text-ims-danger">Missing</span>) },
+                  { key: "net", header: "Amount (RWF)", numeric: true, cell: (s) => <Num value={s.net} />, total: <Num value={sumOf(slips as any[], (s) => s.net)} /> },
+                ]}
+              />
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {tab === "approvals" && <ApprovalTracker approval={approval} actions={actions} />}
+      {tab === "activity" && <Activity actions={actions as any[]} audit={audit as any[]} loading={false} />}
 
       <ActionDialog
         kind={decision}
@@ -410,7 +518,7 @@ export default function PayrollRun() {
       />
       {paying && <PayDialog payroll={p} onClose={() => setPaying(false)} onDone={() => { setPaying(false); refresh(); }} />}
       <PayslipDialog slip={slip} payroll={p} onClose={() => setSlip(null)} />
-    </DocumentPage>
+    </Page>
   );
 }
 
@@ -423,11 +531,12 @@ export function PayDialog({ payroll, onClose, onDone }: { payroll: { id: string;
     const list = (accounts.data || []) as any[];
     if (!account && list.length) setAccount(list[0].id);
   }, [accounts.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const chosen = ((accounts.data || []) as any[]).find((x) => x.id === account);
+  const list = (accounts.data || []) as any[];
+  const chosen = list.find((x) => x.id === account);
   const short = chosen && chosen.book_balance < payroll.total_net;
   const pay = useMutation(() => payrollApi.action(payroll.id, "paid", { reference, account, payment_date: date }), {
     onSuccess: () => {
-      toast.success("Payment recorded — the cash book and the GL are updated, employees can see their payslips");
+      toast.success(`${payroll.number} recorded as paid. The cash book and the general ledger are updated and staff can see their payslips.`);
       onDone();
     },
     onError: (e) => {
@@ -435,52 +544,83 @@ export function PayDialog({ payroll, onClose, onDone }: { payroll: { id: string;
     },
   });
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md bg-white">
-        <DialogHeader>
-          <DialogTitle>Record payment of {payroll.number}</DialogTitle>
-          <DialogDescription>RWF {rwf(payroll.total_net)} net pay to {payroll.headcount} employees. Salary advances and loan instalments in this payroll are marked as recovered.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <Field label="Paid from" required hint={chosen ? `Cash book balance RWF ${rwf(chosen.book_balance)}` : "Unrestricted bank accounts only (donor accounts hold restricted money)"} error={short ? "Not enough money in this account for the whole payroll." : undefined}>
-            <select className={inputCls} value={account} onChange={(e) => setAccount(e.target.value)}>
-              {((accounts.data || []) as any[]).map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
-            </select>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Payment date" required><input type="date" className={inputCls} value={date} max={format(new Date(), "yyyy-MM-dd")} onChange={(e) => setDate(e.target.value)} /></Field>
-            <Field label="Bank reference" hint="Batch or order number"><input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
-          </div>
-        </div>
-        <p className="text-[12px] text-slate-500">Separation of duties: the person who prepared the payroll cannot record its payment.</p>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={pay.isLoading || !account || !date || short} onClick={() => pay.mutate()}>Record payment</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Record the payment of ${payroll.number}`}
+      description={`${fmtMoney(payroll.total_net)} net pay to ${payroll.headcount} employees. Salary advances and loan instalments in this payroll are marked as recovered.`}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" icon={Banknote} loading={pay.isLoading} disabled={!account || !date || short} onClick={() => pay.mutate()}>Record payment</Button>
+        </>
+      }
+    >
+      <Field
+        label="Paid from"
+        required
+        htmlFor="pay-account"
+        hint={chosen ? `Cash book balance ${fmtMoney(chosen.book_balance)}` : "Unrestricted bank accounts only (donor accounts hold restricted money)."}
+        error={short ? "Not enough money in this account for the whole payroll. Choose another account." : undefined}
+      >
+        <Select id="pay-account" invalid={Boolean(short)} value={account} onChange={(e) => setAccount(e.target.value)}>
+          {!list.length && <option value="">{accounts.isLoading ? "Loading…" : "No unrestricted bank account"}</option>}
+          {list.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
+        </Select>
+      </Field>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Payment date" required htmlFor="pay-date">
+          <DatePicker id="pay-date" value={date} max={format(new Date(), "yyyy-MM-dd")} onChange={setDate} />
+        </Field>
+        <Field label="Bank reference" htmlFor="pay-ref" hint="Batch or order number">
+          <Input id="pay-ref" value={reference} onChange={(e) => setReference(e.target.value)} />
+        </Field>
+      </div>
+      <p className="text-t-small text-ims-muted">Separation of duties: the person who prepared the payroll cannot record its payment.</p>
+    </Modal>
   );
 }
 
-function LoansTab({ slips }: { slips: any[] }) {
-  const rows = slips.filter((x) => x.loans > 0);
+function RatesCard({ snap }: { snap: any }) {
+  const types = (["regular", "casual"] as const).filter((t) => (snap.bands?.[t] || []).length > 0);
   return (
-    <div className="overflow-x-auto rounded-md border border-slate-200">
-      <table className="dnr-grid w-full min-w-[560px] text-[12.5px]">
-        <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Employee</th><th className={th}>Loan</th><th className={cn(th, "text-right")}>Instalment</th></tr></thead>
-        <tbody className="divide-y divide-slate-100">
-          {rows.flatMap((x) => (x.loan_deductions || []).map((d: any) => (
-            <tr key={`${x.id}-${d.loan}`}><td className="px-2.5 py-1.5">{x.employee_name}</td><td className="px-2.5 py-1.5 font-mono">{d.number}</td><td className={td}>{rwf(d.amount)}</td></tr>
-          )))}
-        </tbody>
-        <tfoot><tr className="bg-slate-50 font-semibold"><td className="px-2.5 py-1.5" colSpan={2}>Total recovered through this payroll</td><td className={td}>{rwf(rows.reduce((a, x) => a + x.loans, 0))}</td></tr></tfoot>
-      </table>
-      <p className="px-3 py-2 text-[12px] text-slate-500">Loan balances go down when the payment of this payroll is recorded. <Link className="font-medium text-primaryDark hover:underline" to="/dashboard/hr/payroll/loans">All staff loans</Link></p>
-    </div>
+    <Card padded={false} className="h-fit overflow-hidden">
+      <div className="px-5 pt-5">
+        <CardHeader title="Rates used" subtitle={`Frozen when the payroll was calculated${snap.computed_by ? ` by ${snap.computed_by}` : ""}.`} />
+      </div>
+      {types.map((t) => (
+        <DataTable
+          key={t}
+          minWidth={0}
+          rows={snap.bands[t] as any[]}
+          rowKey={(_, i) => `${t}-${i}`}
+          caption={`PAYE bands, ${t === "regular" ? "employees" : "casual workers"}`}
+          className="border-b border-ims-divider"
+          columns={[
+            { key: "band", header: `PAYE, ${t === "regular" ? "employees" : "casual workers"} (RWF)`, cell: (b: any) => <span className="tabular-nums">{fmtNumber(b.min)} – {b.max ? fmtNumber(b.max) : "and above"}</span> },
+            { key: "rate", header: "Rate (%)", numeric: true, cell: (b: any) => <span className="font-semibold">{b.rate}</span> },
+          ]}
+        />
+      ))}
+      <DataTable
+        minWidth={0}
+        rows={(snap.contributions || []) as any[]}
+        rowKey={(c: any) => c.code}
+        caption="Contribution rates"
+        columns={[
+          { key: "name", header: "Contribution", cell: (c: any) => c.name, sub: (c: any) => CONTRIBUTION_BASES[c.base] || c.base },
+          { key: "rate", header: "Staff + employer (%)", numeric: true, cell: (c: any) => `${c.ee} + ${c.er}` },
+        ]}
+        empty={<EmptyState compact text="No rates recorded yet. They are frozen when the payroll is calculated." />}
+      />
+    </Card>
   );
 }
 
 const SHORT: Record<string, string> = { "5101": "Basic", "5102": "Allowances", "5103": "Pension", "5104": "Maternity", "5105": "Occ. hazards", "5106": "Medical" };
-const showDate = (d?: string) => (d ? format(new Date(`${d.slice(0, 10)}T12:00:00`), "d MMM yyyy") : "—");
 
-function PostingTab({ payroll }: { payroll: any }) {
+function PostingCards({ payroll }: { payroll: any }) {
   const ps = payroll.posting || {};
   const { can } = usePermissions();
   const ledger = can(["view_journals", "export_ledger", "approve_journals"]);
@@ -499,129 +639,151 @@ function PostingTab({ payroll }: { payroll: any }) {
     return g;
   }, {})).sort((p: any, q: any) => p.department.localeCompare(q.department) || p.source.localeCompare(q.source)) as any[];
   const byAccount = (ps.by_account || []) as any[];
+  const journalLink = ledger && payroll.gl_journal ? { label: "Open the journal lines", to: `/dashboard/finance/journals/${payroll.gl_journal}` } : undefined;
+  const overCls = "font-semibold text-ims-danger";
+
+  const gridColumns: Column<any>[] = [
+    { key: "holder", header: "Charged to", className: "min-w-[210px]", cell: (h) => <span className="font-semibold">{h.department}</span>, sub: (h) => (h.source ? <span className="font-mono">{h.source}</span> : null) },
+    ...accounts.map<Column<any>>((a) => ({
+      key: a,
+      header: <span title={budget.find((x) => x.account === a)?.name}>{SHORT[a] || a} (RWF)</span>,
+      numeric: true,
+      cell: (h) => {
+        const c = h.cells[a];
+        return c ? <span className={cn(c.over && overCls)} title={`${c.code} · still available ${fmtMoney(c.available)}`}><Num value={c.amount} /></span> : <span className="text-ims-faint">—</span>;
+      },
+      total: <Num value={budget.filter((x) => x.account === a).reduce((t, x) => t + x.amount, 0)} />,
+    })),
+    { key: "total", header: "This payroll (RWF)", numeric: true, cell: (h) => <span className="font-semibold"><Num value={h.total} /></span>, total: <Num value={charged} /> },
+    { key: "available", header: "Still available (RWF)", numeric: true, cell: (h) => <span className={cn(h.available < 0 ? overCls : "text-ims-body")}><Num value={h.available} /></span>, total: <Num value={budget.reduce((t, x) => t + x.available, 0)} /> },
+  ];
+  const lineColumns: Column<any>[] = [
+    { key: "line", header: "Budget line charged", cell: (x) => <><span className="font-mono text-t-small">{x.code}</span> {x.name}</> },
+    { key: "amount", header: "This payroll (RWF)", numeric: true, cell: (x) => <Num value={x.amount} />, total: <Num value={charged} /> },
+    { key: "available", header: "Still available (RWF)", numeric: true, cell: (x) => <span className={cn(x.over && overCls)}><Num value={x.available} /></span> },
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-3">
-        <div className="rounded-lg border border-slate-200 px-3 py-2.5"><p className="text-[11.5px] text-slate-500">Journal</p><p className="text-[16px] font-semibold">{ledger ? <Link className="text-primaryDark hover:underline" to={`/dashboard/finance/journals/${payroll.gl_journal}`}>{ps.journal}</Link> : ps.journal}</p><p className="text-[11.5px] text-slate-500">dated {showDate(ps.date)} · RWF {rwf(ps.total)}{ps.lines ? ` · ${ps.lines} lines` : ""}</p></div>
-        <div className="rounded-lg border border-slate-200 px-3 py-2.5"><p className="text-[11.5px] text-slate-500">Charged to budget lines</p><p className="text-[16px] font-semibold tabular-nums">RWF {rwf(charged)}</p><p className="text-[11.5px] text-slate-500">{budget.length} lines{budget.some((x) => x.over) ? " · some over budget" : " · all within budget"}</p></div>
-        <div className={cn("rounded-lg border px-3 py-2.5", unbudgeted.length ? "border-amber-300 bg-amber-50" : "border-slate-200")}><p className="text-[11.5px] text-slate-500">Not budgeted</p><p className="text-[16px] font-semibold tabular-nums">RWF {rwf(unbudgeted.reduce((t, x) => t + x.amount, 0))}</p><p className="text-[11.5px] text-slate-500">{unbudgeted.length ? "Add personnel lines in a budget revision" : "Every cost had a budget line"}</p></div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[12.5px] font-semibold text-slate-700">By funding source</span>
-        {(ps.by_funding || []).map((x: any) => <span key={x.funding_source} className="rounded-md border border-slate-200 px-2.5 py-1 text-[12.5px]">{x.name}: <b className="tabular-nums">RWF {rwf(x.amount)}</b></span>)}
-      </div>
-      {unbudgeted.length > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
-          No budget line for: {unbudgeted.map((u) => `${u.account_name} · ${u.department_name || "—"} · ${u.funding_name} (RWF ${rwf(u.amount)})`).join("; ")}.
-        </div>
-      )}
-      {budget.length > 0 && (
-        <div className="overflow-x-auto rounded-md border border-slate-200">
-          {grid ? (
-            <table className="dnr-grid w-full min-w-[860px] text-[12.5px]">
-              <thead>
-                <tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">
-                  <th className={th}>Charged to</th>
-                  {accounts.map((a) => <th key={a} className={cn(th, "text-right")} title={budget.find((x) => x.account === a)?.name}><span className="block font-mono normal-case tracking-normal text-slate-400">{a}</span>{SHORT[a] || a}</th>)}
-                  <th className={cn(th, "text-right")}>This payroll</th><th className={cn(th, "text-right")}>Still available</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {holders.map((h) => (
-                  <tr key={h.key} className={h.over ? "bg-red-50/60" : ""}>
-                    <td className="px-2.5 py-1.5"><span className="font-medium text-slate-800">{h.department}</span>{h.source && <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-px font-mono text-[11px] text-violet-700">{h.source}</span>}</td>
-                    {accounts.map((a) => {
-                      const c = h.cells[a];
-                      return <td key={a} className={cn(td, c?.over && "font-semibold text-red-700")} title={c ? `${c.code} · still available RWF ${rwf(c.available)}` : undefined}>{c ? rwf(c.amount) : <span className="text-slate-300">—</span>}</td>;
-                    })}
-                    <td className={cn(td, "font-semibold")}>{rwf(h.total)}</td>
-                    <td className={cn(td, h.available < 0 ? "font-semibold text-red-700" : "text-slate-600")}>{h.available < 0 ? `over by ${rwf(-h.available)}` : rwf(h.available)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-50 font-semibold">
-                  <td className="px-2.5 py-1.5">Total</td>
-                  {accounts.map((a) => <td key={a} className={td}>{rwf(budget.filter((x) => x.account === a).reduce((t, x) => t + x.amount, 0))}</td>)}
-                  <td className={td}>{rwf(charged)}</td>
-                  <td className={td}>{rwf(budget.reduce((t, x) => t + x.available, 0))}</td>
-                </tr>
-              </tfoot>
-            </table>
-          ) : (
-            <table className="dnr-grid w-full min-w-[620px] text-[12.5px]">
-              <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Budget line charged</th><th className={cn(th, "text-right")}>This payroll</th><th className={cn(th, "text-right")}>Still available</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">
-                {budget.map((x) => (
-                  <tr key={x.line} className={x.over ? "bg-red-50/60" : ""}>
-                    <td className="px-2.5 py-1.5"><span className="font-mono text-[11.5px]">{x.code}</span> {x.name}</td>
-                    <td className={td}>{rwf(x.amount)}</td>
-                    <td className={cn(td, x.over ? "font-semibold text-red-700" : "")}>{x.over ? `over by ${rwf(-x.available)}` : rwf(x.available)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <>
+      <Card padded={false} className="overflow-hidden">
+        <div className="px-5 pt-5">
+          <CardHeader title="Budget" subtitle="Salaries are never stopped by the budget; an overrun shows in red here and in the budget reports so that a revision can be prepared." />
+          <Details
+            columns={2}
+            className="mb-4"
+            items={[
+              { label: "Charged to budget lines", value: <span className="font-semibold">{fmtMoney(charged)}</span>, hint: `${budget.length} lines${budget.some((x) => x.over) ? " · some over budget" : " · all within budget"}` },
+              { label: "Not budgeted", value: <span className={cn("font-semibold", unbudgeted.length > 0 && "text-ims-warning")}>{fmtMoney(unbudgeted.reduce((t, x) => t + x.amount, 0))}</span>, hint: unbudgeted.length ? "Add personnel lines in a budget revision" : "Every cost had a budget line" },
+              { label: "By funding source", wide: true, value: (ps.by_funding || []).length ? <span className="flex flex-col gap-0.5">{(ps.by_funding || []).map((x: any) => <span key={x.funding_source}>{x.name}: <span className="font-semibold tabular-nums">{fmtMoney(x.amount)}</span></span>)}</span> : null },
+            ]}
+          />
+          {unbudgeted.length > 0 && (
+            <p role="status" className="mb-4 flex items-start gap-2 rounded-card border border-ims-warning/30 bg-ims-warning-bg px-4 py-3 text-t-body text-ims-warning">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
+              <span>No budget line for: {unbudgeted.map((u) => `${u.account_name} · ${u.department_name || "—"} · ${u.funding_name} (${fmtMoney(u.amount)})`).join("; ")}.</span>
+            </p>
           )}
-          <p className="px-3 py-2 text-[12px] text-slate-500">Salaries are never stopped by the budget; an overrun shows in red here and in the budget reports so that a revision can be prepared.</p>
         </div>
-      )}
-      {byAccount.length > 0 && (
-        <div className="overflow-x-auto rounded-md border border-slate-200">
-          <table className="dnr-grid w-full min-w-[560px] text-[12.5px]">
-            <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Journal by account</th><th className={cn(th, "text-right")}>Debit</th><th className={cn(th, "text-right")}>Credit</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">
-              {byAccount.map((x) => <tr key={x.account}><td className="px-2.5 py-1.5"><span className="font-mono font-semibold">{x.code}</span> {x.name}</td><td className={td}>{x.debit ? rwf(x.debit) : ""}</td><td className={td}>{x.credit ? rwf(x.credit) : ""}</td></tr>)}
-            </tbody>
-            <tfoot><tr className="bg-slate-50 font-semibold"><td className="px-2.5 py-1.5">Total</td><td className={td}>{rwf(byAccount.reduce((t, x) => t + x.debit, 0))}</td><td className={td}>{rwf(byAccount.reduce((t, x) => t + x.credit, 0))}</td></tr></tfoot>
-          </table>
+        {budget.length > 0 && (
+          grid ? (
+            <DataTable columns={gridColumns} rows={holders} rowKey={(h) => h.key} minWidth={860} caption="Budget lines charged" rowClassName={(h) => (h.over ? "bg-ims-danger-bg/60" : undefined)} />
+          ) : (
+            <DataTable columns={lineColumns} rows={budget} rowKey={(x) => x.line} minWidth={620} caption="Budget lines charged" rowClassName={(x) => (x.over ? "bg-ims-danger-bg/60" : undefined)} />
+          )
+        )}
+      </Card>
+
+      <Card padded={false} className="overflow-hidden">
+        <div className="px-5 pt-5">
+          <CardHeader
+            title="General ledger"
+            subtitle="Salary costs are posted by department and funding source, with no personal pay data in the ledger. What is owed to staff, RRA and RSSB is cleared when it is paid."
+            link={journalLink}
+          />
+          <Details
+            columns={3}
+            className="mb-4"
+            items={[
+              { label: "Journal", value: ledger ? <Link className="whitespace-nowrap font-semibold text-ims-link hover:underline" to={`/dashboard/finance/journals/${payroll.gl_journal}`}>{ps.journal}</Link> : <DocNo value={ps.journal} /> },
+              { label: "Dated", value: ps.date ? fmtDate(ps.date.slice(0, 10)) : null },
+              { label: "Amount", value: fmtMoney(ps.total), hint: ps.lines ? `${ps.lines} lines` : undefined },
+            ]}
+          />
         </div>
-      )}
-      <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-slate-500">
-        <BookOpen size={13} /> Salary costs are posted by department and funding source, with no personal pay data in the ledger; what is owed to staff, RRA and RSSB is cleared when it is paid.
-        {ledger && payroll.gl_journal && <Link className="font-medium text-primaryDark hover:underline" to={`/dashboard/finance/journals/${payroll.gl_journal}`}>Open the journal lines →</Link>}
-      </p>
-    </div>
+        {byAccount.length > 0 && (
+          <DataTable
+            minWidth={560}
+            rows={byAccount}
+            rowKey={(x) => x.account}
+            caption="Journal by account"
+            columns={[
+              { key: "account", header: "Account", cell: (x) => <><span className="font-mono font-semibold">{x.code}</span> {x.name}</> },
+              { key: "debit", header: "Debit (RWF)", numeric: true, cell: (x) => (x.debit ? <Num value={x.debit} /> : ""), total: <Num value={byAccount.reduce((t, x) => t + x.debit, 0)} /> },
+              { key: "credit", header: "Credit (RWF)", numeric: true, cell: (x) => (x.credit ? <Num value={x.credit} /> : ""), total: <Num value={byAccount.reduce((t, x) => t + x.credit, 0)} /> },
+            ]}
+          />
+        )}
+      </Card>
+    </>
   );
 }
 
-function ReconciliationTab({ payrollId }: { payrollId: string }) {
+function ReconciliationCard({ payrollId }: { payrollId: string }) {
   const q = useQuery(["payroll-reconciliation", payrollId], () => payrollApi.reconciliation(payrollId));
-  if (q.isLoading) return <Skeleton className="h-48 w-full" />;
-  if (q.isError) return <p className="text-[13px] text-red-700">{errorMessage(q.error)}</p>;
-  const r = q.data;
-  if (!r.previous) return <p className="text-[13px] text-slate-500">No earlier approved payroll to compare with.</p>;
   const KIND: Record<string, string> = { joiner: "Joined", leaver: "Left", changed: "Changed" };
+  const diff = (n: number) => (
+    <span className={cn("tabular-nums", n > 0 ? "text-ims-success" : n < 0 ? "text-ims-danger" : "text-ims-faint")}>{n > 0 ? "+" : ""}{fmtNumber(n)}</span>
+  );
+  const r = q.data;
   return (
-    <div className="space-y-4">
-      <p className="text-[13px] text-slate-600">Compared with <b>{r.previous.number}</b> ({r.previous.period_label}, {r.previous.headcount} employees): {r.joiners} joined, {r.leavers} left, {r.changed} with a different pay. Everyone else is paid the same.</p>
-      <div className="overflow-x-auto rounded-md border border-slate-200">
-        <table className="dnr-grid w-full min-w-[620px] text-[12.5px]">
-          <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Component</th><th className={cn(th, "text-right")}>{r.previous.period_label}</th><th className={cn(th, "text-right")}>{r.current.period_label}</th><th className={cn(th, "text-right")}>Difference</th></tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {(r.components as any[]).map((c) => (
-              <tr key={c.key} className={c.key === "net" || c.key === "gross" ? "font-semibold" : ""}><td className="px-2.5 py-1.5">{c.label}</td><td className={td}>{rwf(c.previous)}</td><td className={td}>{rwf(c.current)}</td><td className={cn(td, c.difference > 0 ? "text-emerald-700" : c.difference < 0 ? "text-red-700" : "text-slate-400")}>{c.difference > 0 ? "+" : ""}{rwf(c.difference)}</td></tr>
-            ))}
-          </tbody>
-        </table>
+    <Card padded={false} className="overflow-hidden">
+      <div className="px-5 pt-5">
+        <CardHeader
+          className={r?.previous ? undefined : "mb-0 pb-5"}
+          title="Against last month"
+          subtitle={
+            q.isLoading ? "Comparing with the last approved payroll…" : q.isError ? <span className="text-ims-danger">{errorMessage(q.error)}</span> : !r?.previous ? "No earlier approved payroll to compare with." : (
+              <>Compared with <span className="whitespace-nowrap font-semibold">{r.previous.number}</span> ({r.previous.period_label}, {r.previous.headcount} employees): {r.joiners} joined, {r.leavers} left, {r.changed} with a different pay. Everyone else is paid the same.</>
+            )
+          }
+        />
       </div>
-      {(r.rows as any[]).length > 0 && (
-        <div className="overflow-x-auto rounded-md border border-slate-200">
-          <table className="dnr-grid w-full min-w-[760px] text-[12.5px]">
-            <thead><tr className="bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wider text-slate-500"><th className={th}>Employee</th><th className={th}>What changed</th><th className={cn(th, "text-right")}>Gross</th><th className={cn(th, "text-right")}>Net pay</th><th className={cn(th, "text-right")}>Net difference</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">
-              {(r.rows as any[]).map((x) => (
-                <tr key={x.employee}>
-                  <td className="px-2.5 py-1.5"><span className="block font-medium">{x.name}</span><span className="text-[11px] text-slate-500">{x.department}</span></td>
-                  <td className="px-2.5 py-1.5"><span className="mr-1 rounded bg-slate-100 px-1.5 py-px text-[11px] font-semibold">{KIND[x.kind]}</span>{(x.reasons || []).join("; ")}</td>
-                  <td className={td}>{x.current ? rwf(x.current.gross) : "—"}</td>
-                  <td className={td}>{x.current ? rwf(x.current.net) : "—"}</td>
-                  <td className={cn(td, x.diff_net > 0 ? "text-emerald-700" : x.diff_net < 0 ? "text-red-700" : "")}>{x.diff_net > 0 ? "+" : ""}{rwf(x.diff_net)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {q.isLoading && <div className="px-5 pb-5"><Skeleton className="h-40 w-full" /></div>}
+      {r?.previous && (
+        <>
+          <DataTable
+            minWidth={620}
+            rows={r.components as any[]}
+            rowKey={(c: any) => c.key}
+            caption="Totals against last month"
+            rowClassName={(c: any) => (c.key === "net" || c.key === "gross" ? "font-semibold" : undefined)}
+            columns={[
+              { key: "label", header: "Component", cell: (c: any) => c.label },
+              { key: "previous", header: `${r.previous.period_label} (RWF)`, numeric: true, cell: (c: any) => <Num value={c.previous} /> },
+              { key: "current", header: `${r.current.period_label} (RWF)`, numeric: true, cell: (c: any) => <Num value={c.current} /> },
+              { key: "difference", header: "Difference (RWF)", numeric: true, cell: (c: any) => diff(c.difference) },
+            ]}
+          />
+          {(r.rows as any[]).length > 0 && (
+            <>
+              <h3 className="border-t border-ims-divider px-5 pb-3 pt-5 text-t-body font-bold text-ims-text">Employees with a change</h3>
+              <DataTable
+                minWidth={680}
+                rows={r.rows as any[]}
+                rowKey={(x: any) => x.employee}
+                caption="Employees with a change"
+                columns={[
+                  { key: "name", header: "Employee", cell: (x: any) => <Person name={x.name} detail={x.department} /> },
+                  { key: "kind", header: "What changed", clamp: true, cell: (x: any) => <span className="font-semibold">{KIND[x.kind]}</span>, sub: (x: any) => (x.reasons || []).join("; ") },
+                  { key: "gross", header: "Gross (RWF)", numeric: true, cell: (x: any) => (x.current ? <Num value={x.current.gross} /> : "—") },
+                  { key: "net", header: "Net pay (RWF)", numeric: true, cell: (x: any) => (x.current ? <Num value={x.current.net} /> : "—") },
+                  { key: "diff", header: "Net difference (RWF)", numeric: true, cell: (x: any) => diff(x.diff_net) },
+                ]}
+              />
+            </>
+          )}
+        </>
       )}
-    </div>
+    </Card>
   );
 }

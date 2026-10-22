@@ -1,32 +1,20 @@
 import { useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import Loader from "@/components/icons/Loader";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { Form } from "@/components/ui/form";
-import AppFormSelect from "@/components/forms/AppFormSelect";
-import AppFormDatePicker from "@/components/forms/AppFormDatepicker";
+import { Controller, useForm } from "react-hook-form";
+import { format } from "date-fns";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import useSettings from "@/hooks/useSettings";
 import pocketbase from "@/lib/pocketbase";
 import { toast } from "sonner";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useQuery } from "react-query";
-import { PlusCircle } from "react-feather";
 import { DeductionFormModal } from "@/components/modals/DeductionFormModal";
 import useModalState from "@/hooks/useModalState";
 import useEditRow from "@/hooks/use-edit-row";
 import useConfirmModal from "@/hooks/useConfirmModal";
-import ConfirmModal from "@/components/modals/ConfirmModal";
+import { Button, Card, CardHeader, ConfirmDialog, DataTable, DatePicker, EmptyState, Field, Select, fmtNumber, toDate } from "@/components/ims";
 
+/** Shown as a section of Settings: the Settings page carries the page header. */
 function PayrollSettings() {
   const formSchema = z.object({
     payroll_period_cycle: z.string(),
@@ -51,10 +39,10 @@ function PayrollSettings() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       await pocketbase.collection("settings").update(settings.id, values);
-      toast.success("Settings updated successfully");
+      toast.success("Payroll settings saved");
     } catch (error) {
       console.log(error);
-      toast.error("Failed to update attendance settings");
+      toast.error("The payroll settings could not be saved. Check your connection and try again.");
     }
   }
 
@@ -80,181 +68,81 @@ function PayrollSettings() {
       .then(() => {
         deductionsQuery.refetch();
         confirmModal.close();
-        toast.success("departments deleted successfully");
+        toast.success("Deduction deleted");
       })
       .catch((e) => {
         confirmModal.setIsLoading(false);
         toast.error(e.message);
       });
   };
+
+  const rows = (deductionsQuery.data || []) as any[];
+  const dateValue = (v: unknown) => (v instanceof Date ? format(v, "yyyy-MM-dd") : v ? String(v).slice(0, 10) : "");
+
   return (
     <>
-      <div>
-        <div className="max-w-2xl py-4 px-4">
-          <div className="dark:border-slate-700 border-slate-300">
-            <div className="border-b- dark:border-b-slate-700 border-slate-300 mb-0 pb-3 ">
-              <h4 className="font-semibold dark:text-slate-200 text-sm">
-                Update Payroll Settings
-              </h4>
-              <p className="text-[14px] leading-7 dark:text-slate-400 mt-1 text-slate-500">
-                Configure how employee payroll is calculated and processed.
-              </p>
+      <div className="flex max-w-3xl flex-col gap-4 p-4">
+        <Card>
+          <CardHeader title="Payroll settings" subtitle="How employee payroll is calculated and processed." />
+          <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Controller
+                control={form.control}
+                name="payroll_period_cycle"
+                render={({ field, fieldState }) => (
+                  <Field label="Period cycle" htmlFor="ps-cycle" error={fieldState.error ? "Choose a period cycle." : null}>
+                    <Select id="ps-cycle" invalid={Boolean(fieldState.error)} value={field.value || ""} onChange={(e) => field.onChange(e.target.value)} onBlur={field.onBlur}>
+                      <option value="">Choose a period cycle</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="weekly">Weekly</option>
+                    </Select>
+                  </Field>
+                )}
+              />
+              <Controller
+                control={form.control}
+                name="payroll_date"
+                render={({ field, fieldState }) => (
+                  <Field label="Payroll date" htmlFor="ps-date" error={fieldState.error ? "Choose the payroll date." : null}>
+                    <DatePicker id="ps-date" invalid={Boolean(fieldState.error)} value={dateValue(field.value)} onChange={(d) => field.onChange(toDate(d))} placeholder="Choose the payroll date" />
+                  </Field>
+                )}
+              />
             </div>
-            <div className="mb-0">
-              <Form {...form}>
-                <form
-                  className="space-y-2"
-                  onSubmit={form.handleSubmit(onSubmit)}
-                >
-                  <div className="grid grid-cols-2 gap-3">
-                    <AppFormSelect
-                      label="Period Cycle"
-                      placeholder={"Select period cycle"}
-                      name={"payroll_period_cycle"}
-                      options={[
-                        { value: "monthly", label: "Monthly" },
-                        { value: "weekly", label: "Weekly" },
-                      ]}
-                      form={form}
-                    />
-                    <AppFormDatePicker
-                      label="Payroll Date"
-                      placeholder={"Select payroll date"}
-                      name={"payroll_date"}
-                      form={form}
-                    />
-                  </div>
-                  <div className="!mt-3 flex items-center justify-start">
-                    <Button
-                      size="sm"
-                      type="submit"
-                      className="mt-1"
-                      disabled={
-                        form.formState.disabled || form.formState.isSubmitting
-                      }
-                    >
-                      {form.formState.isSubmitting && (
-                        <Loader className="mr-2 h-4 w-4 text-white animate-spin" />
-                      )}
-                      Update payroll settings
-                    </Button>
-                  </div>
-                </form>
-              </Form>
+            <div className="flex justify-end border-t border-ims-divider pt-4">
+              <Button variant="primary" type="submit" loading={form.formState.isSubmitting} disabled={form.formState.disabled}>Save</Button>
             </div>
-          </div>
-          <div className="dark:border-slate-700 mt-6 border-slate-300">
-            <div className="border-b- flex items-center justify-between dark:border-b-slate-700 border-slate-300 mb-0 pb-3 ">
-              <div className="">
-                <h4 className="font-semibold dark:text-slate-200 text-sm">
-                  Payroll Deductions
-                </h4>
-                <p className="text-[14px] leading-7 dark:text-slate-400 mt-1 text-slate-500">
-                  List of all deductions that goes into the payroll.
-                </p>
-              </div>
-              <Button
-                onClick={() => newRecordModal.open()}
-                variant="outline"
-                size="sm"
-              >
-                <PlusCircle className="h-4 w-4 mr-2" />
-                <span className="text-[13px]">Add Deduction</span>
-              </Button>
-            </div>
-            <div className="mb-0 border">
-              <Table className="table-auto">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[100px] !h-10">Name</TableHead>
-                    <TableHead className="!h-10">Percentage</TableHead>
-                    <TableHead className="!h-10 text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {deductionsQuery?.data?.map((deduction) => (
-                    <TableRow key={deduction.id}>
-                      <TableCell className="font-medium truncate">
-                        {deduction.name}
-                      </TableCell>
-                      <TableCell>{deduction.percentage}%</TableCell>
-                      <TableCell className="flex justify-end">
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={() => {
-                              editRow.edit(deduction);
-                            }}
-                            size="sm"
-                            variant="default"
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              confirmModal.open({
-                                meta: deduction,
-                              });
-                            }}
-                            size="sm"
-                            variant="destructive"
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+          </form>
+        </Card>
 
-                  {deductionsQuery.status === "loading" && (
-                    <TableRow>
-                      <TableCell colSpan={3}>
-                        <div className="flex items-center h-40 justify-center">
-                          <Loader className="mr-2 h-5 w-5 text-primary animate-spin" />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {deductionsQuery.status === "error" && (
-                    <TableRow>
-                      <TableCell colSpan={3}>
-                        <div className="flex items-center h-40 justify-center">
-                          <span className="text-sm text-slate-500">
-                            Failed to load deductions
-                          </span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {deductionsQuery.status === "success" &&
-                    deductionsQuery?.data?.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={3}>
-                          <div className="flex items-center h-40 justify-center">
-                            <span className="text-sm text-slate-500">
-                              No deductions found
-                            </span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell colSpan={1}>Total</TableCell>
-                    <TableCell className="text-right-">
-                      {deductionsQuery.data?.reduce(
-                        (acc, curr) => acc + Number(curr?.percentage),
-                        0
-                      ) || 0}
-                      %
-                    </TableCell>
-                    <TableCell colSpan={1}></TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
-            </div>
+        <Card padded={false} className="overflow-hidden">
+          <div className="px-5 pt-5">
+            <CardHeader
+              title="Payroll deductions"
+              subtitle="All the deductions that go into the payroll."
+              action={<Button size="sm" icon={Plus} onClick={() => newRecordModal.open()}>Add deduction</Button>}
+            />
           </div>
-        </div>
+          <DataTable
+            minWidth={420}
+            rows={rows}
+            rowKey={(d) => d.id}
+            loading={deductionsQuery.status === "loading"}
+            error={deductionsQuery.status === "error" ? deductionsQuery.error : undefined}
+            onRetry={() => deductionsQuery.refetch()}
+            onRowClick={(d) => editRow.edit(d)}
+            caption="Payroll deductions"
+            empty={<EmptyState compact text="No deductions yet. Add one with Add deduction." />}
+            rowActions={(d) => [
+              { label: "Edit", icon: Pencil, onSelect: () => editRow.edit(d) },
+              { label: "Delete", icon: Trash2, danger: true, onSelect: () => confirmModal.open({ meta: d }) },
+            ]}
+            columns={[
+              { key: "name", header: "Name", className: "font-semibold", clamp: true, cell: (d) => d.name },
+              { key: "percentage", header: "Percentage (%)", numeric: true, cell: (d) => fmtNumber(d.percentage, true), total: fmtNumber(rows.reduce((acc, curr) => acc + Number(curr?.percentage), 0) || 0, true) },
+            ]}
+          />
+        </Card>
       </div>
       <DeductionFormModal
         onComplete={() => {
@@ -266,14 +154,14 @@ function PayrollSettings() {
         setOpen={editRow.isOpen ? editRow.setOpen : newRecordModal.setisOpen}
         open={newRecordModal.isOpen || editRow.isOpen}
       />{" "}
-      <ConfirmModal
-        title={"Are you sure you want to delete?"}
-        description={"This action cannot be undone. This will permanently delete the selected record."}
-        meta={confirmModal.meta}
-        onConfirm={handleDelete}
-        isLoading={confirmModal.isLoading}
+      <ConfirmDialog
         open={confirmModal.isOpen}
         onClose={() => confirmModal.close()}
+        title={`Delete ${confirmModal.meta?.name || "this deduction"}?`}
+        description="This cannot be undone. The deduction is removed for good."
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => handleDelete(confirmModal.meta)}
       />
     </>
   );
