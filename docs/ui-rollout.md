@@ -61,62 +61,65 @@ Status: ☐ to do · ◐ kit applied through shared components · ☑ page check
 | Page | Route | Template | Status |
 |---|---|---|---|
 | My workspace | my | Dashboard | ☑ |
-| My attendance · My leave · My payslips · My requests | my/attendance, my/leave, my/payslips, my/requests | List | ◐ (embedded legacy lists in progress) |
-| My performance · My documents · My expenses · My equipment | my/performance, my/documents, my/expenses, my/equipment | List | ◐ (embedded legacy lists in progress; expense requests list on hold) |
-| Help & HR policies | help | Detail (reading) | ☐ |
+| My attendance · My leave · My payslips · My requests | my/attendance, my/leave, my/payslips, my/requests | List | ☑ |
+| My performance · My documents · My expenses · My equipment | my/performance, my/documents, my/expenses, my/equipment | List | ☑ (the expense list itself belongs to the staff-expenses rebuild) |
+| Help & HR policies | help | Detail (reading) | ☑ |
 
 ### Plans & reports (module 4)
 | Page | Route | Template | Status |
 |---|---|---|---|
-| My plans & reports (+ department, reports, team tabs) | my/plans | List | ☐ |
-| Plan | my/plans/:id | Detail | ☐ |
-| New / edit plan | my/plans/new, …/:id/edit | Form | ☐ |
-| Action plan / report (portal) | employee-portal/plans/*, employee-portal/reports/* | Detail · Form | ☐ |
+| My plans & reports (+ department, reports, team tabs) | my/plans | List | ☑ |
+| Plan | my/plans/:id | Detail | ☑ |
+| New / edit plan | my/plans/new, …/:id/edit | Form | ☑ |
+| Action plan / report (portal) | employee-portal/plans/*, employee-portal/reports/* | Detail · Form | ☑ |
 
 ### HR & payroll (module 5)
 | Page | Route | Template | Status |
 |---|---|---|---|
-| Employees · Employee · Import employees | hr/employees, …/:id, …/import | List · Detail · Form | ☐ |
-| Departments · Designations | hr/departments, hr/designations | List | ☐ |
-| Leave requests · Leave plan | hr/leaves, hr/leave-plan | List | ☐ |
-| Staff expenses | hr/prepayments | List | ☐ |
-| Attendance logs · Attendance report · Attendance corrections | attendance/*, hr/attendance-corrections | List | ☐ |
-| Timesheet · Timesheet report | reports/employee-timesheet, reports/timesheet-report | List (report) | ☐ |
-| Performance · Templates · Appraisal · Evaluation form | hr/performance/* | Dashboard · Form · Detail · Form | ☐ |
-| Payroll runs · Payroll run · Salary structures · Staff loans | hr/payroll/* | List · Detail · List · List | ☐ |
-| Payroll tax settings · Leave policy | settings/payroll, settings/leaves | Form (settings) | ☐ |
+| Employees · Employee · Import employees | hr/employees, …/:id, …/import | List · Detail · Form | ☑ |
+| Departments · Designations | hr/departments, hr/designations | List | ☑ |
+| Leave requests · Leave plan | hr/leaves, hr/leave-plan | List | ☑ |
+| Staff expenses | finance/staff-expenses (was hr/prepayments) | List · Detail | ☑ (rebuilt server-side on the kit by the build session) |
+| Attendance logs · Attendance report · Attendance corrections | attendance/*, hr/attendance-corrections | List | ☑ |
+| Timesheet · Timesheet report | reports/employee-timesheet, reports/timesheet-report | List (report) | ☑ |
+| Performance · Templates · Appraisal · Evaluation form | hr/performance/* | Dashboard · Form · Detail · Form | ☑ |
+| Payroll runs · Payroll run · Salary structures · Staff loans | hr/payroll/* | List · Detail · List · List | ☑ |
+| Payroll tax settings · Leave policy | settings/payroll, settings/leaves | Form (settings) | ☑ |
 
 ### Finance (module 5)
 | Page | Route | Template | Status |
 |---|---|---|---|
-| Supplier invoices · Invoice · Payments | finance/invoices, …/:id, finance/payments | List · Detail · List | ☐ |
-| Payment vouchers · Voucher · New / edit voucher | finance/vouchers/* | List · Detail · Form | ☐ |
-| Journals · Journal | finance/journals, …/:id | List · Detail | ☐ |
-| Payables reports | finance/reports | Dashboard (reports) | ☐ |
-| Petty cash accounts · Account · Petty cash requests · Vehicle requests · Expense reports | finance/petty-cash-*, finance/carmanagement, reports/expense-reports | List · Detail · List · List · List | ☐ |
-| Bank & cash overview · Accounts · Account · Receipts · Receipt · Transfers · Transfer · Salary payments · Statements · Statement · Reconcile · Reconciliations · Reconciliation · Reports | treasury/* | Dashboard · List · Detail · Form | ☐ |
-| Budget overview · Budgets · Budget · Revisions · Revision · Budget reports | budget/* | Dashboard · List · Detail · List · Detail · Dashboard | ☐ |
+| Supplier invoices · Invoice · Payments | finance/invoices, …/:id, finance/payments | List · Detail · List | ☑ |
+| Payment vouchers · Voucher · New / edit voucher | finance/vouchers/* | List · Detail · Form | ☑ |
+| Journals · Journal · Trial balance · Period close | finance/journals, …/:id, finance/trial-balance, finance/periods | List · Detail · Report | ☑ (built on the kit by the build session) |
+| Payables reports | finance/reports | Dashboard (reports) | ☑ |
+| Vehicle requests | finance/carmanagement | List | ☑ |
+| Petty cash accounts · Petty cash requests · Expense reports | finance/petty-cash-*, reports/expense-reports | — | retired: petty cash books are Bank & cash accounts, requests are staff expenses, expense reports are the staff-expenses "By category" view |
+| Bank & cash overview · Accounts · Account · Receipts · Receipt · Transfers · Transfer · Salary payments · Statements · Statement · Reconcile · Reconciliations · Reconciliation · Reports | treasury/* | Dashboard · List · Detail · Form | ☑ |
+| Budget overview · Budgets · Budget · Revisions · Revision · Budget reports | budget/* | Dashboard · List · Detail · List · Detail · Dashboard | ☑ |
 
 ### Assets (module 5)
 | Page | Route | Template | Status |
 |---|---|---|---|
-| Assets overview · Register · Asset · Transfers · Disposals · Disposal · Depreciation runs · Run · Counts · Count · Categories · Reports · Equipment requests | assets/* | Dashboard · List · Detail · List · List · Detail · List · Detail · List · Detail · List · Dashboard · List | ☐ |
+| Assets overview · Register · Asset · Transfers · Disposals · Disposal · Depreciation runs · Run · Counts · Count · Categories · Reports · Equipment requests | assets/* | Dashboard · List · Detail · List · List · Detail · List · Detail · List · Detail · List · Dashboard · List | ☑ |
 
 ### Approvals, administration, setup, settings (module 5)
 | Page | Route | Template | Status |
 |---|---|---|---|
-| My approvals | approvals | List | ☐ |
-| Users & security · Permission matrix · Delegations · System health · Audit log | admin/*, security/audit-log | List · Form · List · Dashboard · List | ☐ |
-| Fiscal years · Chart of accounts · Funding sources · Projects · Cost centres · Strategic objectives · Tax rates · Posting accounts · Approval limits | setup/* | List | ☐ |
-| General settings · Attendance · E-mail (SMTP) · Branches · Account settings | settings/*, account-settings | Form (settings) | ☐ |
-| Team overview | dashboard | Dashboard | ☐ |
-
-### On hold
-- Expenses & petty cash finance pages (PettyCashRequests, PrePayments, EmployeePrePayments, Accounts, Cashmanagement): the flow is being moved to the server by the build session first; restyled after that.
+| My approvals | approvals | List | ☑ |
+| Users & security · Permission matrix · Delegations · System health · Audit log | admin/*, security/audit-log | List · Form · List · Dashboard · List | ☑ |
+| Fiscal years · Chart of accounts · Funding sources · Projects · Cost centres · Strategic objectives · Tax rates · Approval limits | setup/* | List | ☑ |
+| Posting accounts | setup/posting-accounts | List | ☑ (kit, owned by the build session) |
+| General settings · Attendance · E-mail (SMTP) · Branches · Account settings | settings/*, account-settings | Form (settings) | ☑ |
+| Team overview | dashboard | Dashboard | ☑ |
 
 ### Not converted on purpose
-- Sign-in and Forgot password: their own design (supplied by RALGA, `AuthShell`); they already use the tokens' colours.
-- Not found page: one line and a link back.
+- Sign-in and Forgot password: their own design supplied by RALGA (`AuthShell`); they keep it.
+- The sidebar, its profile menu and the notification bell: the brief says not to change the sidebar.
 
-### Legacy pages (still routed, not in the sidebar)
-Classic employee portal, RequestCash, AddReason, leave-plan-2, employees/tasks, weeklyplane, clients, other/assets-allocation — converted last or listed as not converted.
+### Legacy pages (still routed, not in the sidebar): tokens only
+Classic employee portal (employee-portal/classic), old leave plan (leave-plan-2), RequestCash, AddReason, weeklyplane, clients, assets-allocation. They use the design tokens (colours, sizes, sentence-case labels, no "Please") but are not rebuilt on the list / detail / form templates. Pages under `src/pages/dashboard/projects/*` and other unrouted files (Payroll.tsx, NewPayroll.tsx, PayrollDetails.tsx, LeavesSettings.tsx, Performance.tsx, Report*.tsx, Task.tsx, Roles.tsx…) are not reachable and were left alone.
+
+### Known gaps in the kit
+- No searchable (async) select: forms that pick an employee, role or department still use `AsyncSelectField` (react-select), restyled on the tokens.
+- DataTable has no grouped headers, sticky header/column or group rows: the permission matrix, leave plan grid, attendance report and payroll register keep hand-built tables on the tokens.
